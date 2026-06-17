@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0b0b12;
+  --surface: #13131f;
+  --muted: #1e1e2a;
+  --neon: #00F5FF;
+  --fuchsia: #FF007F;
+  --violet: #7c3aed;
+  --fore: #f8fafc;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background-color: var(--bg);
+  color: var(--fore);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--violet); }
+
+.neon-text { color: var(--neon); text-shadow: 0 0 12px var(--neon); }
+.fuchsia-text { color: var(--fuchsia); text-shadow: 0 0 10px var(--fuchsia); }
+.neon-border { border-color: var(--neon); box-shadow: 0 0 8px var(--neon); }
+.fuchsia-border { border-color: var(--fuchsia); box-shadow: 0 0 8px var(--fuchsia); }
+
+.domino-gradient {
+  background: linear-gradient(135deg, #7c3aed 0%, #00F5FF 50%, #FF007F 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.chain-line {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: chain 3s linear infinite;
+}
+
+.glass {
+  background: rgba(19, 19, 31, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(42, 42, 58, 0.8);
+}
+
+.video-snap {
+  scroll-snap-type: y mandatory;
+  overflow-y: scroll;
+  height: 100vh;
+}
+
+.video-item {
+  scroll-snap-align: start;
+  height: 100vh;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes dominoFall {
+  0% { transform: rotate(0deg) translateY(0); }
+  30% { transform: rotate(-15deg) translateY(5px); }
+  60% { transform: rotate(45deg) translateY(20px); }
+  100% { transform: rotate(45deg) translateY(20px) scaleX(0.9); }
+}
