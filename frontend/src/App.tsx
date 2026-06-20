@@ -880,24 +880,35 @@ function CameraPage() {
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: true
         });
       } catch {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
       }
       streamRef.current = stream;
+      setCameraActive(true);
+      // Esperar al siguiente frame para que el video esté en el DOM
+      await new Promise(r => setTimeout(r, 100));
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute('playsinline', 'true');
         videoRef.current.muted = true;
-        await videoRef.current.play().catch(() => {});
+        videoRef.current.playsInline = true;
+        try {
+          await videoRef.current.play();
+        } catch (playErr) {
+          console.warn('Play error:', playErr);
+        }
       }
-      setCameraActive(true);
     } catch (err: any) {
       console.error('Camera error:', err);
+      setCameraActive(false);
       if (err.name === 'NotAllowedError') {
-        alert('❌ Permiso de cámara denegado.\n\nVe a Ajustes > Aplicaciones > DOMINO > Permisos y activa Cámara y Micrófono.');
+        alert('❌ Permiso de cámara denegado.\n\nVe a Ajustes del navegador > Permisos de sitio > Cámara y actívala para esta web.');
       } else if (err.name === 'NotFoundError') {
         alert('❌ No se encontró ninguna cámara en este dispositivo.');
       } else {
@@ -1045,9 +1056,16 @@ function CameraPage() {
       )}
 
       <div className="relative h-screen max-h-screen overflow-hidden">
-        {cameraActive ? (
-          <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay muted playsInline />
-        ) : (
+        {/* Video siempre en DOM para que el ref funcione correctamente en móvil */}
+        <video
+          ref={videoRef}
+          className="absolute inset-0 w-full h-full object-cover"
+          autoPlay
+          muted
+          playsInline
+          style={{ display: cameraActive ? 'block' : 'none' }}
+        />
+        {!cameraActive && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
             {recorded
               ? <div className="text-center"><CheckCircle size={64} className="mx-auto text-green-400 mb-3" /><p className="text-white font-bold">Video grabado</p></div>
