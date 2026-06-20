@@ -1,0 +1,26 @@
+{
+  "name": "DOMINO — The Real-World Chain Reaction",
+  "short_name": "DOMINO",
+  "description": "Completa retos de 15 segundos y pasa el testigo a 3 personas en cualquier rincón del mundo.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0b12",
+  "theme_color": "#00f5ff",
+  "lang": "es",
+  "categories": ["social", "entertainment"],
+  "icons": [
+    { "src": "/icons/icon-72.png", "sizes": "72x72", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-96.png", "sizes": "96x96", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-152.png", "sizes": "152x152", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Grabar reto", "short_name": "Grabar", "url": "/camera", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] },
+    { "name": "Ver mapa", "short_name": "Mapa", "url": "/map", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] }
+  ]
+}

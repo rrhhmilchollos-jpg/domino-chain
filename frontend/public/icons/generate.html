@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head><title>DOMINO Icon Generator</title></head>
+<body style="background:#0b0b12;color:#00f5ff;font-family:sans-serif;padding:24px;text-align:center">
+<h2>Generando iconos DOMINO...</h2>
+<p id="status">Iniciando...</p>
+<script>
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="80" fill="#0b0b12"/><rect x="156" y="80" width="200" height="352" rx="20" fill="#13131f" stroke="#00f5ff" stroke-width="8"/><line x1="156" y1="256" x2="356" y2="256" stroke="#00f5ff" stroke-width="5" opacity="0.4"/><circle cx="216" cy="168" r="22" fill="#00f5ff"/><circle cx="296" cy="168" r="22" fill="#00f5ff"/><circle cx="256" cy="344" r="22" fill="#ff007f"/></svg>`;
+const sizes = [72,96,128,144,152,192,384,512];
+const blob = new Blob([svg], {type:'image/svg+xml'});
+const url = URL.createObjectURL(blob);
+const img = new Image();
+img.onload = async () => {
+  for (const size of sizes) {
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    c.getContext('2d').drawImage(img, 0, 0, size, size);
+    const a = document.createElement('a');
+    a.download = `icon-${size}.png`;
+    a.href = c.toDataURL('image/png');
+    a.click();
+    document.getElementById('status').textContent = `✅ icon-${size}.png descargado`;
+    await new Promise(r => setTimeout(r, 400));
+  }
+  document.getElementById('status').textContent = '🎉 ¡Todos los iconos generados! Muévelos a /frontend/public/icons/';
+};
+img.src = url;
+</script>
+</body>
+</html>
