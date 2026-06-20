@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#00f5ff" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="DOMINO" />
+    <link rel="apple-touch-icon" href="/icons/icon-152.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-96.png" />
+    <link rel="shortcut icon" href="/icons/icon-192.png" />
+
+    <!-- SEO -->
+    <title>DOMINO — The Real-World Chain Reaction</title>
+    <meta name="description" content="Completa retos de 15 segundos y pasa el testigo a 3 personas en cualquier rincón del mundo. Cada video crea una reacción en cadena visible en el mapa global." />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="DOMINO — The Real-World Chain Reaction" />
+    <meta property="og:description" content="Completa retos de 15 segundos y pasa el testigo a 3 personas. Cada video crea una reacción en cadena visible en el mapa global." />
+    <meta property="og:image" content="/icons/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="DOMINO" />
+    <meta name="twitter:image" content="/icons/icon-512.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+
+    <style>
+      html, body { background: #0b0b12; margin: 0; padding: 0; }
+      body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then(r => console.log('[DOMINO SW] Registrado:', r.scope))
+            .catch(e => console.warn('[DOMINO SW] Error:', e));
+        });
+      }
+    </script>
+  </body>
+</html>
