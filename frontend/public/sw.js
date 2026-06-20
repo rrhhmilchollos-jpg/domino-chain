@@ -17,7 +17,6 @@ self.addEventListener('fetch', e => {
   if (e.request.mode === 'navigate') {
     e.respondWith(
       fetch(e.request).then(r => {
-        // ✅ Clonar ANTES de cachear, luego retornar el original
         const clone = r.clone();
         caches.open(CACHE).then(c => c.put(e.request, clone));
         return r;
@@ -30,7 +29,6 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       caches.match(e.request).then(cached => cached || fetch(e.request).then(r => {
         if (r.ok) {
-          // ✅ También corregido aquí por si acaso
           const clone = r.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
