@@ -1046,7 +1046,7 @@ function CameraPage() {
 
       <div className="relative h-screen max-h-screen overflow-hidden">
         {cameraActive ? (
-          <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" muted playsInline />
+          <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay muted playsInline />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
             {recorded
