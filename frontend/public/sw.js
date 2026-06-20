@@ -13,19 +13,42 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (!e.request.url.startsWith('http')) return;
+
   if (e.request.mode === 'navigate') {
-    e.respondWith(fetch(e.request).then(r => { caches.open(CACHE).then(c => c.put(e.request, r.clone())); return r; }).catch(() => caches.match('/index.html')));
+    e.respondWith(
+      fetch(e.request).then(r => {
+        // ✅ Clonar ANTES de cachear, luego retornar el original
+        const clone = r.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
+        return r;
+      }).catch(() => caches.match('/index.html'))
+    );
     return;
   }
-  if (['script','style','image','font'].includes(e.request.destination)) {
-    e.respondWith(caches.match(e.request).then(cached => cached || fetch(e.request).then(r => { if(r.ok) caches.open(CACHE).then(c => c.put(e.request, r.clone())); return r; })));
+
+  if (['script', 'style', 'image', 'font'].includes(e.request.destination)) {
+    e.respondWith(
+      caches.match(e.request).then(cached => cached || fetch(e.request).then(r => {
+        if (r.ok) {
+          // ✅ También corregido aquí por si acaso
+          const clone = r.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return r;
+      }))
+    );
   }
 });
 
 self.addEventListener('push', e => {
   if (!e.data) return;
   const d = e.data.json();
-  self.registration.showNotification(d.title || 'DOMINO', { body: d.body, icon: '/icons/icon-192.png', badge: '/icons/icon-72.png', data: { url: d.url || '/' } });
+  self.registration.showNotification(d.title || 'DOMINO', {
+    body: d.body,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-72.png',
+    data: { url: d.url || '/' }
+  });
 });
 
 self.addEventListener('notificationclick', e => {
