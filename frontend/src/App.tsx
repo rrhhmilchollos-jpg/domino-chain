@@ -687,7 +687,7 @@ function WorldMapPage() {
       ctx.strokeStyle = grad; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.6;
       ctx.stroke(); ctx.globalAlpha = 1;
     }
-    points.forEach((pt, idx) => {
+    points.forEach((pt: {lat: number; lng: number; flag: string; city: string}, idx: number) => {
       const { x, y } = project(pt.lat, pt.lng, w, h);
       ctx.beginPath(); ctx.arc(x, y, idx === 0 ? 8 : 6, 0, Math.PI * 2);
       ctx.fillStyle = idx === 0 ? '#FF007F' : '#00F5FF';
