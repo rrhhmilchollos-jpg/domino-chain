@@ -1087,13 +1087,7 @@ function CameraPage() {
             <div className="w-10" />
           </div>
 
-          {recording && (
-            <div className="absolute top-20 left-1/2 -translate-x-1/2 pointer-events-none">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center border-4" style={{ borderColor: '#FF007F', boxShadow: '0 0 20px rgba(255,0,127,0.5)' }}>
-                <span className="text-2xl font-black text-white font-mono">{timeLeft}</span>
-              </div>
-            </div>
-          )}
+
 
           <div className="absolute top-32 left-4 w-8 h-8 border-t-2 border-l-2 rounded-tl-lg" style={{ borderColor: '#00F5FF' }} />
           <div className="absolute top-32 right-4 w-8 h-8 border-t-2 border-r-2 rounded-tr-lg" style={{ borderColor: '#00F5FF' }} />
@@ -1127,15 +1121,29 @@ function CameraPage() {
               </button>
             ) : (
               <div className="flex flex-col items-center gap-3">
-                <p className="text-xs text-gray-300">{recording ? 'Grabando...' : 'Pulsa para grabar'}</p>
+                <p className="text-xs text-gray-300">
+                  {recording ? `Grabando... ${timeLeft}s` : 'Pulsa para empezar a grabar'}
+                </p>
+                {recording && (
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center border-4 mb-1"
+                    style={{ borderColor: '#FF007F', boxShadow: '0 0 20px rgba(255,0,127,0.5)' }}>
+                    <span className="text-2xl font-black text-white font-mono">{timeLeft}</span>
+                  </div>
+                )}
                 <button
-                  onMouseDown={startRecording} onMouseUp={stopRecording}
-                  onTouchStart={startRecording} onTouchEnd={stopRecording}
-                  className={cn('w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all', recording ? 'scale-110' : 'border-white hover:border-neon active:scale-95')}
-                  style={recording ? { background: '#FF007F', borderColor: '#FF007F', boxShadow: '0 0 30px rgba(255,0,127,0.6)' } : { background: 'rgba(255,255,255,0.1)' }}>
-                  {recording ? <div className="w-8 h-8 bg-white rounded-sm" /> : <div className="w-14 h-14 bg-white rounded-full" />}
+                  onClick={recording ? stopRecording : startRecording}
+                  className={cn('w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all active:scale-95', recording ? 'scale-110' : 'border-white hover:border-neon')}
+                  style={recording
+                    ? { background: '#FF007F', borderColor: '#FF007F', boxShadow: '0 0 30px rgba(255,0,127,0.6)' }
+                    : { background: 'rgba(255,255,255,0.1)' }}>
+                  {recording
+                    ? <div className="w-7 h-7 bg-white rounded-sm" />
+                    : <div className="w-14 h-14 bg-white rounded-full" />
+                  }
                 </button>
-                <p className="text-xs text-gray-500">Máximo 15 segundos</p>
+                <p className="text-xs text-gray-500">
+                  {recording ? 'Pulsa para detener' : 'Se detiene automáticamente a los 15s'}
+                </p>
               </div>
             )}
           </div>
