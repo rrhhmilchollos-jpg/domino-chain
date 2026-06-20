@@ -140,6 +140,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
 function useAuth() { return React.useContext(AuthContext); }
 
+// ===================== FIX useApi: no explotar cuando la API devuelve 401 =====================
 function useApi(endpoint: string, deps: any[] = []) {
   const { token } = useAuth();
   const [data, setData] = useState<any>(null);
@@ -149,7 +150,10 @@ function useApi(endpoint: string, deps: any[] = []) {
   useEffect(() => {
     setLoading(true);
     fetch(`${API}${endpoint}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -307,7 +311,7 @@ function Navbar() {
   const [open, setOpen] = useState(false);
   const [loc, setLocation] = useLocation();
   const { data: notifData } = useApi('/api/notifications', [user?._id]);
-  const unread = (notifData || []).filter((n: Notification) => !n.read).length;
+  const unread = Array.isArray(notifData) ? notifData.filter((n: Notification) => !n.read).length : 0;
 
   const links = [
     { href: '/', label: 'Inicio', icon: <Home size={16} /> },
@@ -485,7 +489,7 @@ function HomePage() {
         </section>
       )}
 
-      {ranking && ranking.length > 0 && (
+      {Array.isArray(ranking) && ranking.length > 0 && (
         <section className="py-16 px-4">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-6">
@@ -578,7 +582,7 @@ function FeedPage() {
         </div>
       )}
       <div className="fixed top-14 left-0 right-0 bottom-0 overflow-y-scroll snap-y snap-mandatory">
-        {(videos || []).map((video: DominoVideo) => (
+        {(Array.isArray(videos) ? videos : []).map((video: DominoVideo) => (
           <div key={video._id} className="relative w-full h-screen snap-start flex-shrink-0 overflow-hidden bg-black">
             {video.thumbnailUrl
               ? <img src={video.thumbnailUrl} alt={`Video de ${video.userId?.username}`} className="absolute inset-0 w-full h-full object-cover" />
@@ -615,7 +619,7 @@ function FeedPage() {
             </div>
           </div>
         ))}
-        {(!videos || videos.length === 0) && (
+        {(!videos || !Array.isArray(videos) || videos.length === 0) && (
           <div className="h-screen flex flex-col items-center justify-center text-center px-4">
             <div className="text-6xl mb-4">🎲</div>
             <h3 className="text-xl font-bold text-fore mb-2">Sin videos todavía</h3>
@@ -649,7 +653,7 @@ function WorldMapPage() {
     { lat: 51.5074, lng: -0.1278, flag: '🇬🇧', city: 'Londres' },
   ];
 
-  const points = videos && videos.length > 0
+  const points = Array.isArray(videos) && videos.length > 0
     ? videos.map((v: DominoVideo) => ({
         lat: v.geoCoordinates.lat, lng: v.geoCoordinates.lng,
         flag: v.userId?.flag || '🌍', city: v.userId?.city || ''
@@ -709,7 +713,7 @@ function WorldMapPage() {
         </div>
         <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-surface border border-border rounded-xl p-4">
-            <div className="text-2xl font-bold" style={{ color: '#00F5FF' }}>{videos?.length || points.length}</div>
+            <div className="text-2xl font-bold" style={{ color: '#00F5FF' }}>{Array.isArray(videos) ? videos.length : points.length}</div>
             <div className="text-xs text-gray-400 mt-1">Videos en cadena</div>
           </div>
           <div className="bg-surface border border-border rounded-xl p-4">
@@ -735,10 +739,10 @@ function DashboardPage() {
   const markRead = async (id: string) => {
     if (!token) return;
     await fetch(`${API}/api/notifications/${id}/read`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
-    setNotifs((prev: Notification[]) => prev.map(n => n._id === id ? { ...n, read: true } : n));
+    setNotifs((prev: Notification[]) => Array.isArray(prev) ? prev.map(n => n._id === id ? { ...n, read: true } : n) : prev);
   };
 
-  const unread = (notifs || []).filter((n: Notification) => !n.read).length;
+  const unread = Array.isArray(notifs) ? notifs.filter((n: Notification) => !n.read).length : 0;
 
   if (!user) return (
     <div className="min-h-screen flex items-center justify-center" style={{ paddingTop: '80px' }}>
@@ -791,7 +795,7 @@ function DashboardPage() {
                 <div className="flex items-center gap-1 text-xs text-neon"><Star size={12} /></div>
               </div>
               <div className="space-y-1">
-                {(ranking || []).map((entry: RankingEntry, i: number) => (
+                {(Array.isArray(ranking) ? ranking : []).map((entry: RankingEntry, i: number) => (
                   <div key={entry._id} className={cn('flex items-center gap-3 p-3 rounded-xl transition-all hover:bg-muted', entry._id === user._id && 'border border-neon/30 bg-neon/5')}>
                     <span className="w-7 text-center text-sm font-bold">
                       {i < 3 ? ['🥇','🥈','🥉'][i] : <span className="text-gray-500 font-mono">#{i+1}</span>}
@@ -821,7 +825,7 @@ function DashboardPage() {
                 {unread > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full text-black" style={{ background: '#FF007F' }}>{unread} nuevas</span>}
               </div>
               <div className="space-y-2">
-                {(notifs || []).map((n: Notification) => (
+                {(Array.isArray(notifs) ? notifs : []).map((n: Notification) => (
                   <div key={n._id} onClick={() => markRead(n._id)}
                     className={cn('flex gap-3 p-2.5 rounded-xl cursor-pointer transition-all hover:bg-muted', !n.read && 'bg-neon/5 border border-neon/20')}>
                     <span className="text-lg">{n.type === 'nomination' ? '🎯' : n.type === 'chain_continued' ? '⛓️' : '🏆'}</span>
@@ -832,7 +836,7 @@ function DashboardPage() {
                     {!n.read && <div className="w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0" style={{ background: '#00F5FF' }} />}
                   </div>
                 ))}
-                {(!notifs || notifs.length === 0) && (
+                {(!notifs || !Array.isArray(notifs) || notifs.length === 0) && (
                   <div className="text-center py-8">
                     <Bell size={32} className="mx-auto text-gray-700 mb-2" />
                     <p className="text-sm text-gray-500">Sin notificaciones</p>
@@ -859,7 +863,7 @@ function CameraPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(15);
+  const [recTimeLeft, setRecTimeLeft] = useState(15);
   const [recorded, setRecorded] = useState(false);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [showNomination, setShowNomination] = useState(false);
@@ -892,7 +896,6 @@ function CameraPage() {
       }
       streamRef.current = stream;
       setCameraActive(true);
-      // Esperar al siguiente frame para que el video esté en el DOM
       await new Promise(r => setTimeout(r, 100));
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -917,10 +920,25 @@ function CameraPage() {
     }
   };
 
+  const stopRecording = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setRecording(false);
+  };
+
   const startRecording = () => {
     if (!streamRef.current) return;
     chunksRef.current = [];
-    const mr = new MediaRecorder(streamRef.current, { mimeType: 'video/webm' });
+
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9'
+      : MediaRecorder.isTypeSupported('video/webm')
+      ? 'video/webm'
+      : '';
+
+    const mr = new MediaRecorder(streamRef.current, mimeType ? { mimeType } : {});
     mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
     mr.onstop = () => {
       const b = new Blob(chunksRef.current, { type: 'video/webm' });
@@ -932,27 +950,22 @@ function CameraPage() {
     mediaRecorderRef.current = mr;
     mr.start();
     setRecording(true);
-    setTimeLeft(15);
+    setRecTimeLeft(15);
     intervalRef.current = setInterval(() => {
-      setTimeLeft(t => {
-        if (t <= 1) { stopRecording(); return 0; }
+      setRecTimeLeft(t => {
+        if (t <= 1) {
+          stopRecording();
+          return 0;
+        }
         return t - 1;
       });
     }, 1000);
-  };
-
-  const stopRecording = () => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    mediaRecorderRef.current?.stop();
-    setRecording(false);
   };
 
   const publish = async (nominatedIds: string[]) => {
     if (!token || !challenge) return;
     setPublishing(true);
     try {
-      const formData = new FormData();
-      if (blob) formData.append('video', blob, 'domino.webm');
       const r = await fetch(`${API}/api/videos`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -967,7 +980,7 @@ function CameraPage() {
     finally { setPublishing(false); }
   };
 
-  const filteredUsers = (users || []).filter((u: RankingEntry) =>
+  const filteredUsers = (Array.isArray(users) ? users : []).filter((u: RankingEntry) =>
     u._id !== user?._id && !selected.includes(u._id) &&
     (u.username.toLowerCase().includes(search.toLowerCase()) || (u.country || '').toLowerCase().includes(search.toLowerCase()))
   );
@@ -1014,7 +1027,7 @@ function CameraPage() {
             {selected.length > 0 && (
               <div className="flex gap-2 flex-wrap mb-3">
                 {selected.map(id => {
-                  const u = (users || []).find((x: RankingEntry) => x._id === id);
+                  const u = (Array.isArray(users) ? users : []).find((x: RankingEntry) => x._id === id);
                   return u ? (
                     <button key={id} onClick={() => setSelected(s => s.filter(x => x !== id))}
                       className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border" style={{ borderColor: '#FF007F', color: '#FF007F', background: 'rgba(255,0,127,0.1)' }}>
@@ -1068,7 +1081,7 @@ function CameraPage() {
         {!cameraActive && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
             {recorded
-              ? <div className="text-center"><CheckCircle size={64} className="mx-auto text-green-400 mb-3" /><p className="text-white font-bold">Video grabado</p></div>
+              ? <div className="text-center"><CheckCircle size={64} className="mx-auto text-green-400 mb-3" /><p className="text-white font-bold">Video grabado — 15s</p></div>
               : <div className="text-center"><Camera size={64} className="mx-auto text-gray-600 mb-3" /><p className="text-gray-400 text-sm">Activa la cámara para grabar</p></div>
             }
           </div>
@@ -1086,8 +1099,6 @@ function CameraPage() {
             </div>
             <div className="w-10" />
           </div>
-
-
 
           <div className="absolute top-32 left-4 w-8 h-8 border-t-2 border-l-2 rounded-tl-lg" style={{ borderColor: '#00F5FF' }} />
           <div className="absolute top-32 right-4 w-8 h-8 border-t-2 border-r-2 rounded-tr-lg" style={{ borderColor: '#00F5FF' }} />
@@ -1108,7 +1119,7 @@ function CameraPage() {
                   style={{ background: 'linear-gradient(135deg, #FF007F, #7c3aed)', boxShadow: '0 0 24px rgba(255,0,127,0.4)' }}>
                   <Users size={18} />Nominar 3 personas y publicar
                 </button>
-                <button onClick={() => { setRecorded(false); setBlob(null); setTimeLeft(15); }}
+                <button onClick={() => { setRecorded(false); setBlob(null); setRecTimeLeft(15); }}
                   className="text-sm text-gray-400 hover:text-white flex items-center gap-1">
                   <RefreshCw size={14} />Repetir
                 </button>
@@ -1122,12 +1133,12 @@ function CameraPage() {
             ) : (
               <div className="flex flex-col items-center gap-3">
                 <p className="text-xs text-gray-300">
-                  {recording ? `Grabando... ${timeLeft}s` : 'Pulsa para empezar a grabar'}
+                  {recording ? `Grabando... ${recTimeLeft}s` : 'Pulsa para empezar a grabar'}
                 </p>
                 {recording && (
                   <div className="w-16 h-16 rounded-full flex items-center justify-center border-4 mb-1"
                     style={{ borderColor: '#FF007F', boxShadow: '0 0 20px rgba(255,0,127,0.5)' }}>
-                    <span className="text-2xl font-black text-white font-mono">{timeLeft}</span>
+                    <span className="text-2xl font-black text-white font-mono">{recTimeLeft}</span>
                   </div>
                 )}
                 <button
@@ -1142,7 +1153,7 @@ function CameraPage() {
                   }
                 </button>
                 <p className="text-xs text-gray-500">
-                  {recording ? 'Pulsa para detener' : 'Se detiene automáticamente a los 15s'}
+                  {recording ? 'Pulsa para detener antes' : 'Se detiene automáticamente a los 15s'}
                 </p>
               </div>
             )}
@@ -1161,7 +1172,7 @@ function NotificationsPage() {
   const markAllRead = async () => {
     if (!token) return;
     await fetch(`${API}/api/notifications/read-all`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
-    setNotifs((prev: Notification[]) => prev.map(n => ({ ...n, read: true })));
+    setNotifs((prev: Notification[]) => Array.isArray(prev) ? prev.map(n => ({ ...n, read: true })) : prev);
   };
 
   return (
@@ -1169,12 +1180,12 @@ function NotificationsPage() {
       <div className="max-w-2xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-display font-bold text-fore" style={{ fontFamily: 'Syne, sans-serif' }}>Notificaciones</h1>
-          {(notifs || []).some((n: Notification) => !n.read) && (
+          {Array.isArray(notifs) && notifs.some((n: Notification) => !n.read) && (
             <button onClick={markAllRead} className="text-xs text-neon hover:underline">Marcar todas como leídas</button>
           )}
         </div>
         <div className="space-y-2">
-          {(notifs || []).map((n: Notification) => (
+          {(Array.isArray(notifs) ? notifs : []).map((n: Notification) => (
             <div key={n._id} className={cn('flex gap-3 p-4 rounded-xl border transition-all', !n.read ? 'bg-neon/5 border-neon/20' : 'border-border bg-surface')}>
               <span className="text-xl">{n.type === 'nomination' ? '🎯' : n.type === 'chain_continued' ? '⛓️' : '🏆'}</span>
               <div className="flex-1">
@@ -1184,7 +1195,7 @@ function NotificationsPage() {
               {!n.read && <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1" style={{ background: '#00F5FF' }} />}
             </div>
           ))}
-          {(!notifs || notifs.length === 0) && (
+          {(!notifs || !Array.isArray(notifs) || notifs.length === 0) && (
             <div className="text-center py-16">
               <Bell size={48} className="mx-auto text-gray-700 mb-3" />
               <p className="text-gray-400">Sin notificaciones</p>
