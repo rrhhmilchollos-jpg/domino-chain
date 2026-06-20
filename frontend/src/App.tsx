@@ -640,16 +640,35 @@ function WorldMapPage() {
     y: ((90 - lat) / 180) * h
   });
 
+  const SAMPLE_POINTS = [
+    { lat: 40.4168, lng: -3.7038, flag: '🇪🇸', city: 'Madrid' },
+    { lat: 35.6762, lng: 139.6503, flag: '🇯🇵', city: 'Tokio' },
+    { lat: 40.7128, lng: -74.006, flag: '🇺🇸', city: 'Nueva York' },
+    { lat: -34.6037, lng: -58.3816, flag: '🇦🇷', city: 'Buenos Aires' },
+    { lat: 48.8566, lng: 2.3522, flag: '🇫🇷', city: 'París' },
+    { lat: 51.5074, lng: -0.1278, flag: '🇬🇧', city: 'Londres' },
+  ];
+
+  const points = videos && videos.length > 0
+    ? videos.map((v: DominoVideo) => ({
+        lat: v.geoCoordinates.lat, lng: v.geoCoordinates.lng,
+        flag: v.userId?.flag || '🌍', city: v.userId?.city || ''
+      }))
+    : SAMPLE_POINTS;
+
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !videos) return;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    const parent = canvas.parentElement;
+    canvas.width = parent?.clientWidth || 800;
+    canvas.height = Math.min((parent?.clientWidth || 800) * 0.5, 400);
     const w = canvas.width, h = canvas.height;
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = '#0b0b12';
     ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = 'rgba(42,42,58,0.5)';
+    ctx.strokeStyle = 'rgba(42,42,58,0.6)';
     ctx.lineWidth = 0.5;
     for (let lng2 = -180; lng2 <= 180; lng2 += 30) {
       const { x } = project(0, lng2, w, h);
@@ -659,44 +678,47 @@ function WorldMapPage() {
       const { y } = project(lat2, 0, w, h);
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
     }
-    videos.forEach((vid: DominoVideo) => {
-      const { x, y } = project(vid.geoCoordinates.lat, vid.geoCoordinates.lng, w, h);
-      ctx.beginPath();
-      ctx.arc(x, y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = '#00F5FF';
-      ctx.shadowBlur = 12;
-      ctx.shadowColor = '#00F5FF';
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      if (vid.userId?.flag) {
-        ctx.fillStyle = 'rgba(248,250,252,0.8)';
-        ctx.font = '9px Inter';
-        ctx.fillText(`${vid.userId.flag} ${vid.userId.city || ''}`, x + 8, y - 4);
-      }
+    for (let i = 0; i < points.length - 1; i++) {
+      const p1 = project(points[i].lat, points[i].lng, w, h);
+      const p2 = project(points[i+1].lat, points[i+1].lng, w, h);
+      const grad = ctx.createLinearGradient(p1.x, p1.y, p2.x, p2.y);
+      grad.addColorStop(0, '#00F5FF'); grad.addColorStop(1, '#FF007F');
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+      ctx.strokeStyle = grad; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.6;
+      ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    points.forEach((pt, idx) => {
+      const { x, y } = project(pt.lat, pt.lng, w, h);
+      ctx.beginPath(); ctx.arc(x, y, idx === 0 ? 8 : 6, 0, Math.PI * 2);
+      ctx.fillStyle = idx === 0 ? '#FF007F' : '#00F5FF';
+      ctx.shadowBlur = 14; ctx.shadowColor = ctx.fillStyle;
+      ctx.fill(); ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(248,250,252,0.85)';
+      ctx.font = `${Math.max(8, Math.floor(w/90))}px Inter`;
+      ctx.fillText(`${pt.flag} ${pt.city}`, x + 10, y - 4);
     });
-  }, [videos]);
+  }, [points.length]);
 
   return (
     <div className="min-h-screen" style={{ paddingTop: '80px' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <h1 className="text-3xl font-display font-bold text-fore mb-2" style={{ fontFamily: 'Syne, sans-serif' }}>Mapa Global de Impacto</h1>
-        <p className="text-gray-400 mb-6">Cadenas activas en tiempo real</p>
-        <div className="relative w-full rounded-xl overflow-hidden border border-border">
-          <canvas ref={canvasRef} width={800} height={400} className="w-full" style={{ height: '400px' }}
-            aria-label="Mapa mundial con cadenas DOMINO" />
+        <p className="text-gray-400 mb-6">Cadenas activas en tiempo real · {points.length} nodos</p>
+        <div className="relative w-full rounded-xl overflow-hidden border border-border bg-[#0b0b12]" style={{ minHeight: '300px' }}>
+          <canvas ref={canvasRef} className="w-full block" aria-label="Mapa mundial con cadenas DOMINO" />
         </div>
         <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-surface border border-border rounded-xl p-4">
-            <div className="text-2xl font-bold" style={{ color: '#00F5FF' }}>{videos?.length || 0}</div>
+            <div className="text-2xl font-bold" style={{ color: '#00F5FF' }}>{videos?.length || points.length}</div>
             <div className="text-xs text-gray-400 mt-1">Videos en cadena</div>
           </div>
           <div className="bg-surface border border-border rounded-xl p-4">
-            <div className="text-2xl font-bold" style={{ color: '#FF007F' }}>{new Set((videos || []).map((v: DominoVideo) => v.userId?.country)).size}</div>
-            <div className="text-xs text-gray-400 mt-1">Países conectados</div>
+            <div className="text-2xl font-bold" style={{ color: '#FF007F' }}>{new Set(points.map((p: any) => p.city)).size}</div>
+            <div className="text-xs text-gray-400 mt-1">Ciudades conectadas</div>
           </div>
           <div className="bg-surface border border-border rounded-xl p-4">
-            <div className="text-2xl font-bold text-violet-400">{(videos || []).filter((v: DominoVideo) => !v.parentVideoId).length}</div>
-            <div className="text-xs text-gray-400 mt-1">Cadenas iniciadas</div>
+            <div className="text-2xl font-bold text-violet-400">{points.length}</div>
+            <div className="text-xs text-gray-400 mt-1">Nodos activos</div>
           </div>
         </div>
       </div>
@@ -855,12 +877,32 @@ function CameraPage() {
 
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: true });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: true
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      }
       streamRef.current = stream;
-      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute('playsinline', 'true');
+        videoRef.current.muted = true;
+        await videoRef.current.play().catch(() => {});
+      }
       setCameraActive(true);
-    } catch {
-      alert('No se pudo acceder a la cámara. Permite el acceso en los ajustes del navegador.');
+    } catch (err: any) {
+      console.error('Camera error:', err);
+      if (err.name === 'NotAllowedError') {
+        alert('❌ Permiso de cámara denegado.\n\nVe a Ajustes > Aplicaciones > DOMINO > Permisos y activa Cámara y Micrófono.');
+      } else if (err.name === 'NotFoundError') {
+        alert('❌ No se encontró ninguna cámara en este dispositivo.');
+      } else {
+        alert('❌ Error al acceder a la cámara: ' + err.message);
+      }
     }
   };
 
