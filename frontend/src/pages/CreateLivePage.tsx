@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { Video } from 'lucide-react';
-import { cn, useAuth, Spinner, API } from '../lib/shared';
+import { cn, useAuth, Spinner, API, storeHostLiveToken } from '../lib/shared';
 
 export default function CreateLivePage() {
   const { user, token } = useAuth();
@@ -10,7 +10,7 @@ export default function CreateLivePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   if(!user)return<div className="min-h-screen flex items-center justify-center" style={{paddingTop:'80px',background:'#0b0b12'}}><div className="text-center"><p className="text-gray-400 mb-4">Inicia sesión</p><Link href="/auth" className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Entrar</Link></div></div>;
-  const create=async()=>{if(!form.title.trim())return setError('Escribe un título');setError('');setLoading(true);try{const r=await fetch(`${API}/api/lives`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(form)});const d=await r.json();if(!r.ok)throw new Error(d.error||'Error');setLocation(`/live/${d.live._id}`);}catch(e:any){setError(e.message);}finally{setLoading(false);}};
+  const create=async()=>{if(!form.title.trim())return setError('Escribe un título');setError('');setLoading(true);try{const r=await fetch(`${API}/api/lives`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(form)});const d=await r.json();if(!r.ok)throw new Error(d.error||'Error');if(d.token&&d.livekitUrl)storeHostLiveToken(d.live._id,d.token,d.livekitUrl);setLocation(`/live/${d.live._id}`);}catch(e:any){setError(e.message);}finally{setLoading(false);}};
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{paddingTop:'80px',background:'#0b0b12'}}>
       <div className="w-full max-w-md">

@@ -19,7 +19,7 @@ function generateRoomName(userId) {
   return `domino-live-${userId}-${Date.now()}`;
 }
 
-function generateLivekitToken(roomName, userId, username, isHost = false) {
+async function generateLivekitToken(roomName, userId, username, isHost = false) {
   if (!AccessToken) return null;
   const apiKey = process.env.LIVEKIT_API_KEY;
   const apiSecret = process.env.LIVEKIT_API_SECRET;
@@ -33,7 +33,7 @@ function generateLivekitToken(roomName, userId, username, isHost = false) {
     canSubscribe: true,      // todos pueden ver
     canPublishData: true     // todos pueden enviar mensajes de chat
   });
-  return at.toJwt();
+  return await at.toJwt(); // v2 del SDK: toJwt() devuelve una Promise
 }
 
 // GET /api/lives — lives activos
@@ -62,7 +62,7 @@ router.post('/', auth, async (req, res) => {
     );
 
     const roomName = generateRoomName(req.user._id);
-    const token = generateLivekitToken(roomName, req.user._id.toString(), req.user.username, true);
+    const token = await generateLivekitToken(roomName, req.user._id.toString(), req.user.username, true);
 
     const live = await Live.create({
       userId: req.user._id,
@@ -89,7 +89,7 @@ router.post('/:id/join', auth, async (req, res) => {
     const live = await Live.findById(req.params.id).populate('userId', 'username avatarUrl flag');
     if (!live || live.status !== 'active') return res.status(404).json({ error: 'Live no encontrado o terminado' });
 
-    const token = generateLivekitToken(live.roomName, req.user._id.toString(), req.user.username, false);
+    const token = await generateLivekitToken(live.roomName, req.user._id.toString(), req.user.username, false);
 
     // Incrementar contador de espectadores
     await Live.findByIdAndUpdate(live._id, {

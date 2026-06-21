@@ -205,6 +205,22 @@ export function GoogleSignInButton({ onError, onSuccess }: { onError?: (msg: str
 }
 
 
+// ===================== LIVEKIT: token de host =====================
+// Cuando el usuario crea un live, el backend ya devuelve su token de host
+// (con permiso de publicar). Lo guardamos en sessionStorage para que la
+// pantalla del live lo use al conectar, en vez de pedir uno de espectador.
+const hostTokenKey = (liveId: string) => `domino_live_host_${liveId}`;
+export function storeHostLiveToken(liveId: string, token: string, livekitUrl: string) {
+  try { sessionStorage.setItem(hostTokenKey(liveId), JSON.stringify({ token, livekitUrl })); } catch {}
+}
+export function readHostLiveToken(liveId: string): { token: string; livekitUrl: string } | null {
+  try {
+    const raw = sessionStorage.getItem(hostTokenKey(liveId));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+// ===================== NAVBAR =====================
 export function Navbar() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);

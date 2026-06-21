@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { Eye, X, Gift, Send } from 'lucide-react';
-import { cn, useAuth, useApi, Av, GIFT_CATALOG, API, LiveStream } from '../lib/shared';
+import { Eye, X, Gift, Send, Volume2, VolumeX } from 'lucide-react';
+import { Room, RoomEvent, Track } from 'livekit-client';
+import { cn, useAuth, useApi, Av, GIFT_CATALOG, API, LiveStream, readHostLiveToken } from '../lib/shared';
+
+type ConnState = 'idle' | 'connecting' | 'connected' | 'error' | 'unavailable';
 
 export default function LiveViewerPage({ id }: { id: string }) {
   const { user, token, refreshUser } = useAuth();
@@ -13,11 +16,75 @@ export default function LiveViewerPage({ id }: { id: string }) {
   const [viewers, setViewers] = useState(0);
   const [sending, setSending] = useState(false);
   const [insufficientCoins, setInsufficientCoins] = useState(false);
+  const [connState, setConnState] = useState<ConnState>('idle');
+  const [muted, setMuted] = useState(true);
   const chatRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const roomRef = useRef<Room | null>(null);
   const live = Array.isArray(lives)?lives.find((l:LiveStream)=>l._id===id):null;
+  const isOwner = !!user && !!live && live.userId?._id === user._id;
   useEffect(()=>{if(live)setViewers(live.viewerCount||0);},[live]);
   useEffect(()=>{const t=setInterval(()=>setViewers(v=>Math.max(0,v+Math.floor(Math.random()*3-1))),5000);return()=>clearInterval(t);},[]);
   useEffect(()=>{if(chatRef.current)chatRef.current.scrollTop=chatRef.current.scrollHeight;},[msgs]);
+
+  // ===== Conexión real a LiveKit: el host publica cámara/mic, el espectador se suscribe =====
+  useEffect(() => {
+    if (!live?._id) return;
+    let cancelled = false;
+    setConnState('connecting');
+
+    (async () => {
+      let lkToken: string | null = null;
+      let livekitUrl: string | null = null;
+
+      if (isOwner) {
+        const stored = readHostLiveToken(live._id);
+        if (stored) { lkToken = stored.token; livekitUrl = stored.livekitUrl; }
+      }
+      if (!lkToken && token) {
+        try {
+          const r = await fetch(`${API}/api/lives/${live._id}/join`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+          const d = await r.json();
+          if (r.ok && d.token && d.livekitUrl && !d.livekitUrl.includes('your-livekit-server')) {
+            lkToken = d.token; livekitUrl = d.livekitUrl;
+          }
+        } catch { /* sin conexión a la API: nos quedamos en 'unavailable' */ }
+      }
+
+      if (cancelled) return;
+      if (!lkToken || !livekitUrl) { setConnState('unavailable'); return; }
+
+      const room = new Room();
+      roomRef.current = room;
+
+      room.on(RoomEvent.TrackSubscribed, (track) => {
+        if (track.kind === Track.Kind.Video && videoRef.current) track.attach(videoRef.current);
+      });
+      room.on(RoomEvent.Disconnected, () => { if (!cancelled) setConnState('unavailable'); });
+
+      try {
+        await room.connect(livekitUrl, lkToken);
+        if (cancelled) { room.disconnect(); return; }
+        if (isOwner) {
+          const camPub = await room.localParticipant.setCameraEnabled(true);
+          if (camPub?.track && videoRef.current) camPub.track.attach(videoRef.current);
+          await room.localParticipant.setMicrophoneEnabled(true);
+        }
+        setConnState('connected');
+      } catch {
+        if (!cancelled) setConnState('error');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      roomRef.current?.disconnect();
+      roomRef.current = null;
+      if (!isOwner && token) fetch(`${API}/api/lives/${live._id}/leave`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live?._id, isOwner]);
+
   const sendMsg=()=>{if(!input.trim()||!user)return;setMsgs(m=>[...m,{user:user.username,text:input}]);setInput('');};
   const sendGift=async(type:string)=>{
     if(!token||!user)return;
@@ -35,7 +102,13 @@ export default function LiveViewerPage({ id }: { id: string }) {
   return (
     <div className="fixed inset-0 flex" style={{paddingTop:'56px',background:'#000'}}>
       <div className="relative flex-1">
-        <div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><div className="text-center"><Av u={live.userId} s={120}/><p className="text-white font-bold mt-4 text-xl">@{live.userId?.username}</p><p className="text-gray-400 text-sm mt-1">{live.title}</p><div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full" style={{background:'rgba(255,0,127,0.2)',border:'1px solid #FF007F'}}><div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#FF007F'}}/><span className="text-white text-sm font-bold">EN DIRECTO</span></div><p className="text-gray-500 text-xs mt-2">Conecta LiveKit para stream real</p></div></div>
+        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner||muted} style={{display:connState==='connected'?'block':'none'}}/>
+        {connState!=='connected'&&(
+          <div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><div className="text-center"><Av u={live.userId} s={120}/><p className="text-white font-bold mt-4 text-xl">@{live.userId?.username}</p><p className="text-gray-400 text-sm mt-1">{live.title}</p><div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full" style={{background:'rgba(255,0,127,0.2)',border:'1px solid #FF007F'}}><div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#FF007F'}}/><span className="text-white text-sm font-bold">EN DIRECTO</span></div><p className="text-gray-500 text-xs mt-2">{connState==='connecting'?'Conectando con el directo...':connState==='unavailable'?(isOwner?'El streaming todavía no está configurado en el servidor':'Esperando a que el streamer se conecte...'):'No se pudo conectar al directo'}</p></div></div>
+        )}
+        {connState==='connected'&&!isOwner&&(
+          <button onClick={()=>setMuted(m=>!m)} className="absolute bottom-20 right-3 z-10 p-2 rounded-full" style={{background:'rgba(0,0,0,0.6)'}}>{muted?<VolumeX size={16} className="text-white"/>:<Volume2 size={16} className="text-white"/>}</button>
+        )}
         <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-10">
           <div className="flex items-center gap-2"><div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE</div><div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs text-white" style={{background:'rgba(0,0,0,0.6)'}}><Eye size={10}/>{Math.max(0,viewers)}</div></div>
           <Link href="/live" className="p-1.5 rounded-full" style={{background:'rgba(0,0,0,0.6)'}}><X size={16} className="text-white"/></Link>
