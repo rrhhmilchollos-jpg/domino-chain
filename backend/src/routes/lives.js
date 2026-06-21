@@ -5,16 +5,33 @@ const Gift = require('../models/Gift');
 const Video = require('../models/Video');
 
 // LiveKit token generation + grabación (Egress)
-let AccessToken, EgressClient, EncodedFileOutput, EncodedFileType, S3Upload;
+let AccessToken, EgressClient, EncodedFileOutput, EncodedFileType, DirectFileOutput;
 try {
   const livekit = require('livekit-server-sdk');
   AccessToken = livekit.AccessToken;
   EgressClient = livekit.EgressClient;
   EncodedFileOutput = livekit.EncodedFileOutput;
   EncodedFileType = livekit.EncodedFileType;
-  S3Upload = livekit.S3Upload;
+  DirectFileOutput = livekit.DirectFileOutput;
 } catch (e) {
   console.warn('livekit-server-sdk no instalado — lives desactivados');
+}
+
+// Cloudinary para subir grabaciones de directos
+let cloudinary = null;
+try {
+  const { v2 } = require('cloudinary');
+  if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
+    v2.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
+    cloudinary = v2;
+    console.log('✅ Cloudinary configurado para grabaciones de directos');
+  }
+} catch (e) {
+  console.warn('cloudinary no disponible:', e.message);
 }
 
 function generateRoomName(userId) {
@@ -42,53 +59,80 @@ function getLivekitUrl() {
   return process.env.LIVEKIT_URL || null;
 }
 
-// ===== Grabación automática (LiveKit Egress -> S3 / R2 / cualquier S3-compatible) =====
-// Necesita S3_ACCESS_KEY, S3_SECRET, S3_BUCKET, S3_REGION (y opcionalmente
-// S3_ENDPOINT para Cloudflare R2 u otro proveedor S3-compatible). Si no
-// están configuradas, los lives funcionan igual mas no se graban.
+// ===== Grabación automática (LiveKit Egress -> fichero temporal -> Cloudinary) =====
+// Estrategia: LiveKit graba a un fichero local temporal en /tmp, y al terminar
+// el live subimos ese fichero a Cloudinary. No necesita S3 ni R2.
+// Solo necesita CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.
+const fs = require('fs');
+const path = require('path');
+
 function recordingConfigured() {
-  return !!(EgressClient && process.env.S3_ACCESS_KEY && process.env.S3_SECRET && process.env.S3_BUCKET && process.env.S3_REGION);
+  return !!(EgressClient && cloudinary && process.env.LIVEKIT_API_KEY);
 }
+
 function getEgressClient() {
   const url = getLivekitUrl();
-  if (!recordingConfigured() || !url) return null;
+  if (!EgressClient || !url) return null;
   const host = url.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
   return new EgressClient(host, process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
 }
+
+// Mapa en memoria: egressId -> ruta del fichero temporal
+const egressFiles = {};
+
 async function startRecording(roomName) {
+  if (!recordingConfigured()) return null;
   const client = getEgressClient();
   if (!client) return null;
   try {
+    const tmpPath = `/tmp/${roomName}-${Date.now()}.mp4`;
     const output = new EncodedFileOutput({
-      fileType: EncodedFileType.MP4,
-      filepath: `domino-lives/${roomName}-{time}.mp4`,
-      output: {
-        case: 's3',
-        value: new S3Upload({
-          accessKey: process.env.S3_ACCESS_KEY,
-          secret: process.env.S3_SECRET,
-          region: process.env.S3_REGION,
-          bucket: process.env.S3_BUCKET,
-          endpoint: process.env.S3_ENDPOINT || undefined,
-        }),
-      },
+      fileType: EncodedFileType ? EncodedFileType.MP4 : 1,
+      filepath: tmpPath,
     });
     const info = await client.startRoomCompositeEgress(roomName, { file: output });
+    egressFiles[info.egressId] = tmpPath;
+    console.log(`🎙️ Grabación iniciada: ${info.egressId} → ${tmpPath}`);
     return info.egressId;
   } catch (e) {
     console.error('No se pudo iniciar la grabación del live:', e.message);
     return null;
   }
 }
+
 async function stopRecording(egressId) {
   const client = getEgressClient();
   if (!client || !egressId) return null;
   try {
-    const info = await client.stopEgress(egressId);
-    const fileResult = info.fileResults?.[0];
-    return fileResult?.location || fileResult?.filename || null;
+    await client.stopEgress(egressId);
   } catch (e) {
-    console.error('No se pudo detener/leer la grabación del live:', e.message);
+    console.error('Error al detener egress:', e.message);
+  }
+
+  // Esperar un momento a que el fichero se cierre
+  await new Promise(r => setTimeout(r, 4000));
+
+  const tmpPath = egressFiles[egressId];
+  if (!tmpPath || !fs.existsSync(tmpPath)) {
+    console.warn('Fichero de grabación no encontrado:', tmpPath);
+    return null;
+  }
+
+  try {
+    console.log(`☁️ Subiendo grabación a Cloudinary: ${tmpPath}`);
+    const result = await cloudinary.uploader.upload(tmpPath, {
+      resource_type: 'video',
+      folder: 'domino-lives',
+      public_id: `live-${egressId}`,
+      overwrite: true,
+    });
+    // Limpiar fichero temporal
+    try { fs.unlinkSync(tmpPath); } catch {}
+    delete egressFiles[egressId];
+    console.log(`✅ Grabación subida: ${result.secure_url}`);
+    return result.secure_url;
+  } catch (e) {
+    console.error('Error al subir grabación a Cloudinary:', e.message);
     return null;
   }
 }
