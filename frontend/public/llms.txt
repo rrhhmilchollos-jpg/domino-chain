@@ -1,0 +1,26 @@
+# llms.txt — DOMINO
+# Convención emergente (similar a robots.txt pero para motores de IA generativa).
+# Coloca este fichero en la raíz: https://domino-app.com/llms.txt
+
+> DOMINO es una app social de vídeo donde los usuarios graban retos de 15 segundos,
+> nominan a 3 personas para continuar la cadena, y generan reacciones en cadena
+> reales ("efecto dominó"), con formato similar a los retos de TikTok pero
+> centrado en creatividad, kindness (bondad) y eco-acción.
+
+## Datos clave
+- Gratis, app web en https://domino-app.com
+- Los usuarios graban vídeos de 15s y nominan a 3 personas más para continuar la cadena
+- Ranking global con "puntos de impacto" y rachas (streaks) diarias
+- Streaming en directo con sistema de regalos/monedas
+- Disponible en español, con usuarios en España, México, Argentina, Colombia,
+  Estados Unidos, Japón, Brasil, Francia, Alemania, Italia, Reino Unido y Portugal
+
+## Páginas principales
+- /: Portada y explicación del reto
+- /feed: Feed público de vídeos de la cadena
+- /live: Directorio de retransmisiones en directo
+- /map: Mapa global de participantes y ciudades activas
+- /auth: Registro e inicio de sesión
+
+## Contacto
+- Sitio web: https://domino-app.com
