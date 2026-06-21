@@ -307,13 +307,13 @@ export default function LiveViewerPage({ id }: { id: string }) {
     <div className="fixed inset-0" style={{paddingTop:'56px',background:'#000'}}>
       <div className="relative w-full h-full">
         {live.isBattle?(
-          <div className="absolute inset-0 flex flex-col" style={{display:connState==='connected'?'flex':'none'}}>
+          <div className="absolute inset-0 flex flex-row" style={{display:connState==='connected'?'flex':'none'}}>
             <div className="relative flex-1 overflow-hidden">
               <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner?true:muted}/>
             </div>
-            <div className="relative flex-1 overflow-hidden" style={{borderTop:'2px solid #FF007F'}}>
+            <div className="relative flex-1 overflow-hidden" style={{borderLeft:'2px solid #FF007F'}}>
               <video ref={opponentVideoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOpponent?true:muted}/>
-              {!live.battleOpponentId&&<div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><p className="text-gray-400 text-sm">Esperando a que el rival acepte la batalla...</p></div>}
+              {!live.battleOpponentId&&<div className="absolute inset-0 flex items-center justify-center px-2" style={{background:'#1a1a2e'}}><p className="text-gray-400 text-xs text-center">Esperando a que el rival acepte la batalla...</p></div>}
             </div>
           </div>
         ):(
@@ -340,20 +340,27 @@ export default function LiveViewerPage({ id }: { id: string }) {
         {connState==='connected'&&!isOwner&&(
           <button onClick={()=>setMuted(m=>!m)} className="absolute z-10 p-2.5 rounded-full" style={{top:'52px',right:'8px',background:'rgba(0,0,0,0.55)'}}>{muted?<VolumeX size={18} className="text-white"/>:<Volume2 size={18} className="text-white"/>}</button>
         )}
-        <button onClick={doShare} className="absolute z-10 p-2.5 rounded-full" style={{top:connState==='connected'&&!isOwner?'96px':'52px',right:'8px',background:'rgba(0,0,0,0.55)'}}><Share2 size={18} className="text-white"/></button>
-        {live.isBattle&&(
-          <div className="absolute top-12 left-2 right-2 flex items-center gap-2 z-10">
-            <button onClick={()=>setGiftTarget('host')} className="flex-1 text-center py-1 rounded-lg transition-all" style={{background:'rgba(255,0,127,0.3)',border:giftTarget==='host'?'2px solid #FF007F':'1px solid rgba(255,0,127,0.4)'}}>
-              <p className="text-white text-xs font-bold">@{live.userId?.username}</p>
-              <p className="text-white text-xl font-black">{live.battleScore?.host||0}</p>
-            </button>
-            <div className="text-white font-black">VS</div>
-            <button onClick={()=>live.battleOpponentId&&setGiftTarget('opponent')} disabled={!live.battleOpponentId} className="flex-1 text-center py-1 rounded-lg transition-all disabled:opacity-60" style={{background:'rgba(124,58,237,0.3)',border:giftTarget==='opponent'?'2px solid #7c3aed':'1px solid rgba(124,58,237,0.4)'}}>
-              <p className="text-white text-xs font-bold">{live.battleOpponentId?`@${live.battleOpponentId.username}`:'Esperando rival...'}</p>
-              <p className="text-white text-xl font-black">{live.battleScore?.opponent||0}</p>
-            </button>
-          </div>
-        )}
+        {live.isBattle&&(()=>{
+          const h=live.battleScore?.host||0, o=live.battleScore?.opponent||0, total=h+o;
+          const hostPct = total>0 ? Math.round((h/total)*100) : 50;
+          return (
+            <div className="absolute top-12 left-2 right-2 z-10">
+              <div className="relative h-7 rounded-full overflow-hidden flex" style={{background:'#1a1a2e'}}>
+                <button onClick={()=>setGiftTarget('host')} className="h-full flex items-center justify-start pl-2.5 transition-all" style={{width:`${hostPct}%`,minWidth:'10%',background:'linear-gradient(90deg,#FF007F,#FF6FB5)',boxShadow:giftTarget==='host'?'inset 0 0 0 2px #fff':'none'}}>
+                  <span className="text-white text-xs font-black">{h}</span>
+                </button>
+                <button onClick={()=>live.battleOpponentId&&setGiftTarget('opponent')} disabled={!live.battleOpponentId} className="h-full flex-1 flex items-center justify-end pr-2.5 transition-all" style={{background:'linear-gradient(90deg,#7c3aed,#3b82f6)',boxShadow:giftTarget==='opponent'?'inset 0 0 0 2px #fff':'none'}}>
+                  <span className="text-white text-xs font-black">{o}</span>
+                </button>
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="text-white text-[10px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(0,0,0,0.45)'}}>VS</span></div>
+              </div>
+              <div className="flex items-center justify-between mt-1 px-0.5">
+                <span className="text-white text-[11px] font-bold truncate max-w-[46%]" style={{textShadow:'0 1px 2px rgba(0,0,0,0.8)'}}>@{live.userId?.username}</span>
+                <span className="text-white text-[11px] font-bold truncate max-w-[46%] text-right" style={{textShadow:'0 1px 2px rgba(0,0,0,0.8)'}}>{live.battleOpponentId?`@${live.battleOpponentId.username}`:'Esperando rival...'}</span>
+              </div>
+            </div>
+          );
+        })()}
         {giftAnim&&<div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center animate-bounce z-20"><div className="text-5xl mb-2">{giftAnim.split(' ')[0]}</div><p className="text-white font-bold">{giftAnim}</p></div>}
         {insufficientCoins&&<div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 px-6 py-4 rounded-2xl text-center" style={{background:'rgba(255,0,127,0.9)'}}><p className="text-white font-bold">¡Monedas insuficientes!</p><Link href="/coins" className="text-xs text-white underline mt-1 block">Comprar monedas →</Link></div>}
 
@@ -387,7 +394,9 @@ export default function LiveViewerPage({ id }: { id: string }) {
               <Link href="/auth" className="flex-1 rounded-full px-4 py-2.5 text-sm text-gray-200 text-center" style={{background:'rgba(255,255,255,0.12)'}}>Inicia sesión para chatear</Link>
             )}
             {user&&<button onClick={sendMsg} className="p-2.5 rounded-full flex-shrink-0" style={{background:'rgba(255,255,255,0.15)'}}><Send size={16} className="text-white"/></button>}
+            {user&&<button onClick={()=>sendGift('domino')} disabled={sending} title="Regalo rápido 🎲 (5 monedas)" className="p-2.5 rounded-full flex-shrink-0 disabled:opacity-50 text-lg leading-none" style={{background:'rgba(255,255,255,0.15)'}}>🎲</button>}
             <button onClick={()=>setShowGifts(true)} disabled={sending} className="p-2.5 rounded-full flex-shrink-0 disabled:opacity-50" style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)'}}><Gift size={18} className="text-white"/></button>
+            <button onClick={doShare} className="p-2.5 rounded-full flex-shrink-0" style={{background:'rgba(255,255,255,0.15)'}}><Share2 size={18} className="text-white"/></button>
           </div>
         </div>
       </div>

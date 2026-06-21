@@ -275,30 +275,38 @@ export function CommentsPanel({ videoId, onClose }: { videoId: string; onClose: 
     } finally { setSending(false); }
   };
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl flex flex-col" style={{background:'#13131f',border:'1px solid #1e1e2a',maxHeight:'70vh'}}>
-      <div className="flex items-center justify-between p-4 border-b" style={{borderColor:'#1e1e2a'}}><h3 className="font-bold text-white">Comentarios</h3><button onClick={onClose}><X size={18} className="text-gray-400"/></button></div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {(Array.isArray(comments)?comments:[]).map((c:Comment)=>(
-          <div key={c._id} className="flex gap-3"><Av u={c.userId} s={32}/><div className="flex-1"><span className="text-xs font-bold text-white">{c.userId?.username} </span><span className="text-xs text-gray-400">{c.text}</span><div className="text-xs text-gray-600 mt-0.5">{ago(c.createdAt)}</div></div></div>
-        ))}
-        {(!comments||comments.length===0)&&<p className="text-center text-gray-500 text-sm py-8">Sin comentarios</p>}
+    <>
+      {/* Fondo oscurecido al estilo TikTok — además, tocar fuera cierra el panel */}
+      <div className="fixed inset-0 z-[55]" style={{background:'rgba(0,0,0,0.5)'}} onClick={onClose}/>
+      {/* BUG ARREGLADO: este panel tenía el mismo z-50 que el BottomNav de la
+          app, y al pintarse el BottomNav después en el DOM, tapaba physicamente
+          la caja de texto de abajo — por eso no se veía ni se podía escribir
+          un comentario. Ahora va en una capa claramente superior (z-[60]). */}
+      <div className="fixed inset-x-0 bottom-0 z-[60] rounded-t-2xl flex flex-col" style={{background:'#13131f',border:'1px solid #1e1e2a',maxHeight:'70vh'}}>
+        <div className="flex items-center justify-between p-4 border-b" style={{borderColor:'#1e1e2a'}}><h3 className="font-bold text-white">Comentarios</h3><button onClick={onClose}><X size={18} className="text-gray-400"/></button></div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {(Array.isArray(comments)?comments:[]).map((c:Comment)=>(
+            <div key={c._id} className="flex gap-3"><Av u={c.userId} s={32}/><div className="flex-1"><span className="text-xs font-bold text-white">{c.userId?.username} </span><span className="text-xs text-gray-400">{c.text}</span><div className="text-xs text-gray-600 mt-0.5">{ago(c.createdAt)}</div></div></div>
+          ))}
+          {(!comments||comments.length===0)&&<p className="text-center text-gray-500 text-sm py-8">Sin comentarios</p>}
+        </div>
+        {/* FIX: antes este bloque entero desaparecía si `user` era null/undefined,
+            dejando el panel sin ningún campo de texto y sin explicación.
+            Ahora siempre se muestra algo: el input si hay sesión, o un aviso
+            con enlace a /auth si no la hay. */}
+        {user ? (
+          <div className="p-4 pb-6 border-t flex gap-2" style={{borderColor:'#1e1e2a'}}>
+            <Av u={user} s={32}/>
+            <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Añade un comentario..." className="flex-1 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/>
+            <button onClick={send} disabled={sending||!text.trim()} className="p-2 rounded-xl disabled:opacity-50" style={{background:'#00F5FF'}}><Send size={16} className="text-black"/></button>
+          </div>
+        ) : (
+          <div className="p-4 pb-6 border-t text-center" style={{borderColor:'#1e1e2a'}}>
+            <Link href="/auth" onClick={onClose} className="text-sm font-semibold" style={{color:'#00F5FF'}}>Inicia sesión para comentar</Link>
+          </div>
+        )}
       </div>
-      {/* FIX: antes este bloque entero desaparecía si `user` era null/undefined,
-          dejando el panel sin ningún campo de texto y sin explicación.
-          Ahora siempre se muestra algo: el input si hay sesión, o un aviso
-          con enlace a /auth si no la hay. */}
-      {user ? (
-        <div className="p-4 border-t flex gap-2" style={{borderColor:'#1e1e2a'}}>
-          <Av u={user} s={32}/>
-          <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Añade un comentario..." className="flex-1 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/>
-          <button onClick={send} disabled={sending||!text.trim()} className="p-2 rounded-xl disabled:opacity-50" style={{background:'#00F5FF'}}><Send size={16} className="text-black"/></button>
-        </div>
-      ) : (
-        <div className="p-4 border-t text-center" style={{borderColor:'#1e1e2a'}}>
-          <Link href="/auth" onClick={onClose} className="text-sm font-semibold" style={{color:'#00F5FF'}}>Inicia sesión para comentar</Link>
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 
