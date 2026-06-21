@@ -1,0 +1,34 @@
+# robots.txt — DOMINO
+# Cambia https://domino-app.com por tu dominio real
+
+User-agent: *
+Allow: /
+Disallow: /create
+Disallow: /camera
+Disallow: /messages
+Disallow: /notifications
+Disallow: /search
+Disallow: /profile/edit
+Disallow: /settings
+Disallow: /coins
+
+# Bots de IA / motores generativos (GEO) — permitimos explícitamente
+# que indexen el contenido público para aparecer en respuestas de ChatGPT,
+# Perplexity, Gemini, etc. Quítalos si no quieres que tu contenido se use
+# para entrenar o responder con IA.
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://domino-app.com/sitemap.xml
