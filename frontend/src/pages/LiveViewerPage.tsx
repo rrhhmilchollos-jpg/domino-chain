@@ -30,6 +30,8 @@ export default function LiveViewerPage({ id }: { id: string }) {
   const [blockingUserId, setBlockingUserId] = useState<string|null>(null); // evita doble-click mientras se procesa el bloqueo
   const chatRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const opponentVideoRef = useRef<HTMLVideoElement>(null);
+  const [giftTarget, setGiftTarget] = useState<'host'|'opponent'>('host');
   const roomRef = useRef<Room | null>(null);
   const mrRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -37,6 +39,9 @@ export default function LiveViewerPage({ id }: { id: string }) {
 
   const live = Array.isArray(lives)?lives.find((l:LiveStream)=>l._id===id):null;
   const isOwner = !!user && !!live && live.userId?._id === user._id;
+  // isOpponent: solo true si la cuenta logueada es la que ACEPTÓ la invitación
+  // a esta batalla concreta — nunca se inventa, sale de battleOpponentId real.
+  const isOpponent = !!user && !!live && !!live.battleOpponentId && live.battleOpponentId._id === user._id;
   useEffect(()=>{if(live)setViewers(live.viewerCount||0);},[live]);
   useEffect(()=>{if(chatRef.current)chatRef.current.scrollTop=chatRef.current.scrollHeight;},[msgs]);
 
@@ -91,10 +96,14 @@ export default function LiveViewerPage({ id }: { id: string }) {
       const room = new Room();
       roomRef.current = room;
 
-      room.on(RoomEvent.TrackSubscribed, (track) => {
-        if ((track.kind === Track.Kind.Video || track.kind === Track.Kind.Audio) && videoRef.current) {
-          track.attach(videoRef.current);
-        }
+      const hostId = live.userId?._id;
+      room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
+        if (track.kind !== Track.Kind.Video && track.kind !== Track.Kind.Audio) return;
+        // Cualquier publicador que NO sea el host solo puede ser el rival real
+        // que aceptó la batalla (el servidor solo da permiso de publicar a
+        // esos dos), así que va siempre a su propio panel.
+        const target = participant.identity === hostId ? videoRef.current : opponentVideoRef.current;
+        if (target) track.attach(target);
       });
       room.on(RoomEvent.Disconnected, () => {
         if (cancelled) return;
@@ -127,18 +136,21 @@ export default function LiveViewerPage({ id }: { id: string }) {
       try {
         await room.connect(livekitUrl, lkToken);
         if (cancelled) { room.disconnect(); return; }
-        if (isOwner) {
+        if (isOwner || isOpponent) {
+          const myRef = isOwner ? videoRef : opponentVideoRef;
           const camPub = await room.localParticipant.setCameraEnabled(true);
-          if (camPub?.track && videoRef.current) camPub.track.attach(videoRef.current);
+          if (camPub?.track && myRef.current) camPub.track.attach(myRef.current);
           await room.localParticipant.setMicrophoneEnabled(true);
 
-          try {
-            if (videoRef.current) {
-              const videoEl = videoRef.current as any;
-              const captureStream: MediaStream = videoEl.captureStream ? videoEl.captureStream(30) : videoEl.mozCaptureStream?.();
-              if (captureStream) startLocalRecording(captureStream);
-            }
-          } catch (e) { console.warn('captureStream no disponible:', e); }
+          if (isOwner) {
+            try {
+              if (videoRef.current) {
+                const videoEl = videoRef.current as any;
+                const captureStream: MediaStream = videoEl.captureStream ? videoEl.captureStream(30) : videoEl.mozCaptureStream?.();
+                if (captureStream) startLocalRecording(captureStream);
+              }
+            } catch (e) { console.warn('captureStream no disponible:', e); }
+          }
         }
         setConnState('connected');
         updateViewerCount();
@@ -154,7 +166,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
       if (!isOwner && token) fetch(`${API}/api/lives/${live._id}/leave`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live?._id, isOwner]);
+  }, [live?._id, isOwner, isOpponent]);
 
   const encoder = new TextEncoder();
   const broadcast = (msg: ChatMsg) => {
@@ -253,7 +265,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
     if((user.coins||0)<g.coins){setInsufficientCoins(true);setTimeout(()=>setInsufficientCoins(false),3000);setShowGifts(false);return;}
     setSending(true);
     try{
-      const r=await fetch(`${API}/api/coins/gift`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({liveId:id,giftType:type,quantity:1})});
+      const r=await fetch(`${API}/api/coins/gift`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({liveId:id,giftType:type,quantity:1,target:live?.isBattle?giftTarget:'host'})});
       const d=await r.json();
       if(r.ok){setGiftAnim(`${g.emoji} ${g.name}`);setTimeout(()=>setGiftAnim(null),3000);const msg:ChatMsg={user:user.username,userId:user._id,text:`envió ${g.emoji} ${g.name}!`,type:'gift'};setMsgs(m=>[...m,msg]);broadcast(msg);await refreshUser();}
       else if(r.status===400){setInsufficientCoins(true);setTimeout(()=>setInsufficientCoins(false),3000);}
@@ -294,7 +306,19 @@ export default function LiveViewerPage({ id }: { id: string }) {
   return (
     <div className="fixed inset-0" style={{paddingTop:'56px',background:'#000'}}>
       <div className="relative w-full h-full">
-        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner||muted} style={{display:connState==='connected'?'block':'none'}}/>
+        {live.isBattle?(
+          <div className="absolute inset-0 flex flex-col" style={{display:connState==='connected'?'flex':'none'}}>
+            <div className="relative flex-1 overflow-hidden">
+              <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner?true:muted}/>
+            </div>
+            <div className="relative flex-1 overflow-hidden" style={{borderTop:'2px solid #FF007F'}}>
+              <video ref={opponentVideoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOpponent?true:muted}/>
+              {!live.battleOpponentId&&<div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><p className="text-gray-400 text-sm">Esperando a que el rival acepte la batalla...</p></div>}
+            </div>
+          </div>
+        ):(
+          <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner||muted} style={{display:connState==='connected'?'block':'none'}}/>
+        )}
         {connState!=='connected'&&(
           <div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><div className="text-center"><Av u={live.userId} s={120}/><p className="text-white font-bold mt-4 text-xl">@{live.userId?.username}</p><p className="text-gray-400 text-sm mt-1">{live.title}</p><div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full" style={{background:'rgba(255,0,127,0.2)',border:'1px solid #FF007F'}}><div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#FF007F'}}/><span className="text-white text-sm font-bold">EN DIRECTO</span></div><p className="text-gray-500 text-xs mt-2">{connState==='connecting'?'Conectando con el directo...':connState==='unavailable'?(isOwner?'El streaming todavía no está configurado en el servidor':'Esperando a que el streamer se conecte...'):'No se pudo conectar al directo'}</p></div></div>
         )}
@@ -317,13 +341,25 @@ export default function LiveViewerPage({ id }: { id: string }) {
           <button onClick={()=>setMuted(m=>!m)} className="absolute z-10 p-2.5 rounded-full" style={{top:'52px',right:'8px',background:'rgba(0,0,0,0.55)'}}>{muted?<VolumeX size={18} className="text-white"/>:<Volume2 size={18} className="text-white"/>}</button>
         )}
         <button onClick={doShare} className="absolute z-10 p-2.5 rounded-full" style={{top:connState==='connected'&&!isOwner?'96px':'52px',right:'8px',background:'rgba(0,0,0,0.55)'}}><Share2 size={18} className="text-white"/></button>
-        {live.isBattle&&<div className="absolute top-12 left-2 right-2 flex items-center gap-2 z-10"><div className="flex-1 text-center py-1 rounded-lg" style={{background:'rgba(255,0,127,0.3)',border:'1px solid #FF007F'}}><p className="text-white text-xs font-bold">{live.userId?.username}</p><p className="text-white text-xl font-black">{live.battleScore?.host||0}</p></div><div className="text-white font-black">VS</div><div className="flex-1 text-center py-1 rounded-lg" style={{background:'rgba(124,58,237,0.3)',border:'1px solid #7c3aed'}}><p className="text-white text-xs font-bold">Rival</p><p className="text-white text-xl font-black">{live.battleScore?.opponent||0}</p></div></div>}
+        {live.isBattle&&(
+          <div className="absolute top-12 left-2 right-2 flex items-center gap-2 z-10">
+            <button onClick={()=>setGiftTarget('host')} className="flex-1 text-center py-1 rounded-lg transition-all" style={{background:'rgba(255,0,127,0.3)',border:giftTarget==='host'?'2px solid #FF007F':'1px solid rgba(255,0,127,0.4)'}}>
+              <p className="text-white text-xs font-bold">@{live.userId?.username}</p>
+              <p className="text-white text-xl font-black">{live.battleScore?.host||0}</p>
+            </button>
+            <div className="text-white font-black">VS</div>
+            <button onClick={()=>live.battleOpponentId&&setGiftTarget('opponent')} disabled={!live.battleOpponentId} className="flex-1 text-center py-1 rounded-lg transition-all disabled:opacity-60" style={{background:'rgba(124,58,237,0.3)',border:giftTarget==='opponent'?'2px solid #7c3aed':'1px solid rgba(124,58,237,0.4)'}}>
+              <p className="text-white text-xs font-bold">{live.battleOpponentId?`@${live.battleOpponentId.username}`:'Esperando rival...'}</p>
+              <p className="text-white text-xl font-black">{live.battleScore?.opponent||0}</p>
+            </button>
+          </div>
+        )}
         {giftAnim&&<div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center animate-bounce z-20"><div className="text-5xl mb-2">{giftAnim.split(' ')[0]}</div><p className="text-white font-bold">{giftAnim}</p></div>}
         {insufficientCoins&&<div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 px-6 py-4 rounded-2xl text-center" style={{background:'rgba(255,0,127,0.9)'}}><p className="text-white font-bold">¡Monedas insuficientes!</p><Link href="/coins" className="text-xs text-white underline mt-1 block">Comprar monedas →</Link></div>}
 
         {showGifts&&(
           <div className="absolute bottom-20 left-2 right-2 sm:right-auto sm:w-80 z-20 rounded-2xl p-4" style={{background:'#13131f',border:'1px solid #1e1e2a'}}>
-            <div className="flex items-center justify-between mb-3"><h3 className="font-bold text-white text-sm">Enviar Regalo</h3><button onClick={()=>setShowGifts(false)}><X size={16} className="text-gray-400"/></button></div>
+            <div className="flex items-center justify-between mb-3"><h3 className="font-bold text-white text-sm">Enviar Regalo{live.isBattle?` a ${giftTarget==='host'?'@'+live.userId?.username:live.battleOpponentId?'@'+live.battleOpponentId.username:'...'}`:''}</h3><button onClick={()=>setShowGifts(false)}><X size={16} className="text-gray-400"/></button></div>
             <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-lg" style={{background:'rgba(0,245,255,0.1)'}}><span className="text-sm">🪙</span><span className="text-sm font-bold text-white">{(user?.coins||0).toLocaleString()} monedas</span><Link href="/coins" className="ml-auto text-xs font-semibold" style={{color:'#00F5FF'}}>+ Comprar</Link></div>
             <div className="grid grid-cols-3 gap-2">
               {Object.entries(GIFT_CATALOG).map(([k,g])=>(

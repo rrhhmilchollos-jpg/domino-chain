@@ -14,10 +14,10 @@ export const CLOUDINARY_PRESET = import.meta.env.VITE_CLOUDINARY_PRESET || 'domi
 export interface AppUser { _id: string; username: string; email: string; avatarUrl: string; country: string; city: string; flag: string; impactPoints: number; currentStreak: number; bio: string; coins: number; }
 export interface Challenge { _id: string; title: string; description: string; category: string; expiresAt: string; globalCounter: number; }
 export interface DominoVideo { _id: string; userId: AppUser; videoUrl: string; thumbnailUrl: string; chainDepth: number; likes: string[]; createdAt: string; geoCoordinates: { lat: number; lng: number }; isPublic: boolean; }
-export interface Notification { _id: string; type: string; fromUserId: { username: string; avatarUrl: string; flag: string }; message: string; read: boolean; createdAt: string; }
+export interface Notification { _id: string; type: string; fromUserId: { username: string; avatarUrl: string; flag: string }; liveId?: string; message: string; read: boolean; createdAt: string; }
 export interface RankingEntry { _id: string; username: string; avatarUrl: string; country: string; flag: string; impactPoints: number; currentStreak: number; coins?: number; }
 export interface Comment { _id: string; userId: { _id: string; username: string; avatarUrl: string; flag: string }; text: string; createdAt: string; }
-export interface LiveStream { _id: string; userId: AppUser; title: string; status: string; viewerCount: number; category: string; isBattle: boolean; battleScore: { host: number; opponent: number }; createdAt: string; }
+export interface LiveStream { _id: string; userId: AppUser; title: string; status: string; viewerCount: number; category: string; isBattle: boolean; battleOpponentId: AppUser | null; battleScore: { host: number; opponent: number }; createdAt: string; }
 export interface CoinPackage { id: string; coins: number; price: number; label: string; emoji: string; badge?: string; }
 
 export const GIFT_CATALOG: Record<string, { name: string; emoji: string; coins: number; points: number }> = {

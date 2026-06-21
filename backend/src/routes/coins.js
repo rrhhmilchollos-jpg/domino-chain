@@ -77,14 +77,20 @@ router.post('/checkout', auth, async (req, res) => {
 // POST /api/coins/gift — enviar un regalo (resta monedas al que envía, suma puntos al streamer)
 router.post('/gift', auth, async (req, res) => {
   try {
-    const { liveId, giftType, quantity = 1 } = req.body;
+    const { liveId, giftType, quantity = 1, target = 'host' } = req.body;
     const catalog = Gift.CATALOG;
     if (!catalog[giftType]) return res.status(400).json({ error: 'Tipo de regalo inválido' });
     const qty = Math.max(1, Math.min(99, Number(quantity) || 1));
 
-    const live = await Live.findById(liveId).populate('userId');
+    const live = await Live.findById(liveId).populate('userId').populate('battleOpponentId');
     if (!live || live.status !== 'active') return res.status(404).json({ error: 'Live no encontrado o terminado' });
-    if (live.userId._id.toString() === req.user._id.toString()) return res.status(400).json({ error: 'No puedes regalarte a ti mismo' });
+
+    // En batalla el regalo puede ir al host o al rival real (target). Fuera
+    // de batalla siempre va al dueño del live.
+    const giftingOpponent = live.isBattle && target === 'opponent';
+    if (giftingOpponent && !live.battleOpponentId) return res.status(400).json({ error: 'Esta batalla todavía no tiene rival' });
+    const recipient = giftingOpponent ? live.battleOpponentId : live.userId;
+    if (recipient._id.toString() === req.user._id.toString()) return res.status(400).json({ error: 'No puedes regalarte a ti mismo' });
 
     const cost = catalog[giftType].coins * qty;
 
@@ -99,7 +105,7 @@ router.post('/gift', auth, async (req, res) => {
 
     const gift = await Gift.create({
       fromUserId: req.user._id,
-      toUserId: live.userId._id,
+      toUserId: recipient._id,
       liveId: live._id,
       giftType,
       coins: cost,
@@ -107,12 +113,12 @@ router.post('/gift', auth, async (req, res) => {
     });
 
     const pointsEarned = catalog[giftType].points * qty;
-    await User.findByIdAndUpdate(live.userId._id, { $inc: { impactPoints: pointsEarned } });
+    await User.findByIdAndUpdate(recipient._id, { $inc: { impactPoints: pointsEarned } });
     await Live.findByIdAndUpdate(live._id, { $inc: { totalGiftsReceived: qty } });
-    if (live.isBattle) await Live.findByIdAndUpdate(live._id, { $inc: { 'battleScore.host': pointsEarned } });
+    if (live.isBattle) await Live.findByIdAndUpdate(live._id, { $inc: { [`battleScore.${giftingOpponent ? 'opponent' : 'host'}`]: pointsEarned } });
 
     await Notification.create({
-      userId: live.userId._id,
+      userId: recipient._id,
       type: 'liked',
       fromUserId: req.user._id,
       videoId: null,

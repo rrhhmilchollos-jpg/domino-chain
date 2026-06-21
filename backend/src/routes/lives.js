@@ -142,6 +142,7 @@ router.get('/', async (req, res) => {
   try {
     const lives = await Live.find({ status: 'active' })
       .populate('userId', 'username avatarUrl flag country city impactPoints')
+      .populate('battleOpponentId', 'username avatarUrl flag')
       .sort({ viewerCount: -1, createdAt: -1 })
       .limit(20);
     res.json(lives);
@@ -191,7 +192,7 @@ router.post('/', auth, async (req, res) => {
 // POST /api/lives/:id/join — conectar a un live (host o espectador, se detecta aquí)
 router.post('/:id/join', auth, async (req, res) => {
   try {
-    const live = await Live.findById(req.params.id).populate('userId', 'username avatarUrl flag');
+    const live = await Live.findById(req.params.id).populate('userId', 'username avatarUrl flag').populate('battleOpponentId', 'username avatarUrl flag');
     if (!live || live.status !== 'active') return res.status(404).json({ error: 'Live no encontrado o terminado' });
 
     // BUG ARREGLADO: antes /join siempre emitía un token de espectador
@@ -200,9 +201,13 @@ router.post('/:id/join', auth, async (req, res) => {
     // en sessionStorage al crearlo). Ahora se comprueba aquí de forma
     // fiable, así el host siempre puede publicar venga de donde venga.
     const isHost = live.userId._id.toString() === req.user._id.toString();
-    const token = await generateLivekitToken(live.roomName, req.user._id.toString(), req.user.username, isHost);
+    // El rival de una batalla también publica su propia cámara — su
+    // identidad es su userId real (nunca un nombre inventado), así el
+    // visor lo reconoce por su cuenta real igual que al host.
+    const isOpponent = !!live.battleOpponentId && live.battleOpponentId._id.toString() === req.user._id.toString();
+    const token = await generateLivekitToken(live.roomName, req.user._id.toString(), req.user.username, isHost || isOpponent);
 
-    if (!isHost) {
+    if (!isHost && !isOpponent) {
       // Contador en vivo + espectadores únicos reales (no simulados)
       const updated = await Live.findByIdAndUpdate(live._id, {
         $inc: { viewerCount: 1 },
@@ -213,7 +218,7 @@ router.post('/:id/join', auth, async (req, res) => {
       }
     }
 
-    res.json({ live, token, roomName: live.roomName, livekitUrl: getLivekitUrl(), isHost });
+    res.json({ live, token, roomName: live.roomName, livekitUrl: getLivekitUrl(), isHost, isOpponent });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -228,6 +233,63 @@ router.post('/:id/leave', auth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// POST /api/lives/:id/battle/invite — el host invita a OTRA CUENTA REAL a la
+// batalla VS (nunca un nombre inventado). Solo el host puede invitar, y solo
+// si el live está marcado como isBattle.
+router.post('/:id/battle/invite', auth, async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'Falta userId del rival a invitar' });
+    if (userId === req.user._id.toString()) return res.status(400).json({ error: 'No puedes invitarte a ti mismo' });
+
+    const live = await Live.findOne({ _id: req.params.id, userId: req.user._id, status: 'active' });
+    if (!live) return res.status(404).json({ error: 'Live no encontrado' });
+    if (!live.isBattle) return res.status(400).json({ error: 'Este live no está en modo batalla' });
+
+    const Notification = require('../models/Notification');
+    await Notification.create({
+      userId,
+      type: 'battle_invite',
+      fromUserId: req.user._id,
+      liveId: live._id,
+      message: `${req.user.username} te ha retado a una batalla DOMINO 🥊`,
+    });
+
+    res.status(201).json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/lives/:id/battle/accept — el usuario invitado acepta y se
+// convierte en battleOpponentId con su cuenta real. A partir de aquí /join
+// le dará permiso de publicar su propia cámara junto a la del host.
+router.post('/:id/battle/accept', auth, async (req, res) => {
+  try {
+    const live = await Live.findById(req.params.id);
+    if (!live || live.status !== 'active') return res.status(404).json({ error: 'Live no encontrado o terminado' });
+    if (!live.isBattle) return res.status(400).json({ error: 'Este live no está en modo batalla' });
+    if (live.userId.toString() === req.user._id.toString()) return res.status(400).json({ error: 'No puedes ser rival de tu propio live' });
+    if (live.battleOpponentId && live.battleOpponentId.toString() !== req.user._id.toString()) {
+      return res.status(409).json({ error: 'Esta batalla ya tiene rival' });
+    }
+
+    live.battleOpponentId = req.user._id;
+    await live.save();
+    await live.populate('userId', 'username avatarUrl flag');
+    await live.populate('battleOpponentId', 'username avatarUrl flag');
+
+    res.json({ ok: true, live });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/lives/:id/battle/decline — el invitado rechaza, simplemente no pasa nada más
+router.post('/:id/battle/decline', auth, async (req, res) => {
+  res.json({ ok: true });
 });
 
 // DELETE /api/lives/:id — terminar live. Devuelve el resumen real (espectadores
