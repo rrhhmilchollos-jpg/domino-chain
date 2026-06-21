@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
 import { Eye, X, Gift, Send, Volume2, VolumeX, Share2 } from 'lucide-react';
 import { Room, RoomEvent, Track } from 'livekit-client';
-import { cn, useAuth, useApi, Av, GIFT_CATALOG, API, LiveStream } from '../lib/shared';
+import { cn, useAuth, useApi, Av, GIFT_CATALOG, API, uploadToCloudinary, LiveStream } from '../lib/shared';
 
 type ConnState = 'idle' | 'connecting' | 'connected' | 'error' | 'unavailable';
 type EndSummary = { totalUniqueViewers: number; peakViewerCount: number; totalGiftsReceived: number; durationSeconds: number; recordingUrl: string | null; liveId: string } | null;
@@ -23,15 +23,50 @@ export default function LiveViewerPage({ id }: { id: string }) {
   const [ending, setEnding] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const chatRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const roomRef = useRef<Room | null>(null);
+  // Grabación local del live (solo para el host)
+  const mrRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const localBlobRef = useRef<Blob | null>(null);
+
   const live = Array.isArray(lives)?lives.find((l:LiveStream)=>l._id===id):null;
   const isOwner = !!user && !!live && live.userId?._id === user._id;
   useEffect(()=>{if(live)setViewers(live.viewerCount||0);},[live]);
   useEffect(()=>{if(chatRef.current)chatRef.current.scrollTop=chatRef.current.scrollHeight;},[msgs]);
 
-  // ===== Conexión real a LiveKit: el host publica cámara/mic, el espectador se suscribe =====
+  // ===== Grabación local del stream del host usando MediaRecorder =====
+  const startLocalRecording = (stream: MediaStream) => {
+    if (!isOwner) return;
+    chunksRef.current = [];
+    const mimeOptions = ['video/mp4;codecs=avc1,mp4a.40.2','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4'];
+    const mime = mimeOptions.find(t => { try { return MediaRecorder.isTypeSupported(t); } catch { return false; } }) || '';
+    try {
+      const mr = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 128000, videoBitsPerSecond: 2500000 } : {});
+      mr.ondataavailable = e => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mime || 'video/webm' });
+        localBlobRef.current = blob;
+      };
+      mr.start(1000);
+      mrRef.current = mr;
+    } catch (e) { console.warn('No se pudo iniciar grabación local:', e); }
+  };
+
+  const stopLocalRecording = (): Promise<Blob | null> => {
+    return new Promise(resolve => {
+      if (!mrRef.current || mrRef.current.state === 'inactive') { resolve(localBlobRef.current); return; }
+      mrRef.current.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        localBlobRef.current = blob;
+        resolve(blob);
+      };
+      mrRef.current.stop();
+    });
+  };
+
   useEffect(() => {
     if (!live?._id) return;
     let cancelled = false;
@@ -45,7 +80,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
         const r = await fetch(`${API}/api/lives/${live._id}/join`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
         const d = await r.json();
         if (r.ok && d.token && d.livekitUrl) { lkToken = d.token; livekitUrl = d.livekitUrl; }
-      } catch { /* sin conexión a la API: nos quedamos en 'unavailable' */ }
+      } catch { }
 
       if (cancelled) return;
       if (!lkToken || !livekitUrl) { setConnState('unavailable'); return; }
@@ -53,10 +88,6 @@ export default function LiveViewerPage({ id }: { id: string }) {
       const room = new Room();
       roomRef.current = room;
 
-      // BUG CRÍTICO arreglado: antes solo se adjuntaba la pista de Vídeo.
-      // El micrófono del streamer SÍ se publicaba (setMicrophoneEnabled),
-      // pero como aquí se ignoraba el track de Audio, ningún espectador
-      // llegaba a escucharlo nunca.
       room.on(RoomEvent.TrackSubscribed, (track) => {
         if ((track.kind === Track.Kind.Video || track.kind === Track.Kind.Audio) && videoRef.current) {
           track.attach(videoRef.current);
@@ -64,25 +95,13 @@ export default function LiveViewerPage({ id }: { id: string }) {
       });
       room.on(RoomEvent.Disconnected, () => { if (!cancelled) setConnState('unavailable'); });
 
-      // Conteo real de espectadores (antes era un número aleatorio que no
-      // significaba nada). numParticipants incluye a todos en la sala
-      // menos uno mismo, así que para el host es el nº exacto de
-      // espectadores; para un espectador es +1 (cuenta al host también),
-      // se resta abajo.
       const updateViewerCount = () => setViewers(Math.max(0, room.numParticipants - (isOwner ? 0 : 1)));
       room.on(RoomEvent.ParticipantConnected, updateViewerCount);
       room.on(RoomEvent.ParticipantDisconnected, updateViewerCount);
 
-      // Chat real por el canal de datos de LiveKit: antes sendMsg() solo
-      // tocaba el estado local de React, así que un mensaje nunca salía
-      // del navegador de quien lo escribía. Ahora se emite a la sala y
-      // todos (incluido el streamer) lo reciben aquí.
       const decoder = new TextDecoder();
       room.on(RoomEvent.DataReceived, (payload) => {
-        try {
-          const msg = JSON.parse(decoder.decode(payload));
-          setMsgs(m => [...m, msg]);
-        } catch { /* paquete no reconocido, se ignora */ }
+        try { const msg = JSON.parse(decoder.decode(payload)); setMsgs(m => [...m, msg]); } catch { }
       });
 
       try {
@@ -92,6 +111,16 @@ export default function LiveViewerPage({ id }: { id: string }) {
           const camPub = await room.localParticipant.setCameraEnabled(true);
           if (camPub?.track && videoRef.current) camPub.track.attach(videoRef.current);
           await room.localParticipant.setMicrophoneEnabled(true);
+
+          // Capturar el stream local del host para grabarlo
+          try {
+            if (videoRef.current) {
+              // Crear stream combinando video del elemento y audio del micrófono
+              const videoEl = videoRef.current as any;
+              const captureStream: MediaStream = videoEl.captureStream ? videoEl.captureStream(30) : videoEl.mozCaptureStream?.();
+              if (captureStream) startLocalRecording(captureStream);
+            }
+          } catch (e) { console.warn('captureStream no disponible:', e); }
         }
         setConnState('connected');
         updateViewerCount();
@@ -111,24 +140,49 @@ export default function LiveViewerPage({ id }: { id: string }) {
 
   const encoder = new TextEncoder();
   const broadcast = (msg: {user:string;text:string;type?:string}) => {
-    try { roomRef.current?.localParticipant.publishData(encoder.encode(JSON.stringify(msg)), { reliable: true }); } catch { /* sala no conectada todavía */ }
+    try { roomRef.current?.localParticipant.publishData(encoder.encode(JSON.stringify(msg)), { reliable: true }); } catch { }
   };
   const doShare = () => {
     const url = `${window.location.origin}/live/${id}`;
-    const shareData = { title: `DOMINO — Live de @${live?.userId?.username}`, text: live?.title, url };
-    if (navigator.share) navigator.share(shareData).catch(()=>{});
-    else { navigator.clipboard?.writeText(url); }
+    if (navigator.share) navigator.share({ title: `DOMINO — Live de @${live?.userId?.username}`, text: live?.title, url }).catch(()=>{});
+    else navigator.clipboard?.writeText(url);
   };
 
   const endLive = async () => {
     if (!token || !window.confirm('¿Terminar el directo para todos?')) return;
     setEnding(true);
     try {
+      // 1. Parar la grabación local y obtener el blob
+      const blob = await stopLocalRecording();
+
+      // 2. Terminar el live en el backend
       const r = await fetch(`${API}/api/lives/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       const d = await r.json();
       roomRef.current?.disconnect();
-      if (r.ok) setEndSummary({ ...d.summary, recordingUrl: d.recordingUrl, liveId: d.liveId });
-      else setEndSummary({ totalUniqueViewers: 0, peakViewerCount: 0, totalGiftsReceived: 0, durationSeconds: 0, recordingUrl: null, liveId: id });
+
+      let recordingUrl: string | null = d.recordingUrl || null;
+
+      // 3. Si tenemos grabación local, subirla a Cloudinary
+      if (blob && blob.size > 10000) {
+        try {
+          setPublishing(true);
+          const result = await uploadToCloudinary(blob, (pct) => setUploadProgress(pct));
+          recordingUrl = result.videoUrl;
+          // Guardar la URL en el backend
+          await fetch(`${API}/api/lives/${d.liveId || id}/recording`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recordingUrl })
+          }).catch(() => {});
+        } catch (e) {
+          console.warn('No se pudo subir la grabación:', e);
+        } finally {
+          setPublishing(false);
+        }
+      }
+
+      if (r.ok) setEndSummary({ ...d.summary, recordingUrl, liveId: d.liveId || id });
+      else setEndSummary({ totalUniqueViewers: 0, peakViewerCount: 0, totalGiftsReceived: 0, durationSeconds: 0, recordingUrl, liveId: id });
     } finally { setEnding(false); }
   };
 
@@ -136,8 +190,22 @@ export default function LiveViewerPage({ id }: { id: string }) {
     if (!token || !endSummary) return;
     setPublishing(true);
     try {
-      const r = await fetch(`${API}/api/lives/${endSummary.liveId}/publish-as-video`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) setPublished(true);
+      // Si hay recordingUrl local, publicar directamente como video
+      if (endSummary.recordingUrl) {
+        const r = await fetch(`${API}/api/lives/${endSummary.liveId}/publish-as-video`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+        if (r.ok) { setPublished(true); return; }
+      }
+      // Fallback: publicar el blob local si existe
+      if (localBlobRef.current) {
+        setUploadProgress(0);
+        const result = await uploadToCloudinary(localBlobRef.current, pct => setUploadProgress(pct));
+        const r = await fetch(`${API}/api/videos`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoUrl: result.videoUrl, thumbnailUrl: result.thumbnailUrl, challengeId: null, geoCoordinates: { lat: 0, lng: 0 }, nominatedUserIds: [] })
+        });
+        if (r.ok) setPublished(true);
+      }
     } finally { setPublishing(false); }
   };
 
@@ -174,11 +242,18 @@ export default function LiveViewerPage({ id }: { id: string }) {
           <div className="rounded-xl p-3 border" style={{background:'#13131f',borderColor:'#1e1e2a'}}><div className="text-xl font-black text-white">{endSummary.totalGiftsReceived}</div><div className="text-[10px] text-gray-500 mt-0.5">Regalos</div></div>
         </div>
         {published?(
-          <div className="mb-4 p-3 rounded-xl text-sm font-bold text-white" style={{background:'rgba(0,245,255,0.15)',border:'1px solid #00F5FF'}}>✅ Publicado en tu feed</div>
-        ):endSummary.recordingUrl?(
-          <button onClick={publishAsVideo} disabled={publishing} className="w-full mb-3 py-3 rounded-xl font-bold text-black flex items-center justify-center gap-2 disabled:opacity-50" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}>{publishing?'Publicando...':'Publicar este directo como video'}</button>
+          <div className="mb-4 p-3 rounded-xl text-sm font-bold text-white" style={{background:'rgba(0,245,255,0.15)',border:'1px solid #00F5FF'}}>✅ Publicado en el feed</div>
+        ):publishing?(
+          <div className="mb-4">
+            <p className="text-sm text-gray-400 mb-2">Subiendo grabación... {uploadProgress}%</p>
+            <div className="h-2 rounded-full overflow-hidden" style={{background:'#1e1e2a'}}>
+              <div className="h-full rounded-full transition-all" style={{width:`${uploadProgress}%`,background:'linear-gradient(90deg,#00F5FF,#7c3aed)'}}/>
+            </div>
+          </div>
         ):(
-          <p className="text-xs text-gray-500 mb-4">La grabación automática no está activada, así que no hay video que publicar de este live.</p>
+          <button onClick={publishAsVideo} className="w-full mb-3 py-3 rounded-xl font-bold text-black flex items-center justify-center gap-2" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}>
+            📤 Publicar directo en el feed
+          </button>
         )}
         <Link href="/dashboard" className="block w-full py-3 rounded-xl font-bold text-white border" style={{borderColor:'#2a2a3a'}}>Ir a mi perfil</Link>
       </div>
