@@ -1,6 +1,7 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
 import { Camera, Heart, Grid3x3 } from 'lucide-react';
-import { useApi, useAuth, Av, Spinner, fmt, ago, DominoVideo, AppUser } from '../lib/shared';
+import { useApi, useAuth, Av, FollowButton, Spinner, fmt, ago, DominoVideo, AppUser } from '../lib/shared';
 
 function VideoThumb({ v }: { v: DominoVideo }) {
   return (
@@ -28,6 +29,10 @@ export default function UserProfilePage({ id }: { id: string }) {
   const { user: me } = useAuth();
   const { data: profile, loading: loadingProfile } = useApi(id ? `/api/users/${id}` : '/api/users/_', [id]);
   const { data: videos, loading: loadingVideos } = useApi(id ? `/api/videos/user/${id}` : '/api/videos/user/_', [id]);
+  // Todos los hooks van ANTES de cualquier return condicional (reglas de
+  // hooks de React) — followersCount se sincroniza cuando llega el perfil.
+  const [followersCount, setFollowersCount] = useState(0);
+  useEffect(()=>{ if (profile && !profile.error) setFollowersCount(profile.followersCount||0); }, [profile]);
 
   // Si el usuario pincha en su propio nombre, lo llevamos directo a su Dashboard real (con edición, Me Gusta, etc.)
   if (me && id && me._id === id) {
@@ -66,11 +71,18 @@ export default function UserProfilePage({ id }: { id: string }) {
           {(u.city||u.country)&&<p className="text-gray-500 text-xs mt-0.5">{u.flag} {u.city}{u.city&&u.country?', ':''}{u.country}</p>}
           {u.bio&&<p className="text-gray-300 text-sm mt-2 max-w-sm">{u.bio}</p>}
 
+          {/* Seguidores / Siguiendo — cuentas reales, con link a la lista, igual que TikTok */}
           <div className="flex items-center gap-6 mt-4">
+            <Link href={`/user/${u._id}/followers`} className="text-center"><div className="text-lg font-black text-white">{fmt(followersCount)}</div><div className="text-xs text-gray-500">Seguidores</div></Link>
+            <Link href={`/user/${u._id}/following`} className="text-center"><div className="text-lg font-black text-white">{fmt(u.followingCount||0)}</div><div className="text-xs text-gray-500">Siguiendo</div></Link>
             <div className="text-center"><div className="text-lg font-black text-white">{list.length}</div><div className="text-xs text-gray-500">Cadenas</div></div>
             <div className="text-center"><div className="text-lg font-black text-white">{fmt(totalLikesReceived)}</div><div className="text-xs text-gray-500">Me gusta</div></div>
             <div className="text-center"><div className="text-lg font-black text-white">{u.currentStreak}d</div><div className="text-xs text-gray-500">Racha</div></div>
             <div className="text-center"><div className="text-lg font-black text-white">{fmt(u.impactPoints)}</div><div className="text-xs text-gray-500">Impacto</div></div>
+          </div>
+
+          <div className="mt-4">
+            <FollowButton userId={u._id} initialIsFollowing={!!u.isFollowing} onChange={(_isFollowing, count)=>{ if (typeof count==='number') setFollowersCount(count); }}/>
           </div>
         </div>
 

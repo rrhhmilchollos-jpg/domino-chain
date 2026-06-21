@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const notificationSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  type: { type: String, enum: ['nomination', 'chain_continued', 'milestone', 'liked', 'battle_invite'], required: true },
+  type: { type: String, enum: ['nomination', 'chain_continued', 'milestone', 'liked', 'battle_invite', 'new_follower'], required: true },
   fromUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   videoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Video' },
   chainId: { type: mongoose.Schema.Types.ObjectId, ref: 'Video' },

@@ -11,10 +11,10 @@ export const CLOUDINARY_CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD || 'dawgpv
 export const CLOUDINARY_PRESET = import.meta.env.VITE_CLOUDINARY_PRESET || 'domino_unsigned';
 
 // ===================== TYPES =====================
-export interface AppUser { _id: string; username: string; email: string; avatarUrl: string; country: string; city: string; flag: string; impactPoints: number; currentStreak: number; bio: string; coins: number; }
+export interface AppUser { _id: string; username: string; email: string; avatarUrl: string; country: string; city: string; flag: string; impactPoints: number; currentStreak: number; bio: string; coins: number; followersCount?: number; followingCount?: number; isFollowing?: boolean; }
 export interface Challenge { _id: string; title: string; description: string; category: string; expiresAt: string; globalCounter: number; }
 export interface DominoVideo { _id: string; userId: AppUser; videoUrl: string; thumbnailUrl: string; chainDepth: number; likes: string[]; createdAt: string; geoCoordinates: { lat: number; lng: number }; isPublic: boolean; }
-export interface Notification { _id: string; type: string; fromUserId: { username: string; avatarUrl: string; flag: string }; liveId?: string; message: string; read: boolean; createdAt: string; }
+export interface Notification { _id: string; type: string; fromUserId: { _id: string; username: string; avatarUrl: string; flag: string }; liveId?: string; message: string; read: boolean; createdAt: string; }
 export interface RankingEntry { _id: string; username: string; avatarUrl: string; country: string; flag: string; impactPoints: number; currentStreak: number; coins?: number; }
 export interface Comment { _id: string; userId: { _id: string; username: string; avatarUrl: string; flag: string }; text: string; createdAt: string; }
 export interface LiveStream { _id: string; userId: AppUser; title: string; status: string; viewerCount: number; category: string; isBattle: boolean; battleOpponentId: AppUser | null; battleScore: { host: number; opponent: number }; createdAt: string; }
@@ -114,6 +114,41 @@ export function Av({ u, s=36 }: { u: Partial<AppUser>; s?: number }) {
     <div className="rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center" style={{width:s,height:s,background:'#7c3aed',border:'2px solid #2a2a3a'}}>
       {u.avatarUrl?<img src={u.avatarUrl} alt={u.username} className="w-full h-full object-cover" loading="lazy"/>:<span className="text-white font-bold" style={{fontSize:s*0.35}}>{u.username?.[0]?.toUpperCase()}</span>}
     </div>
+  );
+}
+
+// ===================== SEGUIR / DEJAR DE SEGUIR =====================
+// Botón reutilizable de "+ Seguir" — siempre actúa sobre una cuenta real
+// (userId de verdad), nunca un nombre inventado. Optimista en la UI pero
+// revierte si el servidor falla.
+export function FollowButton({ userId, initialIsFollowing, onChange, compact=false }: { userId: string; initialIsFollowing: boolean; onChange?: (isFollowing: boolean, followersCount?: number) => void; compact?: boolean }) {
+  const { user, token } = useAuth();
+  const [following, setFollowing] = useState(!!initialIsFollowing);
+  const [busy, setBusy] = useState(false);
+  useEffect(()=>{ setFollowing(!!initialIsFollowing); }, [initialIsFollowing, userId]);
+
+  if (!user) return <Link href="/auth" className={cn('font-bold text-black rounded-full text-center', compact?'px-3 py-1 text-xs':'px-5 py-1.5 text-sm')} style={{background:'#00F5FF'}}>Seguir</Link>;
+  if (user._id === userId) return null; // no puedes seguirte a ti mismo
+
+  const toggle = async () => {
+    if (busy) return;
+    setBusy(true);
+    const next = !following;
+    setFollowing(next); // optimista
+    try {
+      const r = await fetch(`${API}/api/users/${userId}/follow`, { method: next?'POST':'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error||'Error');
+      onChange?.(d.isFollowing, d.followersCount);
+    } catch {
+      setFollowing(!next); // revertir si falla
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <button onClick={toggle} disabled={busy} className={cn('font-bold rounded-full transition-colors disabled:opacity-60', compact?'px-3 py-1 text-xs':'px-5 py-1.5 text-sm', following?'text-gray-300 border':'text-black')} style={following?{background:'transparent',borderColor:'#2a2a3a'}:{background:'#00F5FF'}}>
+    {following?'Siguiendo':'+ Seguir'}
+    </button>
   );
 }
 

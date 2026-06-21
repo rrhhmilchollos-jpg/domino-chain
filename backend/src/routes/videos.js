@@ -53,6 +53,36 @@ router.get('/feed', async (req, res) => {
   }
 });
 
+// GET /api/videos/feed/following — pestaña "Siguiendo": solo videos de
+// cuentas reales a las que sigue el usuario logueado (nunca sugeridas).
+router.get('/feed/following', auth, async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+
+    const Follow = require('../models/Follow');
+    const follows = await Follow.find({ followerId: req.user._id }).select('followingId');
+    const followingIds = follows.map(f => f.followingId);
+    if (!followingIds.length) return res.json([]);
+
+    const videos = await Video.find({
+      userId: { $in: followingIds },
+      isPublished: true,
+      isPublic: { $ne: false },
+      videoUrl: { $ne: '' }
+    })
+      .populate('userId', 'username avatarUrl country city flag impactPoints currentStreak')
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum);
+
+    res.json(videos);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/videos/chain/:rootId
 router.get('/chain/:rootId', async (req, res) => {
   try {

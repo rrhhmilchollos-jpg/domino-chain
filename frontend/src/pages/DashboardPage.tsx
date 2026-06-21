@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const { data: notifs, setData: setNotifs } = useApi('/api/notifications', [user?._id]);
   const { data: myVideos } = useApi(user?._id ? `/api/videos/user/${user._id}` : '/api/videos/user/_', [user?._id]);
   const { data: likedVideos } = useApi(user?._id ? `/api/videos/liked/${user._id}` : '/api/videos/liked/_', [user?._id]);
+  const { data: meFull } = useApi(user?._id ? '/api/users/me' : '/api/users/_', [user?._id]);
   const markRead=async(id:string)=>{if(!token)return;await fetch(`${API}/api/notifications/${id}/read`,{method:'PUT',headers:{Authorization:`Bearer ${token}`}});setNotifs((p:Notification[])=>Array.isArray(p)?p.map(n=>n._id===id?{...n,read:true}:n):p);};
   const unread=Array.isArray(notifs)?notifs.filter((n:Notification)=>!n.read).length:0;
   const totalLikesReceived = Array.isArray(myVideos)?myVideos.reduce((s:number,v:DominoVideo)=>s+(v.likes?.length||0),0):0;
@@ -55,8 +56,10 @@ export default function DashboardPage() {
           {(user.city||user.country)&&<p className="text-gray-500 text-xs mt-0.5">{user.flag} {user.city}{user.city&&user.country?', ':''}{user.country}</p>}
           {user.bio&&<p className="text-gray-300 text-sm mt-2 max-w-sm">{user.bio}</p>}
 
-          {/* Stats estilo TikTok: Siguiendo / Seguidores / Me gusta -> adaptado a métricas de DOMINO */}
-          <div className="flex items-center gap-6 mt-4">
+          {/* Stats estilo TikTok: Seguidores / Siguiendo / Me gusta -> + métricas propias de DOMINO */}
+          <div className="flex items-center gap-6 mt-4 flex-wrap justify-center">
+            <Link href={`/user/${user._id}/followers`} className="text-center"><div className="text-lg font-black text-white">{fmt(meFull?.followersCount||0)}</div><div className="text-xs text-gray-500">Seguidores</div></Link>
+            <Link href={`/user/${user._id}/following`} className="text-center"><div className="text-lg font-black text-white">{fmt(meFull?.followingCount||0)}</div><div className="text-xs text-gray-500">Siguiendo</div></Link>
             <div className="text-center"><div className="text-lg font-black text-white">{Array.isArray(myVideos)?myVideos.length:'—'}</div><div className="text-xs text-gray-500">Cadenas</div></div>
             <div className="text-center"><div className="text-lg font-black text-white">{fmt(totalLikesReceived)}</div><div className="text-xs text-gray-500">Me gusta</div></div>
             <div className="text-center"><div className="text-lg font-black text-white">{user.currentStreak}d</div><div className="text-xs text-gray-500">Racha</div></div>
@@ -105,7 +108,7 @@ export default function DashboardPage() {
           </div>
           <div className="rounded-2xl p-5 border" style={{background:'#13131f',borderColor:'#1e1e2a'}}>
             <div className="flex items-center justify-between mb-4"><h2 className="font-bold text-white flex items-center gap-2"><Bell size={16}/>Notificaciones</h2>{unread>0&&<span className="text-xs font-bold px-2 py-0.5 rounded-full text-black" style={{background:'#FF007F'}}>{unread}</span>}</div>
-            <div className="space-y-2 max-h-72 overflow-y-auto">{(Array.isArray(notifs)?notifs:[]).slice(0,8).map((n:Notification)=><div key={n._id} onClick={()=>markRead(n._id)} className={cn('flex gap-3 p-2.5 rounded-xl cursor-pointer hover:bg-white/5',!n.read&&'bg-[#00F5FF]/5 border border-[#00F5FF]/20')}><span className="text-lg">{n.type==='nomination'?'🎯':n.type==='chain_continued'?'⛓️':'🏆'}</span><div className="flex-1 min-w-0"><p className="text-xs text-gray-300 line-clamp-2">{n.message}</p><p className="text-xs text-gray-500 mt-1">{ago(n.createdAt)}</p></div>{!n.read&&<div className="w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0" style={{background:'#00F5FF'}}/>}</div>)}{(!notifs||!Array.isArray(notifs)||notifs.length===0)&&<div className="text-center py-6"><Bell size={28} className="mx-auto text-gray-700 mb-2"/><p className="text-sm text-gray-500">Sin notificaciones</p></div>}</div>
+            <div className="space-y-2 max-h-72 overflow-y-auto">{(Array.isArray(notifs)?notifs:[]).slice(0,8).map((n:Notification)=><div key={n._id} onClick={()=>markRead(n._id)} className={cn('flex gap-3 p-2.5 rounded-xl cursor-pointer hover:bg-white/5',!n.read&&'bg-[#00F5FF]/5 border border-[#00F5FF]/20')}><span className="text-lg">{n.type==='nomination'?'🎯':n.type==='chain_continued'?'⛓️':n.type==='new_follower'?'👥':n.type==='battle_invite'?'🥊':n.type==='liked'?'❤️':'🏆'}</span><div className="flex-1 min-w-0"><p className="text-xs text-gray-300 line-clamp-2">{n.message}</p><p className="text-xs text-gray-500 mt-1">{ago(n.createdAt)}</p></div>{!n.read&&<div className="w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0" style={{background:'#00F5FF'}}/>}</div>)}{(!notifs||!Array.isArray(notifs)||notifs.length===0)&&<div className="text-center py-6"><Bell size={28} className="mx-auto text-gray-700 mb-2"/><p className="text-sm text-gray-500">Sin notificaciones</p></div>}</div>
             {Array.isArray(notifs)&&notifs.length>8&&<Link href="/notifications" className="flex items-center justify-center gap-1 text-xs font-semibold mt-3 pt-3 border-t" style={{color:'#00F5FF',borderColor:'#1e1e2a'}}>Ver todas<ChevronRight size={12}/></Link>}
           </div>
         </div>
