@@ -7,6 +7,7 @@ const Notification = require('../models/Notification');
 const Comment = require('../models/Comment');
 const User = require('../models/User');
 const SavedVideo = require('../models/SavedVideo');
+const VideoView = require('../models/VideoView');
 const { SOUND_LIBRARY } = require('./sounds');
 
 // Marca isSaved en cada video de una lista según quién pregunta (una sola
@@ -326,6 +327,36 @@ router.post('/:id/save', auth, async (req, res) => {
     await SavedVideo.create({ userId: req.user._id, videoId: video._id });
     await Video.findByIdAndUpdate(video._id, { $inc: { savesCount: 1 } });
     res.status(201).json({ saved: true, savesCount: (video.savesCount || 0) + 1 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/videos/:id/view — registra una reproducción real. Se llama desde
+// el feed cuando un video lleva un rato visible en pantalla (no en cada
+// scroll de paso). Si hay sesión, además registra el "alcance" único —
+// este mismo usuario nunca vuelve a contar como persona nueva alcanzada
+// para este video, gracias al índice único de VideoView.
+router.post('/:id/view', optionalAuth, async (req, res) => {
+  try {
+    await Video.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } });
+    if (req.user) {
+      try { await VideoView.create({ videoId: req.params.id, userId: req.user._id }); }
+      catch { /* índice único: este usuario ya contaba como alcance, no pasa nada */ }
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/videos/:id/share — registra una vez compartido real (se llama
+// solo cuando el panel nativo de compartir se completa o el enlace se
+// copia de verdad, nunca solo por abrir el menú).
+router.post('/:id/share', async (req, res) => {
+  try {
+    await Video.findByIdAndUpdate(req.params.id, { $inc: { sharesCount: 1 } });
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

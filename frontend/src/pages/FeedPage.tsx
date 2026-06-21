@@ -30,6 +30,10 @@ export default function FeedPage() {
     const url=`${window.location.origin}/video/${id}`;
     const result = await shareLink('DOMINO', url);
     if (result==='copied') { setToast('Enlace copiado'); setTimeout(()=>setToast(null),2000); }
+    // Cuenta real de "veces compartido" para el Fondo de Creadores — se
+    // registra siempre que el flujo de compartir se completa (panel nativo,
+    // copia del enlace, o el prompt de respaldo), no solo al abrir el menú.
+    fetch(`${API}/api/videos/${id}/share`,{method:'POST'}).catch(()=>{});
   };
   // Seguir rápido desde el avatar (el "+" rojo de TikTok) — cuenta real, va
   // directo a la API de seguir, igual que el botón Seguir del perfil.
@@ -39,10 +43,33 @@ export default function FeedPage() {
     setFollowedAuthors(p=>new Set(p).add(authorId));
     try { await fetch(`${API}/api/users/${authorId}/follow`, { method:'POST', headers:{Authorization:`Bearer ${token}`} }); } catch {}
   };
+  // Conteo real de vistas para el Fondo de Creadores: solo cuenta un video
+  // como "visto" si lleva al menos 3s visible y reproduciéndose (evita
+  // contar vistas falsas por simplemente pasar de largo al hacer scroll),
+  // y como mucho una vez por video por sesión de feed.
+  const viewTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const viewedThisSession = useRef<Set<string>>(new Set());
   useEffect(()=>{
-    const obs=new IntersectionObserver(entries=>{entries.forEach(e=>{const v=e.target as HTMLVideoElement;if(e.isIntersecting)v.play().catch(()=>{});else{v.pause();v.currentTime=0;}});},{threshold:0.8});
+    const obs=new IntersectionObserver(entries=>{entries.forEach(e=>{
+      const v=e.target as HTMLVideoElement;
+      const vid=v.dataset.videoId;
+      if(e.isIntersecting){
+        v.play().catch(()=>{});
+        if(vid && !viewedThisSession.current.has(vid) && !viewTimers.current.has(vid)){
+          const t=setTimeout(()=>{
+            viewedThisSession.current.add(vid);
+            viewTimers.current.delete(vid);
+            fetch(`${API}/api/videos/${vid}/view`,{method:'POST',headers:token?{Authorization:`Bearer ${token}`}:{}}).catch(()=>{});
+          },3000);
+          viewTimers.current.set(vid,t);
+        }
+      }else{
+        v.pause();v.currentTime=0;
+        if(vid && viewTimers.current.has(vid)){clearTimeout(viewTimers.current.get(vid));viewTimers.current.delete(vid);}
+      }
+    });},{threshold:0.8});
     videoRefs.current.forEach(v=>{if(v)obs.observe(v);});
-    return()=>obs.disconnect();
+    return()=>{obs.disconnect();viewTimers.current.forEach(t=>clearTimeout(t));viewTimers.current.clear();};
   },[videos]);
   // Sincroniza el estado real de "guardado" que viene del servidor cada vez
   // que cambia la lista (cambio de pestaña, recarga...).
@@ -92,7 +119,7 @@ export default function FeedPage() {
 
           {/* Video — ya no ocupa toda la pantalla: deja sitio abajo para la barra negra de leyenda, igual que TikTok ahora mismo */}
           <div className="relative flex-1 min-h-0 overflow-hidden bg-black">
-            {v.videoUrl?<video ref={el=>{videoRefs.current[idx]=el;}} src={v.videoUrl} className="absolute inset-0 w-full h-full object-cover" loop playsInline muted={muted} onDoubleClick={()=>doLike(v._id)}/>:v.thumbnailUrl?<img src={v.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy"/>:<div className="absolute inset-0 flex items-center justify-center" style={{background:'#111'}}><Camera size={48} className="text-gray-600"/></div>}
+            {v.videoUrl?<video ref={el=>{videoRefs.current[idx]=el;}} data-video-id={v._id} src={v.videoUrl} className="absolute inset-0 w-full h-full object-cover" loop playsInline muted={muted} onDoubleClick={()=>doLike(v._id)}/>:v.thumbnailUrl?<img src={v.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy"/>:<div className="absolute inset-0 flex items-center justify-center" style={{background:'#111'}}><Camera size={48} className="text-gray-600"/></div>}
             {v.videoUrl&&<button onClick={()=>setMuted(m=>!m)} className="absolute top-3 right-3 z-10 p-2 rounded-full" style={{background:'rgba(0,0,0,0.45)'}}>{muted?<VolumeX size={16} className="text-white"/>:<Volume2 size={16} className="text-white"/>}</button>}
 
             {/* Columna de acciones — iconos sueltos sin círculo de fondo, igual que TikTok. Avatar arriba con "+" rojo para seguir rápido. */}

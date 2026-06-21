@@ -28,6 +28,11 @@ const videoSchema = new mongoose.Schema({
   isPublic: { type: Boolean, default: true }, // false = solo visible para el propio dueño
   savesCount: { type: Number, default: 0 }, // solo para mostrar el número rápido; el detalle de quién vive en SavedVideo
   commentsCount: { type: Number, default: 0 }, // idem, el detalle de cada comentario vive en la colección Comment
+  // Métricas reales para el Fondo de Creadores — viewsCount es un contador
+  // simple (cada reproducción suma), sharesCount idem; el ALCANCE real
+  // (personas únicas) se calcula aparte a partir de la colección VideoView.
+  viewsCount: { type: Number, default: 0 },
+  sharesCount: { type: Number, default: 0 },
   // Música añadida al grabar — desnormalizado (igual que remixOf) para no
   // tener que consultar el catálogo de sonidos cada vez que se pinta el feed.
   sound: {

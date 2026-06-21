@@ -18,6 +18,7 @@ const UserProfilePage = lazy(() => import('./pages/UserProfilePage'));
 const FollowListPage = lazy(() => import('./pages/FollowListPage'));
 const SearchPage = lazy(() => import('./pages/SearchPage'));
 const RemixCameraPage = lazy(() => import('./pages/RemixCameraPage'));
+const DailyChallengesPage = lazy(() => import('./pages/DailyChallengesPage'));
 
 function PageFallback() {
   return <div className="min-h-screen flex items-center justify-center" style={{background:'#000'}}><Spinner/></div>;
@@ -95,6 +96,7 @@ function AppInner() {
           <Route path="/dashboard" component={DashboardPage}/>
           <Route path="/search"><SearchPage/></Route>
           <Route path="/remix/:videoId">{(p:any)=><RemixCameraPage videoId={p.videoId}/>}</Route>
+          <Route path="/retos-diarios" component={DailyChallengesPage}/>
           <Route path="/user/:id/followers">{(p:any)=><FollowListPage id={p.id} type="followers"/>}</Route>
           <Route path="/user/:id/following">{(p:any)=><FollowListPage id={p.id} type="following"/>}</Route>
           <Route path="/user/:id">{(p:any)=><UserProfilePage id={p.id}/>}</Route>

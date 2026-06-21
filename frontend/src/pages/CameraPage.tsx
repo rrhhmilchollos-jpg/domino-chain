@@ -20,7 +20,10 @@ const TIMER_OPTIONS: { val: 0|3|10; label: string }[] = [{val:0,label:'Sin retra
 export default function CameraPage() {
   const { user, token } = useAuth();
   const [, setLocation] = useLocation();
-  const { data: challenge } = useApi('/api/challenges/active');
+  // Si se viene de Retos Diarios con ?challengeId=, grabamos para ESE reto
+  // en concreto (uno de los 2 del día); si no, el de siempre (/active).
+  const urlChallengeId=new URLSearchParams(window.location.search).get('challengeId');
+  const { data: challenge } = useApi(urlChallengeId?`/api/challenges/${urlChallengeId}`:'/api/challenges/active', [urlChallengeId]);
   const { data: users } = useApi('/api/ranking?limit=20');
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewRef = useRef<HTMLVideoElement>(null);

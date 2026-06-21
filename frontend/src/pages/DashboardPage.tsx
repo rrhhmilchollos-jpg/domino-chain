@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
-import { Zap, Bell, ChevronRight, Camera, Heart, Bookmark, Grid3x3, Settings, Share2 } from 'lucide-react';
+import { Zap, Bell, ChevronRight, Camera, Heart, Bookmark, Grid3x3, Settings, Share2, Coins, Eye, Users } from 'lucide-react';
 import { cn, useAuth, useApi, Av, Spinner, fmt, ago, API, RankingEntry, Notification, DominoVideo, VisibilityToggle, shareLink, Toast } from '../lib/shared';
 
 type Tab = 'videos' | 'liked' | 'saved';
@@ -37,6 +37,7 @@ export default function DashboardPage() {
   const { data: likedVideos } = useApi(user?._id ? `/api/videos/liked/${user._id}` : '/api/videos/liked/_', [user?._id]);
   const { data: savedVideos } = useApi(user?._id ? `/api/videos/saved/${user._id}` : '/api/videos/saved/_', [user?._id]);
   const { data: meFull } = useApi(user?._id ? '/api/users/me' : '/api/users/_', [user?._id]);
+  const { data: creatorFund } = useApi(user?._id ? '/api/creatorfund/me' : '/api/creatorfund/_', [user?._id]);
   const [toast, setToast] = useState<string|null>(null);
   const markRead=async(id:string)=>{if(!token)return;await fetch(`${API}/api/notifications/${id}/read`,{method:'PUT',headers:{Authorization:`Bearer ${token}`}});setNotifs((p:Notification[])=>Array.isArray(p)?p.map(n=>n._id===id?{...n,read:true}:n):p);};
   const unread=Array.isArray(notifs)?notifs.filter((n:Notification)=>!n.read).length:0;
@@ -75,6 +76,51 @@ export default function DashboardPage() {
             <button className="p-2.5 rounded-lg border" style={{borderColor:'#2a2a3a'}}><Settings size={16} className="text-gray-300"/></button>
           </div>
         </div>
+
+        {/* ===== Fondo de Creadores ===== */}
+        {creatorFund && (
+          <div className="rounded-2xl p-5 mb-6 border" style={{background:'linear-gradient(135deg,rgba(255,215,0,0.08),rgba(124,58,237,0.08))',borderColor:'#FFD70033'}}>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-bold text-white flex items-center gap-2"><Coins size={17} style={{color:'#FFD700'}}/>Fondo de Creadores</h2>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.08)',color:'#9ca3af'}}>{creatorFund.payoutsActive?'Pagos activos':'Seguimiento real'}</span>
+            </div>
+            <div className="text-3xl font-black text-white my-2" style={{fontFamily:'Syne,sans-serif'}}>{creatorFund.totalEarnings?.toFixed(2)} €</div>
+            <p className="text-xs text-gray-400 mb-4">
+              Saldo calculado con tus métricas reales (vistas, alcance y veces compartido). {creatorFund.payoutsActive
+                ? 'Ya puedes cobrarlo.'
+                : 'Todavía no se puede cobrar de verdad — falta conectar una pasarela de pagos real. En cuanto esté lista, este mismo saldo será el que se transfiera.'}
+            </p>
+            <div className="flex items-center gap-4 text-[11px] text-gray-500 mb-4 flex-wrap">
+              <span className="flex items-center gap-1"><Users size={11}/>{fmt(creatorFund.thresholds?.minReach||0)}+ personas</span>
+              <span className="flex items-center gap-1"><Eye size={11}/>{fmt(creatorFund.thresholds?.minViews||0)}+ vistas</span>
+              <span className="flex items-center gap-1"><Share2 size={11}/>{fmt(creatorFund.thresholds?.minShares||0)}+ compartidos</span>
+              <span className="text-gray-600">→ reto elegible</span>
+            </div>
+            {Array.isArray(creatorFund.videos) && creatorFund.videos.length>0 ? (
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {creatorFund.videos.map((v:any)=>(
+                  <div key={v.videoId} className="flex items-center gap-3 p-2 rounded-xl" style={{background:'rgba(0,0,0,0.3)'}}>
+                    <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0" style={{background:'#1e1e2a'}}>
+                      {v.thumbnailUrl && <img src={v.thumbnailUrl} alt="" className="w-full h-full object-cover"/>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white truncate">{v.caption||'Sin descripción'}</p>
+                      <div className="flex items-center gap-2 text-[10px] text-gray-500 mt-0.5">
+                        <span className="flex items-center gap-0.5"><Eye size={9}/>{fmt(v.views)}</span>
+                        <span className="flex items-center gap-0.5"><Users size={9}/>{fmt(v.reach)}</span>
+                        <span className="flex items-center gap-0.5"><Share2 size={9}/>{fmt(v.shares)}</span>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-sm font-bold" style={{color: v.eligible?'#FFD700':'#4b5563'}}>{v.earnings.toFixed(2)} €</div>
+                      {!v.eligible && <div className="text-[9px] text-gray-600">aún no elegible</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-xs text-gray-500 text-center py-3">Publica retos y consigue vistas, alcance o veces compartido para empezar a generar saldo.</p>}
+          </div>
+        )}
 
         {/* ===== Pestañas Videos / Me Gusta (estilo TikTok) ===== */}
         <div className="flex border-t border-b" style={{borderColor:'#1e1e2a'}}>

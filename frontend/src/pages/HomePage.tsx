@@ -1,14 +1,20 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
-import { Play, Video, Camera, Globe, Users, Clock, Eye } from 'lucide-react';
-import { useApi, DominoLogo, Av, fmt, left, RankingEntry, LiveStream } from '../lib/shared';
+import { Play, Video, Camera, Globe, Users, Clock, Eye, CalendarDays } from 'lucide-react';
+import { useApi, DominoLogo, Av, fmt, left, RankingEntry, LiveStream, Challenge } from '../lib/shared';
+
+const CATEGORY_INFO: Record<string, { emoji: string; color: string }> = {
+  Kindness: { emoji: '💛', color: '#FF6FB5' },
+  Creativity: { emoji: '🎨', color: '#00F5FF' },
+  Eco: { emoji: '🌱', color: '#4ade80' },
+};
 
 export default function HomePage() {
-  const { data: challenge } = useApi('/api/challenges/active');
+  const { data: dailyChallenges } = useApi('/api/challenges/daily');
   const { data: ranking } = useApi('/api/ranking?limit=5');
   const { data: lives } = useApi('/api/lives');
   const [counter, setCounter] = useState(14782);
-  useEffect(()=>{if(challenge?.globalCounter)setCounter(challenge.globalCounter);},[challenge]);
+  useEffect(()=>{const total=(Array.isArray(dailyChallenges)?dailyChallenges:[]).reduce((s:number,c:Challenge)=>s+(c.globalCounter||0),0);if(total)setCounter(total);},[dailyChallenges]);
   useEffect(()=>{const t=setInterval(()=>setCounter(c=>c+Math.floor(Math.random()*3)),2500);return()=>clearInterval(t);},[]);
   return (
     <div>
@@ -23,6 +29,7 @@ export default function HomePage() {
             <Link href="/feed" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-black" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)',boxShadow:'0 0 20px rgba(0,245,255,0.3)'}}><Play size={18}/>Ver Feed</Link>
             <Link href="/live" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white border" style={{borderColor:'#FF007F',boxShadow:'0 0 16px rgba(255,0,127,0.3)'}}><Video size={18}/>En Vivo</Link>
             <Link href="/camera" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white border border-gray-700"><Camera size={18}/>Grabar Reto</Link>
+            <Link href="/retos-diarios" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-black" style={{background:'linear-gradient(135deg,#FFD700,#FF007F)',boxShadow:'0 0 20px rgba(255,215,0,0.3)'}}><CalendarDays size={18}/>Retos Diarios</Link>
           </div>
           <div className="mt-12 flex items-center justify-center gap-2"><div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#00F5FF'}}/><span className="text-lg font-bold" style={{color:'#00F5FF'}}>{counter.toLocaleString('es-ES')}</span><span className="text-gray-400 text-sm">cadenas activas</span></div>
         </div>
@@ -47,15 +54,26 @@ export default function HomePage() {
         </section>
       )}
 
-      {challenge&&(
+      {Array.isArray(dailyChallenges)&&dailyChallenges.length>0&&(
         <section className="py-12 px-4">
           <div className="max-w-7xl mx-auto">
-            <h2 className="text-2xl font-black text-white mb-4" style={{fontFamily:'Syne,sans-serif'}}>Reto del Día</h2>
-            <div className="rounded-xl p-5 border" style={{background:'#13131f',borderColor:'#1e1e2a'}}>
-              <h3 className="font-bold text-white text-lg">{challenge.title}</h3>
-              <p className="text-sm text-gray-400 mt-1 line-clamp-2">{challenge.description}</p>
-              <div className="flex items-center justify-between mt-3 mb-3"><div className="flex items-center gap-1 text-xs text-gray-400"><Users size={12}/>{fmt(challenge.globalCounter)} participantes</div><div className="flex items-center gap-1 text-xs text-gray-400"><Clock size={12}/>{left(challenge.expiresAt)}</div></div>
-              <Link href="/camera" className="w-full py-2.5 rounded-lg text-sm font-bold text-black flex items-center justify-center gap-2" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}><Camera size={16}/>Aceptar reto</Link>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-black text-white" style={{fontFamily:'Syne,sans-serif'}}>Retos Diarios</h2>
+              <Link href="/retos-diarios" className="flex items-center gap-1.5 text-sm font-semibold" style={{color:'#00F5FF'}}><CalendarDays size={15}/>Ver calendario</Link>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {dailyChallenges.map((challenge:Challenge,i:number)=>{
+                const info=CATEGORY_INFO[challenge.category]||{emoji:'🎲',color:'#00F5FF'};
+                return (
+                  <div key={challenge._id} className="rounded-xl p-5 border" style={{background:'#13131f',borderColor:'#1e1e2a'}}>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full inline-block mb-2" style={{background:`${info.color}22`,color:info.color}}>{info.emoji} Reto {i+1}</span>
+                    <h3 className="font-bold text-white text-lg">{challenge.title}</h3>
+                    <p className="text-sm text-gray-400 mt-1 line-clamp-2">{challenge.description}</p>
+                    <div className="flex items-center justify-between mt-3 mb-3"><div className="flex items-center gap-1 text-xs text-gray-400"><Users size={12}/>{fmt(challenge.globalCounter)} participantes</div><div className="flex items-center gap-1 text-xs text-gray-400"><Clock size={12}/>{left(challenge.expiresAt)}</div></div>
+                    <Link href={`/camera?challengeId=${challenge._id}`} className="w-full py-2.5 rounded-lg text-sm font-bold text-black flex items-center justify-center gap-2" style={{background:`linear-gradient(135deg,${info.color},#7c3aed)`}}><Camera size={16}/>Aceptar reto</Link>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -82,7 +100,7 @@ export default function HomePage() {
       <footer className="border-t mt-16 py-8 px-4" style={{borderColor:'#1e1e2a',background:'#13131f'}}>
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <p className="text-xs text-gray-600">© 2026 DOMINO. The Real-World Chain Reaction.</p>
-          <div className="flex items-center gap-1.5 text-xs text-gray-500"><Globe size={12} style={{color:'#00F5FF'}}/>{fmt(challenge?.globalCounter||14782)} cadenas activas</div>
+          <div className="flex items-center gap-1.5 text-xs text-gray-500"><Globe size={12} style={{color:'#00F5FF'}}/>{fmt(counter||14782)} cadenas activas</div>
         </div>
       </footer>
     </div>

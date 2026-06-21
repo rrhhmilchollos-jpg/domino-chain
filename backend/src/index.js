@@ -13,6 +13,7 @@ const livesRoutes = require('./routes/lives');
 const coinsRoutes = require('./routes/coins');
 const searchRoutes = require('./routes/search');
 const soundsRoutes = require('./routes/sounds');
+const creatorfundRoutes = require('./routes/creatorfund');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -39,6 +40,7 @@ app.use('/api/lives', livesRoutes);
 app.use('/api/coins', coinsRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/sounds', soundsRoutes);
+app.use('/api/creatorfund', creatorfundRoutes);
 
 app.get('/api/health', (req, res) => res.json({
   status: 'ok',

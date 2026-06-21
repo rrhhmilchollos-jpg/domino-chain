@@ -13,7 +13,8 @@ export const CLOUDINARY_PRESET = import.meta.env.VITE_CLOUDINARY_PRESET || 'domi
 
 // ===================== TYPES =====================
 export interface AppUser { _id: string; username: string; email: string; avatarUrl: string; country: string; city: string; flag: string; impactPoints: number; currentStreak: number; bio: string; coins: number; followersCount?: number; followingCount?: number; isFollowing?: boolean; }
-export interface Challenge { _id: string; title: string; description: string; category: string; expiresAt: string; globalCounter: number; }
+export interface Challenge { _id: string; title: string; description: string; category: string; expiresAt: string; globalCounter: number; dayKey?: string; slot?: 1|2; }
+export interface CalendarDay { dayKey: string; challenges: { _id: string; title: string; category: string; completed: boolean }[]; }
 export interface RemixOf { videoId: string; type: 'duet'|'stitch'; authorId: string; authorUsername: string; }
 export interface Sound { id: string; title: string; mood: string; duration: number; audioUrl: string; attribution: string; }
 export interface DominoVideo { _id: string; userId: AppUser; videoUrl: string; thumbnailUrl: string; caption?: string; hashtags?: string[]; remixOf?: RemixOf; sound?: { id: string; title: string }; chainDepth: number; likes: string[]; savesCount?: number; commentsCount?: number; isSaved?: boolean; createdAt: string; geoCoordinates: { lat: number; lng: number }; isPublic: boolean; }
