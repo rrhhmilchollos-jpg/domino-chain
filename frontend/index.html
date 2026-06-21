@@ -1,54 +1,122 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 
-    <!-- PWA -->
-    <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#00f5ff" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="DOMINO" />
-    <link rel="apple-touch-icon" href="/icons/icon-152.png" />
-    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-96.png" />
-    <link rel="shortcut icon" href="/icons/icon-192.png" />
+    <!-- ============ SEO BÁSICO ============ -->
+    <title>DOMINO — The Real-World Chain Reaction | App de retos en cadena</title>
+    <meta name="description" content="DOMINO: graba retos de 15s, nomina a 3 personas y haz crecer la cadena dominó global. Retos de creatividad, kindness y eco-acción, en directo, multi-país. Gratis." />
+    <meta name="keywords" content="domino app, retos en cadena, video challenge app, reto viral, nominaciones, app tiktok style, reto solidario, eco challenge" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta name="author" content="DOMINO" />
+    <link rel="canonical" href="https://domino-app.com/" />
+    <!-- CAMBIA https://domino-app.com por tu dominio real en TODO este archivo -->
 
-    <!-- SEO -->
-    <title>DOMINO — The Real-World Chain Reaction</title>
-    <meta name="description" content="Completa retos de 15 segundos y pasa el testigo a 3 personas en cualquier rincón del mundo. Cada video crea una reacción en cadena visible en el mapa global." />
+    <meta name="theme-color" content="#0b0b12" />
+    <meta name="color-scheme" content="dark" />
 
-    <!-- Open Graph -->
+    <!-- ============ OPEN GRAPH (Facebook / WhatsApp / LinkedIn) ============ -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="DOMINO" />
     <meta property="og:title" content="DOMINO — The Real-World Chain Reaction" />
-    <meta property="og:description" content="Completa retos de 15 segundos y pasa el testigo a 3 personas. Cada video crea una reacción en cadena visible en el mapa global." />
-    <meta property="og:image" content="/icons/icon-512.png" />
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="DOMINO" />
-    <meta name="twitter:image" content="/icons/icon-512.png" />
+    <meta property="og:description" content="Graba retos de 15s, nomina a 3 personas y haz crecer la cadena dominó global." />
+    <meta property="og:url" content="https://domino-app.com/" />
+    <meta property="og:image" content="https://domino-app.com/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="DOMINO — App de retos virales en cadena" />
+    <meta property="og:locale" content="es_ES" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:locale:alternate" content="pt_BR" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <!-- ============ TWITTER / X CARD ============ -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="DOMINO — The Real-World Chain Reaction" />
+    <meta name="twitter:description" content="Graba retos de 15s, nomina a 3 personas y haz crecer la cadena dominó global." />
+    <meta name="twitter:image" content="https://domino-app.com/og-image.jpg" />
+
+    <!-- ============ GEO / LOCAL SEO ============ -->
+    <!-- Útil para resultados locales si en algún momento priorizáis un país concreto -->
+    <meta name="geo.region" content="ES" />
+    <meta name="geo.placename" content="España" />
+    <meta name="ICBM" content="40.4168, -3.7038" />
+
+    <!-- ============ ICONOS / PWA ============ -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- ============ RENDIMIENTO / CORE WEB VITALS ============ -->
+    <!-- Preconecta cuanto antes con tu API y Cloudinary: reduce el tiempo hasta el primer byte de las llamadas fetch e imágenes -->
+    <link rel="preconnect" href="https://domino-chain-production.up.railway.app" crossorigin />
+    <link rel="dns-prefetch" href="https://domino-chain-production.up.railway.app" />
+    <link rel="preconnect" href="https://res.cloudinary.com" crossorigin />
+    <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
 
-    <style>
-      html, body { background: #0b0b12; margin: 0; padding: 0; }
-      body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
-    </style>
+    <!-- Fuente Syne usada en los títulos — cárgala con display=swap para evitar bloqueo de render -->
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    <!-- ============ STRUCTURED DATA (JSON-LD) — Organization + WebApplication ============ -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://domino-app.com/#organization",
+          "name": "DOMINO",
+          "url": "https://domino-app.com/",
+          "logo": "https://domino-app.com/logo.png",
+          "sameAs": []
+        },
+        {
+          "@type": "WebApplication",
+          "name": "DOMINO",
+          "alternateName": "DOMINO — The Real-World Chain Reaction",
+          "url": "https://domino-app.com/",
+          "applicationCategory": "SocialNetworkingApplication",
+          "operatingSystem": "Web, iOS, Android",
+          "description": "App de retos en cadena: graba un vídeo de 15s, nomina a 3 personas y forma parte del efecto dominó global.",
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+          "publisher": { "@id": "https://domino-app.com/#organization" }
+        }
+      ]
+    }
+    </script>
+
+    <!-- ============ SEM: Google tag (gtag.js) ============ -->
+    <!-- Sustituye G-XXXXXXXXXX por tu Measurement ID de GA4. Si usas Google Ads, añade también tu AW-ID con otro 'config'. -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-XXXXXXXXXX', { anonymize_ip: true });
+      // Para conversiones de Google Ads, añade además:
+      // gtag('config', 'AW-XXXXXXXXX');
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!--
+        Fallback estático para crawlers que NO ejecutan JavaScript
+        (la mayoría de bots de IA: GPTBot, PerplexityBot, ClaudeBot...).
+        Googlebot sí renderiza React, pero esto da una red de seguridad
+        y mejora el "GEO" (Generative Engine Optimization).
+      -->
+      <noscript>
+        <main style="font-family:system-ui,sans-serif;background:#0b0b12;color:#fff;padding:40px 20px;text-align:center;">
+          <h1>DOMINO — The Real-World Chain Reaction</h1>
+          <p>Graba retos de 15 segundos, nomina a 3 personas y haz crecer la cadena dominó global. Retos de creatividad, kindness y eco-acción, en directo y en todo el mundo.</p>
+          <p>Activa JavaScript en tu navegador para usar la app completa.</p>
+        </main>
+      </noscript>
+    </div>
+    <!-- Ajusta esta ruta si tu entry point no es src/main.tsx -->
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js', { scope: '/' })
-            .then(r => console.log('[DOMINO SW] Registrado:', r.scope))
-            .catch(e => console.warn('[DOMINO SW] Error:', e));
-        });
-      }
-    </script>
   </body>
 </html>
