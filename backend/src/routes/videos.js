@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
+const optionalAuth = require('../middleware/optionalAuth');
 const Video = require('../models/Video');
 const Challenge = require('../models/Challenge');
 const Notification = require('../models/Notification');
@@ -13,10 +14,10 @@ router.get('/feed', async (req, res) => {
     const pageNum = Number(page);
     const limitNum = Number(limit);
 
-    // Solo videos con archivo real: uno sin videoUrl no tiene nada que
-    // reproducir y antes aparecía en el feed como un hueco negro con un
-    // icono de cámara. Mejor no mostrarlo en absoluto.
-    const pool = await Video.find({ isPublished: true, videoUrl: { $ne: '' } })
+    // Solo videos con archivo real y públicos: uno sin videoUrl no tiene nada
+    // que reproducir, y uno privado no debe verlo nadie salvo su dueño (que
+    // accede a sus propios videos desde el Dashboard, no desde este feed).
+    const pool = await Video.find({ isPublished: true, isPublic: true, videoUrl: { $ne: '' } })
       .populate('userId', 'username avatarUrl country city flag impactPoints currentStreak')
       .sort({ createdAt: -1 })
       .limit(200); // ventana de candidatos recientes sobre la que rankear/diversificar
@@ -51,7 +52,7 @@ router.get('/feed', async (req, res) => {
 // GET /api/videos/chain/:rootId
 router.get('/chain/:rootId', async (req, res) => {
   try {
-    const chain = await Video.find({ rootVideoId: req.params.rootId, isPublished: true })
+    const chain = await Video.find({ rootVideoId: req.params.rootId, isPublished: true, isPublic: true })
       .populate('userId', 'username avatarUrl country city flag')
       .sort({ chainDepth: 1 });
     res.json(chain);
@@ -61,9 +62,15 @@ router.get('/chain/:rootId', async (req, res) => {
 });
 
 // GET /api/videos/user/:userId — videos publicados por un usuario (para su dashboard/perfil)
-router.get('/user/:userId', async (req, res) => {
+// Usa optionalAuth: si quien pregunta es el propio dueño, ve también sus videos
+// privados; cualquier otro visitante (o nadie logueado) solo ve los públicos.
+router.get('/user/:userId', optionalAuth, async (req, res) => {
   try {
-    const videos = await Video.find({ userId: req.params.userId, isPublished: true })
+    const isOwner = req.user && String(req.user._id) === String(req.params.userId);
+    const filter = { userId: req.params.userId, isPublished: true };
+    if (!isOwner) filter.isPublic = true;
+
+    const videos = await Video.find(filter)
       .populate('userId', 'username avatarUrl country city flag')
       .sort({ createdAt: -1 });
     res.json(videos);
@@ -72,7 +79,7 @@ router.get('/user/:userId', async (req, res) => {
   }
 });
 
-// GET /api/videos/liked/:userId — videos a los que el usuario ha dado 'me gusta' (pestaña Me Gusta)
+// GET /api/videos/liked/:userId — videos a los que el usuario ha dado 'me gusta' (pestaña Me Gusta, solo el propio dueño la ve desde el frontend)
 router.get('/liked/:userId', async (req, res) => {
   try {
     const videos = await Video.find({ likes: req.params.userId, isPublished: true })
@@ -97,8 +104,6 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/videos — publicar video
-// BUG FIX: isPublished ahora se pone a true directamente
-// BUG FIX: rootVideoId se establece atómicamente
 router.post('/', auth, async (req, res) => {
   try {
     const { challengeId, videoUrl, thumbnailUrl, parentVideoId, geoCoordinates, nominatedUserIds } = req.body;
@@ -116,36 +121,31 @@ router.post('/', auth, async (req, res) => {
       rootVideoId = parent.rootVideoId || parent._id;
     }
 
-    // BUG FIX: isPublished: true directamente, sin segundo update
     const video = await Video.create({
       challengeId,
       userId: req.user._id,
       videoUrl: videoUrl || '',
       thumbnailUrl: thumbnailUrl || '',
       parentVideoId: parentVideoId || null,
-      rootVideoId, // se actualiza abajo si es el root
+      rootVideoId,
       geoCoordinates,
       nominatedUsers: nominatedUserIds,
       chainDepth,
-      isPublished: true // FIX: antes era false por el schema default
+      isPublished: true
     });
 
-    // Si es el primer video de la cadena, su rootVideoId es su propio _id
     if (!rootVideoId) {
       await Video.findByIdAndUpdate(video._id, { rootVideoId: video._id });
       video.rootVideoId = video._id;
     }
 
-    // Incrementar contador del reto
     await Challenge.findByIdAndUpdate(challengeId, { $inc: { globalCounter: 1 } });
 
-    // Sumar puntos al usuario
     await User.findByIdAndUpdate(req.user._id, {
       $inc: { impactPoints: 100 + chainDepth * 50 },
       lastActiveDate: new Date()
     });
 
-    // Crear notificaciones para los nominados
     const msgs = nominatedUserIds.map(uid => ({
       userId: uid,
       type: 'nomination',
@@ -156,7 +156,6 @@ router.post('/', auth, async (req, res) => {
     }));
     await Notification.insertMany(msgs);
 
-    // Notificar al padre si hay cadena
     if (parentVideoId) {
       const parentVideo = await Video.findById(parentVideoId).populate('userId');
       if (parentVideo && parentVideo.userId._id.toString() !== req.user._id.toString()) {
@@ -177,6 +176,21 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
+// PUT /api/videos/:id/visibility — el dueño cambia un video a público o privado
+router.put('/:id/visibility', auth, async (req, res) => {
+  try {
+    const { isPublic } = req.body;
+    if (typeof isPublic !== 'boolean') return res.status(400).json({ error: 'isPublic debe ser true o false' });
+    const video = await Video.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!video) return res.status(404).json({ error: 'Video no encontrado' });
+    video.isPublic = isPublic;
+    await video.save();
+    res.json({ ok: true, isPublic: video.isPublic });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/videos/:id/like
 router.post('/:id/like', auth, async (req, res) => {
   try {
@@ -186,7 +200,6 @@ router.post('/:id/like', auth, async (req, res) => {
     if (liked) video.likes.pull(req.user._id);
     else {
       video.likes.push(req.user._id);
-      // Notificar al autor
       if (video.userId.toString() !== req.user._id.toString()) {
         await Notification.create({
           userId: video.userId,
