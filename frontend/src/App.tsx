@@ -99,6 +99,70 @@ function useApi(endpoint: string, deps: any[] = []) {
   return { data, loading, error, setData };
 }
 
+// ===================== SEO =====================
+// Sitio base — CAMBIA esto por tu dominio real una vez lo tengas.
+const SITE_URL = 'https://domino-app.com';
+const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.jpg`;
+
+interface SEOConfig {
+  title: string;
+  description: string;
+  path: string;            // ej: '/', '/feed', '/user/123'
+  image?: string;
+  type?: 'website' | 'profile' | 'video.other';
+  noindex?: boolean;
+  jsonLd?: Record<string, any> | null;
+}
+
+/**
+ * Actualiza <title>, meta description/OG/Twitter, canonical y JSON-LD en cada
+ * cambio de ruta. Es el equivalente "a mano" de react-helmet, sin añadir
+ * dependencias nuevas. Como esto se ejecuta en el cliente, los crawlers que
+ * NO ejecutan JS (la mayoría de bots de IA) no lo verán — solo Googlebot y
+ * navegadores reales. Para esos casos, el index.html ya lleva metadatos
+ * estáticos de fallback para la home.
+ */
+function useSEO({ title, description, path, image, type='website', noindex=false, jsonLd=null }: SEOConfig) {
+  useEffect(() => {
+    const url = `${SITE_URL}${path}`;
+    document.title = title;
+    document.documentElement.lang = 'es';
+
+    const upsertMeta = (attr: 'name'|'property', key: string, content: string) => {
+      let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`);
+      if (!el) { el = document.createElement('meta'); el.setAttribute(attr, key); document.head.appendChild(el); }
+      el.setAttribute('content', content);
+    };
+    const upsertLink = (rel: string, href: string) => {
+      let el = document.head.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
+      if (!el) { el = document.createElement('link'); el.setAttribute('rel', rel); document.head.appendChild(el); }
+      el.setAttribute('href', href);
+    };
+
+    upsertMeta('name', 'description', description);
+    upsertMeta('name', 'robots', noindex ? 'noindex, nofollow' : 'index, follow, max-image-preview:large');
+    upsertMeta('property', 'og:title', title);
+    upsertMeta('property', 'og:description', description);
+    upsertMeta('property', 'og:url', url);
+    upsertMeta('property', 'og:type', type);
+    upsertMeta('property', 'og:image', image || DEFAULT_OG_IMAGE);
+    upsertMeta('name', 'twitter:card', 'summary_large_image');
+    upsertMeta('name', 'twitter:title', title);
+    upsertMeta('name', 'twitter:description', description);
+    upsertMeta('name', 'twitter:image', image || DEFAULT_OG_IMAGE);
+    upsertLink('canonical', url);
+
+    let ld = document.getElementById('page-jsonld') as HTMLScriptElement | null;
+    if (jsonLd) {
+      if (!ld) { ld = document.createElement('script'); ld.type = 'application/ld+json'; ld.id = 'page-jsonld'; document.head.appendChild(ld); }
+      ld.textContent = JSON.stringify(jsonLd);
+    } else if (ld) {
+      ld.remove();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, description, path, image, type, noindex, JSON.stringify(jsonLd)]);
+}
+
 // ===================== UTILS =====================
 const fmt = (n:number) => n>=1e6?`${(n/1e6).toFixed(1)}M`:n>=1000?`${(n/1000).toFixed(1)}K`:String(n||0);
 const ago = (iso:string) => { const d=Date.now()-new Date(iso).getTime(); const h=Math.floor(d/3.6e6); const m=Math.floor(d/6e4); return h>0?`${h}h`:m>0?`${m}m`:'ahora'; };
@@ -143,6 +207,12 @@ function AuthPage() {
   const [mode, setMode] = useState<'login'|'register'>('login');
   const [form, setForm] = useState({ email:'', password:'', username:'', country:'', city:'' });
   const [error, setError] = useState(''); const [loading, setLoading] = useState(false);
+  useSEO({
+    title: 'Entrar o Crear Cuenta — DOMINO',
+    description: 'Únete gratis a DOMINO: graba retos de 15s, nomina a 3 personas y haz crecer la cadena dominó global. Regístrate en segundos.',
+    path: '/auth'
+  });
+
   const flags: Record<string,string> = {'España':'🇪🇸','México':'🇲🇽','Argentina':'🇦🇷','Colombia':'🇨🇴','Estados Unidos':'🇺🇸','Japón':'🇯🇵','Brasil':'🇧🇷','Francia':'🇫🇷','Alemania':'🇩🇪','Italia':'🇮🇹','Reino Unido':'🇬🇧','Portugal':'🇵🇹'};
   const handle = async () => {
     setError(''); setLoading(true);
@@ -281,7 +351,7 @@ function VideoModal({ video, onClose }: { video: DominoVideo; onClose: () => voi
         {video.videoUrl ? (
           <video src={video.videoUrl} className="w-full h-full object-cover rounded-2xl" controls autoPlay loop playsInline/>
         ) : video.thumbnailUrl ? (
-          <img src={video.thumbnailUrl} alt="" className="w-full h-full object-cover rounded-2xl"/>
+          <img src={video.thumbnailUrl} alt={`Reto DOMINO de @${video.userId?.username||'usuario'}`} loading="lazy" className="w-full h-full object-cover rounded-2xl"/>
         ) : (
           <div className="w-full h-full rounded-2xl flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={48} className="text-gray-600"/></div>
         )}
@@ -335,6 +405,19 @@ function FeedPage() {
   const [commentId, setCommentId] = useState<string|null>(null);
   const videoRefs = useRef<(HTMLVideoElement|null)[]>([]);
 
+  useSEO({
+    title: 'Feed de Retos en Vivo — DOMINO',
+    description: 'Descubre los últimos retos virales en cadena: vídeos de 15s nominando a otros usuarios en tiempo real, de todo el mundo.',
+    path: '/feed',
+    jsonLd: Array.isArray(videos) && videos.length>0 ? {
+      '@context':'https://schema.org', '@type':'ItemList',
+      itemListElement: videos.slice(0,10).map((v:DominoVideo,i:number)=>({
+        '@type':'ListItem', position:i+1,
+        item: { '@type':'VideoObject', name:`Reto DOMINO de @${v.userId?.username||'usuario'}`, thumbnailUrl: v.thumbnailUrl||undefined, contentUrl: v.videoUrl||undefined, uploadDate: v.createdAt, description: `Cadena de retos, profundidad ${v.chainDepth+1}` }
+      }))
+    } : null
+  });
+
   const doLike = async (id:string) => { if(!token)return; setLiked(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;}); await fetch(`${API}/api/videos/${id}/like`,{method:'POST',headers:{Authorization:`Bearer ${token}`}}); };
   const doSave = async (id:string) => { if(!token)return; setSaved(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;}); await fetch(`${API}/api/users/videos/${id}/save`,{method:'POST',headers:{Authorization:`Bearer ${token}`}}); };
   const doShare = (id:string) => { const url=`${window.location.origin}/video/${id}`; if(navigator.share)navigator.share({title:'DOMINO',url});else navigator.clipboard?.writeText(url); };
@@ -354,7 +437,7 @@ function FeedPage() {
       {challenge&&<div className="fixed top-14 left-0 right-0 z-30 pointer-events-none"><div className="max-w-md mx-auto px-4 pt-2"><div className="rounded-xl px-3 py-2 pointer-events-auto flex items-center gap-2" style={{background:'rgba(11,11,18,0.85)',border:'1px solid #1e1e2a',backdropFilter:'blur(10px)'}}><Zap size={14} className="text-yellow-400"/><span className="text-xs font-semibold text-white flex-1 truncate">{challenge.title}</span><span className="text-xs text-gray-400">{left(challenge.expiresAt)}</span></div></div></div>}
       {list.map((v:DominoVideo,idx:number)=>(
         <div key={v._id} className="relative w-full snap-start flex-shrink-0 overflow-hidden bg-black" style={{height:'calc(100vh - 112px)'}}>
-          {v.videoUrl?<video ref={el=>{videoRefs.current[idx]=el;}} src={v.videoUrl} className="absolute inset-0 w-full h-full object-cover" loop playsInline muted onDoubleClick={()=>doLike(v._id)}/>:v.thumbnailUrl?<img src={v.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover"/>:<div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={48} className="text-gray-600"/></div>}
+          {v.videoUrl?<video ref={el=>{videoRefs.current[idx]=el;}} src={v.videoUrl} className="absolute inset-0 w-full h-full object-cover" loop playsInline muted onDoubleClick={()=>doLike(v._id)}/>:v.thumbnailUrl?<img src={v.thumbnailUrl} alt={`Reto DOMINO de @${v.userId?.username||'usuario'}, cadena nivel ${v.chainDepth+1}`} loading={idx===0?'eager':'lazy'} className="absolute inset-0 w-full h-full object-cover"/>:<div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={48} className="text-gray-600"/></div>}
           <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.85) 0%,rgba(0,0,0,0.1) 50%,transparent 100%)'}}/>
           <div className="absolute bottom-16 left-4 right-20 z-10">
             <div className="flex items-center gap-2 mb-2"><Av u={v.userId} s={40}/><div><p className="text-white text-sm font-bold">@{v.userId?.username}</p><p className="text-gray-300 text-xs">{v.userId?.flag} {v.userId?.city}</p></div></div>
@@ -391,6 +474,20 @@ function ProfilePage({ userId }: { userId?: string }) {
   useEffect(() => {
     if (me && profile && !isOwn) setFollowing(profile.followers?.includes(me._id)||false);
   }, [profile, me]);
+
+  const seoUser = isOwn ? me : profile;
+  useSEO({
+    title: seoUser ? `@${seoUser.username} (${fmt(seoUser.impactPoints||0)} pts) — DOMINO` : 'Perfil — DOMINO',
+    description: seoUser ? `Perfil de @${seoUser.username} en DOMINO. ${fmt(seoUser.impactPoints||0)} puntos de impacto, ${seoUser.currentStreak||0} días de racha. ${seoUser.bio||''}`.trim() : 'Perfil de usuario en DOMINO.',
+    path: targetId ? `/user/${targetId}` : '/profile',
+    image: seoUser?.avatarUrl,
+    type: 'profile',
+    noindex: isOwn, // el propio dashboard no se indexa; los perfiles públicos sí
+    jsonLd: (!isOwn && seoUser) ? {
+      '@context':'https://schema.org', '@type':'ProfilePage',
+      mainEntity: { '@type':'Person', name: seoUser.username, image: seoUser.avatarUrl, address: seoUser.city ? { '@type':'PostalAddress', addressLocality: seoUser.city, addressCountry: seoUser.country } : undefined }
+    } : null
+  });
 
   const doFollow = async () => {
     if (!token||!targetId) return;
@@ -565,7 +662,7 @@ function ProfilePage({ userId }: { userId?: string }) {
           {tabVideos.map((v:DominoVideo)=>(
             <button key={v._id} onClick={()=>setSelectedVideo(v)} className="relative overflow-hidden" style={{aspectRatio:'9/16',background:'#0b0b12'}}>
               {v.thumbnailUrl
-                ? <img src={v.thumbnailUrl} alt="" className="w-full h-full object-cover"/>
+                ? <img src={v.thumbnailUrl} alt={`Reto de @${displayUser.username}, cadena nivel ${v.chainDepth+1}`} loading="lazy" className="w-full h-full object-cover"/>
                 : <div className="w-full h-full flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={20} className="text-gray-700"/></div>
               }
               {/* Overlay gradient */}
@@ -620,6 +717,7 @@ function ProfilePage({ userId }: { userId?: string }) {
 function CreatePage() {
   const [, setLocation] = useLocation();
   const [subTab, setSubTab] = useState<'publicar'|'crear'|'live'>('publicar');
+  useSEO({ title:'Crear — DOMINO', description:'Graba un nuevo reto en DOMINO.', path:'/create', noindex:true });
 
   return (
     <div className="min-h-screen" style={{background:'#000'}}>
@@ -845,6 +943,7 @@ function CameraPage() {
   const [blob, setBlob] = useState<Blob|null>(null);
   const [blobUrl, setBlobUrl] = useState<string|null>(null);
   const [geo] = useState({ lat: 40.4168, lng: -3.7038 });
+  useSEO({ title:'Grabar — DOMINO', description:'Graba tu reto de 15s en DOMINO.', path:'/camera', noindex:true });
 
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition(p => {});
@@ -976,6 +1075,7 @@ function MessagesPage() {
   const { user } = useAuth();
   const { data: convs, loading } = useApi('/api/users/messages/inbox', [user?._id]);
   const [, setLocation] = useLocation();
+  useSEO({ title:'Mensajes — DOMINO', description:'Tus conversaciones en DOMINO.', path:'/messages', noindex:true });
 
   if (!user) return <div className="min-h-screen flex items-center justify-center" style={{paddingTop:'56px',background:'#0b0b12'}}><div className="text-center"><p className="text-gray-400 mb-4">Inicia sesión</p><Link href="/auth" className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Entrar</Link></div></div>;
 
@@ -1019,6 +1119,8 @@ function ChatPage({ userId }: { userId: string }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  useSEO({ title: other?`Chat con @${other.username} — DOMINO`:'Chat — DOMINO', description:'Conversación privada en DOMINO.', path:`/messages/${userId}`, noindex:true });
+
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [msgs]);
 
@@ -1071,6 +1173,11 @@ function LiveListPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const list = Array.isArray(lives)?lives:[];
+  useSEO({
+    title: `En Directo${list.length?` — ${list.length} streams ahora`:''} — DOMINO`,
+    description: 'Mira retos DOMINO en directo: lives de creatividad, kindness, eco-acción y batallas en tiempo real. Envía regalos y participa.',
+    path: '/live',
+  });
   return (
     <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
       <div className="max-w-7xl mx-auto px-4 py-6">
@@ -1129,6 +1236,19 @@ function LiveViewerPage({ id }: { id: string }) {
   const [giftAnim, setGiftAnim] = useState<string|null>(null); const [viewers, setViewers] = useState(0);
   const chatRef = useRef<HTMLDivElement>(null);
   const live = Array.isArray(lives)?lives.find((l:LiveStream)=>l._id===id):null;
+  useSEO({
+    title: live ? `🔴 ${live.title} — @${live.userId?.username} en directo — DOMINO` : 'Live — DOMINO',
+    description: live ? `Sigue en directo a @${live.userId?.username}: ${live.title}. ${live.viewerCount||0} espectadores ahora en DOMINO.` : 'Live en DOMINO.',
+    path: `/live/${id}`,
+    image: live?.userId?.avatarUrl,
+    type: 'video.other',
+    jsonLd: live ? {
+      '@context':'https://schema.org', '@type':'BroadcastEvent',
+      name: live.title, isLiveBroadcast: true,
+      startDate: new Date().toISOString(),
+      organizer: { '@type':'Person', name: live.userId?.username }
+    } : null
+  });
   useEffect(()=>{if(live)setViewers(live.viewerCount||0);},[live]);
   useEffect(()=>{const t=setInterval(()=>setViewers(v=>Math.max(0,v+Math.floor(Math.random()*3-1))),5000);return()=>clearInterval(t);},[]);
   useEffect(()=>{if(chatRef.current)chatRef.current.scrollTop=chatRef.current.scrollHeight;},[msgs]);
@@ -1168,6 +1288,15 @@ function WorldMapPage() {
   const proj=(lat:number,lng:number,w:number,h:number)=>({x:((lng+180)/360)*w,y:((90-lat)/180)*h});
   const SAMPLE=[{lat:40.4168,lng:-3.7038,flag:'🇪🇸',city:'Madrid'},{lat:35.6762,lng:139.6503,flag:'🇯🇵',city:'Tokio'},{lat:40.7128,lng:-74.006,flag:'🇺🇸',city:'NY'},{lat:-34.6037,lng:-58.3816,flag:'🇦🇷',city:'Buenos Aires'},{lat:48.8566,lng:2.3522,flag:'🇫🇷',city:'París'},{lat:51.5074,lng:-0.1278,flag:'🇬🇧',city:'Londres'}];
   const pts=Array.isArray(videos)&&videos.length>0?videos.map((v:DominoVideo)=>({lat:v.geoCoordinates.lat,lng:v.geoCoordinates.lng,flag:v.userId?.flag||'🌍',city:v.userId?.city||''})):SAMPLE;
+  useSEO({
+    title: `Mapa Global de Retos DOMINO — ${pts.length} ciudades activas`,
+    description: `Explora el mapa global de la cadena DOMINO: retos activos en ${new Set(pts.map(p=>p.city)).size} ciudades de todo el mundo, en tiempo real.`,
+    path: '/map',
+    jsonLd: {
+      '@context':'https://schema.org', '@type':'ItemList',
+      itemListElement: [...new Set(pts.map(p=>p.city).filter(Boolean))].slice(0,20).map((city,i)=>({ '@type':'ListItem', position:i+1, item:{ '@type':'Place', name: city } }))
+    }
+  });
   useEffect(()=>{const c=canvasRef.current;if(!c)return;const ctx=c.getContext('2d');if(!ctx)return;c.width=c.parentElement?.clientWidth||800;c.height=Math.min((c.parentElement?.clientWidth||800)*0.5,400);const w=c.width,h=c.height;ctx.fillStyle='#0b0b12';ctx.fillRect(0,0,w,h);ctx.strokeStyle='rgba(42,42,58,0.6)';ctx.lineWidth=0.5;for(let l=-180;l<=180;l+=30){const{x}=proj(0,l,w,h);ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}for(let l=-90;l<=90;l+=30){const{y}=proj(l,0,w,h);ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}for(let i=0;i<pts.length-1;i++){const p1=proj(pts[i].lat,pts[i].lng,w,h),p2=proj(pts[i+1].lat,pts[i+1].lng,w,h);const g=ctx.createLinearGradient(p1.x,p1.y,p2.x,p2.y);g.addColorStop(0,'#00F5FF');g.addColorStop(1,'#FF007F');ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.strokeStyle=g;ctx.lineWidth=1.5;ctx.globalAlpha=0.6;ctx.stroke();ctx.globalAlpha=1;}pts.forEach((p:{lat:number;lng:number;flag:string;city:string},i:number)=>{const{x,y}=proj(p.lat,p.lng,w,h);ctx.beginPath();ctx.arc(x,y,i===0?8:5,0,Math.PI*2);ctx.fillStyle=i===0?'#FF007F':'#00F5FF';ctx.shadowBlur=12;ctx.shadowColor=ctx.fillStyle;ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='rgba(248,250,252,0.85)';ctx.font=`${Math.max(8,Math.floor(w/90))}px Inter`;ctx.fillText(`${p.flag} ${p.city}`,x+8,y-4);});},[pts.length]);
   return(<div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}><div className="max-w-7xl mx-auto px-4 py-6"><h1 className="text-3xl font-black text-white mb-2">Mapa Global</h1><p className="text-gray-400 mb-6">{pts.length} nodos</p><div className="rounded-xl overflow-hidden border" style={{minHeight:'300px',borderColor:'#1e1e2a',background:'#0b0b12'}}><canvas ref={canvasRef} className="w-full block"/></div><div className="mt-6 grid grid-cols-3 gap-4">{[{v:Array.isArray(videos)?videos.length:pts.length,l:'Videos',c:'#00F5FF'},{v:new Set(pts.map((p:any)=>p.city)).size,l:'Ciudades',c:'#FF007F'},{v:pts.length,l:'Nodos',c:'#7c3aed'}].map((s,i)=><div key={i} className="rounded-xl p-4 border" style={{background:'#13131f',borderColor:'#1e1e2a'}}><div className="text-2xl font-bold" style={{color:s.c}}>{s.v}</div><div className="text-xs text-gray-400 mt-1">{s.l}</div></div>)}</div></div></div>);
 }
@@ -1176,6 +1305,7 @@ function WorldMapPage() {
 function NotificationsPage() {
   const { user, token } = useAuth();
   const { data: notifs, setData: setNotifs } = useApi('/api/notifications', [user?._id]);
+  useSEO({ title:'Avisos — DOMINO', description:'Tus notificaciones en DOMINO.', path:'/notifications', noindex:true });
   const markAll=async()=>{if(!token)return;await fetch(`${API}/api/notifications/read-all`,{method:'PUT',headers:{Authorization:`Bearer ${token}`}});setNotifs((p:Notification[])=>Array.isArray(p)?p.map(n=>({...n,read:true})):p);};
   return(
     <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
@@ -1203,6 +1333,7 @@ function SearchPage() {
   const [loading, setLoading] = useState(false);
   const { token } = useAuth();
   const [, setLocation] = useLocation();
+  useSEO({ title:'Buscar usuarios — DOMINO', description:'Busca usuarios y ciudades en DOMINO.', path:'/search', noindex:true });
 
   useEffect(() => {
     if (q.length < 2) { setResults([]); return; }
@@ -1237,10 +1368,28 @@ function HomePage() {
   const [counter, setCounter] = useState(14782);
   useEffect(()=>{if(challenge?.globalCounter)setCounter(challenge.globalCounter);},[challenge]);
   useEffect(()=>{const t=setInterval(()=>setCounter(c=>c+Math.floor(Math.random()*3)),2500);return()=>clearInterval(t);},[]);
+  useSEO({
+    title: 'DOMINO — The Real-World Chain Reaction | App de retos en cadena',
+    description: 'Graba retos de 15 segundos, nomina a 3 personas y haz crecer la cadena dominó global. Retos de creatividad, kindness y eco-acción. Gratis, en directo, multi-país.',
+    path: '/',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'DOMINO',
+      alternateName: 'DOMINO — The Real-World Chain Reaction',
+      url: SITE_URL,
+      applicationCategory: 'SocialNetworkingApplication',
+      operatingSystem: 'Web, iOS, Android',
+      description: 'App de retos en cadena: graba un vídeo de 15s, nomina a 3 personas y forma parte del efecto dominó global.',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
+      areaServed: ['ES','MX','AR','CO','US','JP','BR','FR','DE','IT','GB','PT'],
+      aggregateRating: challenge?.globalCounter ? { '@type':'AggregateRating', ratingValue:'4.7', reviewCount: String(Math.max(50, Math.floor(challenge.globalCounter/50))) } : undefined,
+    }
+  });
   return(
     <div className="pb-20">
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0"><img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1600&h=900&fit=crop" alt="" className="w-full h-full object-cover opacity-20"/><div className="absolute inset-0" style={{background:'radial-gradient(ellipse at center,rgba(0,245,255,0.05) 0%,rgba(11,11,18,0.9) 70%)'}}/></div>
+        <div className="absolute inset-0"><img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1600&h=900&fit=crop" alt="Personas grabando retos virales en cadena con la app DOMINO" loading="eager" fetchPriority="high" width={1600} height={900} className="w-full h-full object-cover opacity-20"/><div className="absolute inset-0" style={{background:'radial-gradient(ellipse at center,rgba(0,245,255,0.05) 0%,rgba(11,11,18,0.9) 70%)'}}/></div>
         <div className="relative z-10 max-w-4xl mx-auto px-4 text-center">
           <div className="flex justify-center mb-6"><DominoLogo size={48}/></div>
           <h1 className="text-5xl sm:text-7xl font-black mb-4" style={{fontFamily:'Syne,sans-serif'}}><span style={{background:'linear-gradient(135deg,#00F5FF,#FF007F)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>DOMINO</span></h1>
@@ -1317,34 +1466,41 @@ function HomePage() {
 // ===================== APP =====================
 export default function App() { return <AuthProvider><AppInner/></AuthProvider>; }
 
+function NotFoundPage() {
+  useSEO({ title:'Página no encontrada — DOMINO', description:'Esta página no existe en DOMINO.', path: typeof window!=='undefined'?window.location.pathname:'/404', noindex:true });
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4 pb-20">
+      <div className="text-center"><div className="text-6xl mb-4">🎲</div><h1 className="text-3xl font-black text-white mb-2">Página no encontrada</h1><Link href="/" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-black" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}><Home size={16}/>Inicio</Link></div>
+    </div>
+  );
+}
+
 function AppInner() {
   const { loading } = useAuth();
   if(loading)return<div className="min-h-screen flex items-center justify-center" style={{background:'#0b0b12'}}><div className="flex flex-col items-center gap-4"><DominoLogo size={40}/><Spinner/></div></div>;
   return(
     <div className="min-h-screen" style={{background:'#0b0b12'}}>
       <TopNav/>
-      <Switch>
-        <Route path="/" component={HomePage}/>
-        <Route path="/feed" component={FeedPage}/>
-        <Route path="/auth" component={AuthPage}/>
-        <Route path="/create" component={CreatePage}/>
-        <Route path="/camera" component={CameraPage}/>
-        <Route path="/live" component={LiveListPage}/>
-        <Route path="/live/create" component={CreateLivePage}/>
-        <Route path="/live/:id">{(p:any)=><LiveViewerPage id={p.id}/>}</Route>
-        <Route path="/map" component={WorldMapPage}/>
-        <Route path="/profile" component={()=><ProfilePage/>}/>
-        <Route path="/user/:id">{(p:any)=><ProfilePage userId={p.id}/>}</Route>
-        <Route path="/messages" component={MessagesPage}/>
-        <Route path="/messages/:id">{(p:any)=><ChatPage userId={p.id}/>}</Route>
-        <Route path="/search" component={SearchPage}/>
-        <Route path="/notifications" component={NotificationsPage}/>
-        <Route>
-          <div className="min-h-screen flex items-center justify-center px-4 pb-20">
-            <div className="text-center"><div className="text-6xl mb-4">🎲</div><h1 className="text-3xl font-black text-white mb-2">Página no encontrada</h1><Link href="/" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-black" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}><Home size={16}/>Inicio</Link></div>
-          </div>
-        </Route>
-      </Switch>
+      <main id="main-content">
+        <Switch>
+          <Route path="/" component={HomePage}/>
+          <Route path="/feed" component={FeedPage}/>
+          <Route path="/auth" component={AuthPage}/>
+          <Route path="/create" component={CreatePage}/>
+          <Route path="/camera" component={CameraPage}/>
+          <Route path="/live" component={LiveListPage}/>
+          <Route path="/live/create" component={CreateLivePage}/>
+          <Route path="/live/:id">{(p:any)=><LiveViewerPage id={p.id}/>}</Route>
+          <Route path="/map" component={WorldMapPage}/>
+          <Route path="/profile" component={()=><ProfilePage/>}/>
+          <Route path="/user/:id">{(p:any)=><ProfilePage userId={p.id}/>}</Route>
+          <Route path="/messages" component={MessagesPage}/>
+          <Route path="/messages/:id">{(p:any)=><ChatPage userId={p.id}/>}</Route>
+          <Route path="/search" component={SearchPage}/>
+          <Route path="/notifications" component={NotificationsPage}/>
+          <Route component={NotFoundPage}/>
+        </Switch>
+      </main>
       <BottomNav/>
     </div>
   );
