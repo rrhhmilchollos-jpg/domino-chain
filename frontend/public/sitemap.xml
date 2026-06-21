@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sitemap estático para las páginas públicas y fijas.
+  Las páginas dinámicas (/user/:id) deberían servirse desde tu backend
+  con un endpoint tipo /sitemap-users.xml generado desde la base de datos
+  (ver ejemplo en la respuesta del chat).
+-->
+<urlset xmlns="https://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://domino-app.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://domino-app.com/feed</loc>
+    <changefreq>hourly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://domino-app.com/live</loc>
+    <changefreq>hourly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://domino-app.com/map</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://domino-app.com/auth</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+</urlset>
