@@ -1,7 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Camera, X, Search, CheckCircle, Download, Upload, RefreshCw, Play, Map, Volume2, VolumeX, Music2 } from 'lucide-react';
+import { Camera, X, Search, CheckCircle, Download, Upload, RefreshCw, Play, Map, Volume2, VolumeX, Music2, SwitchCamera, Grid3x3, Timer, Zap, ZapOff, Palette } from 'lucide-react';
 import { cn, useAuth, useApi, Spinner, Av, DominoLogo, uploadToCloudinary, saveVideoToGallery, API, CLOUDINARY_PRESET, RankingEntry, SoundPicker, Sound } from '../lib/shared';
+
+// Filtros de color reales — se aplican de verdad en el video grabado (no
+// solo decorativos en la vista previa). Esto sustituye al icono de
+// "efectos de belleza IA" de TikTok, que requiere reconocimiento facial
+// en tiempo real y no es algo que se pueda clonar de forma responsable.
+const FILTERS = [
+  { id:'normal',  label:'Normal',   css:'none' },
+  { id:'vivido',  label:'Vívido',   css:'saturate(1.6) contrast(1.1)' },
+  { id:'calido',  label:'Cálido',   css:'sepia(0.25) saturate(1.3) hue-rotate(-8deg)' },
+  { id:'frio',    label:'Frío',     css:'saturate(1.15) hue-rotate(15deg) brightness(1.05)' },
+  { id:'byn',     label:'B&N',      css:'grayscale(1) contrast(1.15)' },
+  { id:'vintage', label:'Vintage',  css:'sepia(0.4) contrast(0.9) brightness(1.05) saturate(0.75)' },
+];
+const TIMER_OPTIONS: { val: 0|3|10; label: string }[] = [{val:0,label:'Sin retraso'},{val:3,label:'3s'},{val:10,label:'10s'}];
 
 export default function CameraPage() {
   const { user, token } = useAuth();
@@ -37,6 +51,20 @@ export default function CameraPage() {
   const [selectedSound, setSelectedSound] = useState<Sound|null>(null);
   const audioCtxRef = useRef<AudioContext|null>(null);
   const soundElRef = useRef<HTMLAudioElement|null>(null);
+  // Flash, temporizador, cuadrícula y filtros — controles reales de la
+  // barra lateral, igual que en TikTok
+  const [facingMode, setFacingMode] = useState<'user'|'environment'>('user');
+  const [flashOn, setFlashOn] = useState(false);
+  const [flashMsg, setFlashMsg] = useState<string|null>(null);
+  const [showTimerMenu, setShowTimerMenu] = useState(false);
+  const [timerDelay, setTimerDelay] = useState<0|3|10>(0);
+  const [countdown, setCountdown] = useState<number|null>(null);
+  const countdownCancelRef = useRef(false);
+  const [showGrid, setShowGrid] = useState(false);
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState(FILTERS[0]);
+  const [durationMsg, setDurationMsg] = useState<string|null>(null);
+  const rafRef = useRef<number|null>(null);
 
   useEffect(()=>{
     navigator.geolocation?.getCurrentPosition(p=>setGeo({lat:p.coords.latitude,lng:p.coords.longitude}));
@@ -46,7 +74,7 @@ export default function CameraPage() {
     if(soundId){
       fetch(`${API}/api/sounds/${soundId}`).then(r=>r.ok?r.json():null).then(s=>{if(s)setSelectedSound(s);}).catch(()=>{});
     }
-    return()=>{streamRef.current?.getTracks().forEach(t=>t.stop());if(blobUrl)URL.revokeObjectURL(blobUrl);soundElRef.current?.pause();audioCtxRef.current?.close().catch(()=>{});};
+    return()=>{streamRef.current?.getTracks().forEach(t=>t.stop());if(blobUrl)URL.revokeObjectURL(blobUrl);soundElRef.current?.pause();audioCtxRef.current?.close().catch(()=>{});if(rafRef.current)cancelAnimationFrame(rafRef.current);};
   },[]);
 
   const startCam=async()=>{
@@ -86,6 +114,43 @@ export default function CameraPage() {
     }catch(err:any){setCamOn(false);if(err.name==='NotAllowedError')alert('❌ Permiso denegado. Ve a Ajustes del navegador y permite el acceso al micrófono y la cámara.');else alert('❌ Error: '+err.message);}
   };
 
+  // Cambiar entre cámara frontal y trasera — pide un stream de video nuevo
+  // con el facingMode contrario y sustituye solo la pista de video,
+  // manteniendo el audio que ya teníamos.
+  const flipCamera=async()=>{
+    if(!streamRef.current||rec)return;
+    const next=facingMode==='user'?'environment':'user';
+    try{
+      const newVideoStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:next},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}},audio:false});
+      const oldVideoTrack=streamRef.current.getVideoTracks()[0];
+      oldVideoTrack?.stop();
+      const newVideoTrack=newVideoStream.getVideoTracks()[0];
+      const audioTracks=streamRef.current.getAudioTracks();
+      const newStream=new MediaStream([newVideoTrack,...audioTracks]);
+      streamRef.current=newStream;
+      setFacingMode(next);
+      setFlashOn(false); // la cámara nueva no hereda el estado del flash de la otra
+      if(videoRef.current){videoRef.current.srcObject=newStream;await videoRef.current.play().catch(()=>{});}
+    }catch(e){console.error('No se pudo cambiar de cámara',e);}
+  };
+
+  // Flash/linterna — solo funciona de verdad si el hardware lo soporta (lo
+  // normal es que solo la cámara TRASERA tenga linterna; la frontal de
+  // selfie casi nunca tiene flash físico, así que avisamos si falla en vez
+  // de fingir que se ha activado.
+  const toggleFlash=async()=>{
+    const track=streamRef.current?.getVideoTracks()[0];
+    if(!track)return;
+    const next=!flashOn;
+    try{
+      await track.applyConstraints({advanced:[{torch:next} as any]});
+      setFlashOn(next);
+    }catch{
+      setFlashMsg(facingMode==='user'?'La cámara frontal no tiene flash':'Flash no disponible en este dispositivo');
+      setTimeout(()=>setFlashMsg(null),2500);
+    }
+  };
+
   const stopRec=useCallback(()=>{if(timerRef.current)clearInterval(timerRef.current);if(mrRef.current&&mrRef.current.state!=='inactive')mrRef.current.stop();setRec(false);},[]);
 
   const startRec=async()=>{
@@ -95,25 +160,42 @@ export default function CameraPage() {
     const audioTracks=streamRef.current.getAudioTracks();
     if(audioTracks.length>0) audioTracks.forEach(t=>{t.enabled=true;});
 
-    // Si hay música elegida, mezclamos micrófono + sonido en un único stream
-    // de audio usando Web Audio API, y construimos un stream nuevo para
-    // MediaRecorder con el video de la cámara + ese audio ya mezclado.
-    // También conectamos la música al altavoz (ctx.destination) para que
-    // el usuario la oiga en directo mientras graba y pueda seguirla — el
-    // micrófono NO se conecta al altavoz para evitar eco.
-    let recordStream:MediaStream=streamRef.current;
+    // 1) Pista de VIDEO: directa de la cámara, o si hay un filtro de color
+    // activo, procesada fotograma a fotograma con canvas — así el filtro
+    // queda grabado de verdad en el archivo final, no es solo un efecto
+    // visual en la vista previa.
+    let videoTrack=streamRef.current.getVideoTracks()[0];
+    if(selectedFilter.id!=='normal'&&videoRef.current){
+      const vw=videoRef.current.videoWidth||720, vh=videoRef.current.videoHeight||1280;
+      const canvas=document.createElement('canvas');
+      canvas.width=vw;canvas.height=vh;
+      const ctx2d=canvas.getContext('2d');
+      if(ctx2d){
+        const draw=()=>{
+          if(ctx2d&&videoRef.current){ctx2d.filter=selectedFilter.css;ctx2d.drawImage(videoRef.current,0,0,vw,vh);}
+          rafRef.current=requestAnimationFrame(draw);
+        };
+        draw();
+        const canvasStream=(canvas as HTMLCanvasElement & {captureStream:(fps?:number)=>MediaStream}).captureStream(30);
+        videoTrack=canvasStream.getVideoTracks()[0];
+      }
+    }
+
+    // 2) Pista de AUDIO: solo micrófono, o micrófono+música mezclados con
+    // Web Audio API si hay un sonido elegido. La música también se conecta
+    // al altavoz (ctx.destination) para que se oiga en directo mientras se
+    // graba — el micrófono NO se conecta al altavoz, para evitar eco.
+    let audioOutTracks:MediaStreamTrack[]=audioTracks.length>0?[audioTracks[0]]:[];
     if(selectedSound){
       try{
         const Ctx=window.AudioContext||(window as any).webkitAudioContext;
         const ctx=new Ctx();
         audioCtxRef.current=ctx;
         const dest=ctx.createMediaStreamDestination();
-
         if(audioTracks.length>0){
           const micSource=ctx.createMediaStreamSource(new MediaStream([audioTracks[0]]));
           micSource.connect(dest);
         }
-
         const audioEl=new Audio();
         audioEl.crossOrigin='anonymous';
         audioEl.src=selectedSound.audioUrl;
@@ -122,15 +204,14 @@ export default function CameraPage() {
         await audioEl.play().catch(()=>{});
         const musicSource=ctx.createMediaElementSource(audioEl);
         musicSource.connect(dest);
-        musicSource.connect(ctx.destination); // para que se oiga en directo mientras se graba
-
-        const videoTrack=streamRef.current.getVideoTracks()[0];
-        recordStream=new MediaStream([videoTrack,...dest.stream.getAudioTracks()]);
+        musicSource.connect(ctx.destination);
+        audioOutTracks=dest.stream.getAudioTracks();
       }catch(e){
         console.error('No se pudo mezclar la música, se graba sin ella',e);
-        recordStream=streamRef.current;
       }
     }
+
+    const recordStream=new MediaStream([videoTrack,...audioOutTracks]);
 
     // Codecs en orden de preferencia — Android Chrome soporta mejor mp4/avc
     const mimeOptions=[
@@ -155,13 +236,31 @@ export default function CameraPage() {
       setDone(true);
       streamRef.current?.getTracks().forEach(t=>t.stop());
       setCamOn(false);
-      // Limpiar la mezcla de audio si la había
+      // Limpiar la mezcla de audio y el dibujado del filtro si los había
       if(soundElRef.current){soundElRef.current.pause();soundElRef.current=null;}
       if(audioCtxRef.current){audioCtxRef.current.close().catch(()=>{});audioCtxRef.current=null;}
+      if(rafRef.current){cancelAnimationFrame(rafRef.current);rafRef.current=null;}
     };
     // timeslice de 250ms para capturar datos frecuentemente (mejor audio en Android)
     mrRef.current=mr;mr.start(250);setRec(true);setSecs(15);
     timerRef.current=setInterval(()=>setSecs(t=>{if(t<=1){stopRec();return 0;}return t-1;}),1000);
+  };
+
+  // Envuelve startRec con la cuenta atrás del temporizador, si hay una
+  // elegida. Tocar el botón de grabar otra vez durante la cuenta atrás la
+  // cancela en vez de empezar a grabar.
+  const beginRecording=async()=>{
+    if(countdown!==null){countdownCancelRef.current=true;setCountdown(null);return;}
+    if(timerDelay>0){
+      countdownCancelRef.current=false;
+      for(let i=timerDelay;i>0;i--){
+        setCountdown(i);
+        await new Promise(r=>setTimeout(r,1000));
+        if(countdownCancelRef.current){setCountdown(null);return;}
+      }
+      setCountdown(null);
+    }
+    startRec();
   };
 
   const handleSaveToGallery = async () => {
@@ -222,7 +321,7 @@ export default function CameraPage() {
       {showSoundPicker&&<SoundPicker onSelect={s=>{setSelectedSound(s);setShowSoundPicker(false);}} onClose={()=>setShowSoundPicker(false)}/>}
 
       <div className="relative h-screen max-h-screen overflow-hidden">
-        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay muted playsInline style={{display:camOn?'block':'none'}}/>
+        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay muted playsInline style={{display:camOn?'block':'none',filter:selectedFilter.css}}/>
 
         {camOn&&!hasAudio&&(
           <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded-full text-xs font-bold text-white flex items-center gap-1.5" style={{background:'rgba(255,0,127,0.85)'}}>🔇 Grabando sin audio — revisa el permiso del micrófono</div>
@@ -241,31 +340,92 @@ export default function CameraPage() {
         )}
 
         <div className="absolute inset-0 pointer-events-none">
+          {/* Barra superior — X, píldora de sonido centrada, cambiar cámara — igual que en TikTok */}
           <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 pointer-events-auto">
-            <button onClick={()=>{streamRef.current?.getTracks().forEach(t=>t.stop());setLocation('/feed');}} className="p-2 rounded-full" style={{background:'rgba(0,0,0,0.5)'}}><X size={20} className="text-white"/></button>
-            <div className="px-3 py-1.5 rounded-xl flex items-center gap-2" style={{background:'rgba(0,0,0,0.5)'}}><DominoLogo size={14}/><span className="text-xs font-bold text-white">DOMINO</span></div>
+            <button onClick={()=>{streamRef.current?.getTracks().forEach(t=>t.stop());setLocation('/feed');}} className="p-2 rounded-full flex-shrink-0" style={{background:'rgba(0,0,0,0.5)'}}><X size={20} className="text-white"/></button>
             {!done?(
-              <button onClick={()=>setShowSoundPicker(true)} className="p-2 rounded-full" style={{background:selectedSound?'rgba(0,245,255,0.25)':'rgba(0,0,0,0.5)'}} title="Añadir música">
-                <Music2 size={20} className={selectedSound?'':'text-white'} style={selectedSound?{color:'#00F5FF'}:undefined}/>
-              </button>
-            ):<div className="w-10"/>}
+              <div className="flex items-center gap-1 mx-2 min-w-0 rounded-full" style={{background:'rgba(0,0,0,0.55)'}}>
+                <button onClick={()=>setShowSoundPicker(true)} className="flex items-center gap-1.5 pl-4 pr-2 py-2 min-w-0">
+                  <Music2 size={14} className="text-white flex-shrink-0"/>
+                  <span className="text-sm text-white font-semibold truncate max-w-[120px]">{selectedSound?selectedSound.title:'Añadir sonido'}</span>
+                </button>
+                {selectedSound&&<button onClick={()=>setSelectedSound(null)} className="p-1.5 mr-1.5 rounded-full flex-shrink-0" style={{background:'rgba(255,255,255,0.15)'}}><X size={12} className="text-white"/></button>}
+              </div>
+            ):<div className="px-3 py-1.5 rounded-xl flex items-center gap-2 mx-2" style={{background:'rgba(0,0,0,0.5)'}}><DominoLogo size={14}/><span className="text-xs font-bold text-white">DOMINO</span></div>}
+            {!done&&camOn?(
+              <button onClick={flipCamera} className="p-2 rounded-full flex-shrink-0" style={{background:'rgba(0,0,0,0.5)'}} title="Cambiar cámara"><SwitchCamera size={20} className="text-white"/></button>
+            ):<div className="w-9 flex-shrink-0"/>}
           </div>
 
-          {!done&&selectedSound&&(
-            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full pointer-events-auto" style={{background:'rgba(0,0,0,0.6)'}}>
-              <Music2 size={12} style={{color:'#00F5FF'}}/>
-              <span className="text-xs text-white font-semibold max-w-[140px] truncate">{selectedSound.title}</span>
-              {!rec&&<button onClick={()=>setSelectedSound(null)} className="p-0.5 rounded-full" style={{background:'rgba(255,255,255,0.15)'}}><X size={11} className="text-white"/></button>}
+          {/* Barra lateral derecha — flash, temporizador, cuadrícula, filtros (reales, no decorativos) */}
+          {!done&&camOn&&!rec&&(
+            <div className="absolute top-20 right-3 z-10 flex flex-col items-center gap-4 pointer-events-auto">
+              <button onClick={toggleFlash} className="flex flex-col items-center gap-1">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.5)'}}>
+                  {flashOn?<Zap size={17} style={{color:'#FFD700'}} className="fill-current"/>:<ZapOff size={17} className="text-white"/>}
+                </div>
+              </button>
+              <div className="relative">
+                <button onClick={()=>{setShowTimerMenu(v=>!v);setShowFilterMenu(false);}} className="flex flex-col items-center gap-1">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{background:timerDelay>0?'rgba(0,245,255,0.3)':'rgba(0,0,0,0.5)'}}>
+                    <Timer size={17} className="text-white"/>
+                  </div>
+                  {timerDelay>0&&<span className="text-[10px] text-white font-bold">{timerDelay}s</span>}
+                </button>
+                {showTimerMenu&&(
+                  <>
+                    <div className="fixed inset-0 z-20" onClick={()=>setShowTimerMenu(false)}/>
+                    <div className="absolute z-30 rounded-xl overflow-hidden flex flex-col" style={{right:'48px',top:'0',background:'#13131f',border:'1px solid #2a2a3a',minWidth:'130px'}}>
+                      {TIMER_OPTIONS.map(o=>(
+                        <button key={o.val} onClick={()=>{setTimerDelay(o.val);setShowTimerMenu(false);}} className={cn('px-4 py-2.5 text-sm text-left hover:bg-white/5',timerDelay===o.val?'text-white font-bold':'text-gray-300')} style={timerDelay===o.val?{color:'#00F5FF'}:undefined}>{o.label}</button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              <button onClick={()=>setShowGrid(v=>!v)} className="flex flex-col items-center gap-1">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{background:showGrid?'rgba(0,245,255,0.3)':'rgba(0,0,0,0.5)'}}>
+                  <Grid3x3 size={17} className="text-white"/>
+                </div>
+              </button>
+              <div className="relative">
+                <button onClick={()=>{setShowFilterMenu(v=>!v);setShowTimerMenu(false);}} className="flex flex-col items-center gap-1">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{background:selectedFilter.id!=='normal'?'rgba(0,245,255,0.3)':'rgba(0,0,0,0.5)'}}>
+                    <Palette size={17} className="text-white"/>
+                  </div>
+                </button>
+                {showFilterMenu&&(
+                  <>
+                    <div className="fixed inset-0 z-20" onClick={()=>setShowFilterMenu(false)}/>
+                    <div className="absolute z-30 rounded-xl overflow-hidden flex flex-col" style={{right:'48px',top:'0',background:'#13131f',border:'1px solid #2a2a3a',minWidth:'130px'}}>
+                      {FILTERS.map(f=>(
+                        <button key={f.id} onClick={()=>{setSelectedFilter(f);setShowFilterMenu(false);}} className={cn('px-4 py-2.5 text-sm text-left hover:bg-white/5',selectedFilter.id===f.id?'font-bold':'text-gray-300')} style={selectedFilter.id===f.id?{color:'#00F5FF'}:undefined}>{f.label}</button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           )}
 
-          {!done&&<>
-            <div className="absolute top-32 left-4 w-8 h-8 border-t-2 border-l-2 rounded-tl-lg" style={{borderColor:'#00F5FF'}}/>
-            <div className="absolute top-32 right-4 w-8 h-8 border-t-2 border-r-2 rounded-tr-lg" style={{borderColor:'#00F5FF'}}/>
-            <div className="absolute bottom-32 left-4 w-8 h-8 border-b-2 border-l-2 rounded-bl-lg" style={{borderColor:'#00F5FF'}}/>
-            <div className="absolute bottom-32 right-4 w-8 h-8 border-b-2 border-r-2 rounded-br-lg" style={{borderColor:'#00F5FF'}}/>
-          </>}
+          {flashMsg&&<div className="absolute top-20 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded-full text-xs font-semibold text-white pointer-events-none" style={{background:'rgba(0,0,0,0.75)'}}>{flashMsg}</div>}
 
+          {/* Cuadrícula de tercios — guía visual real, no se graba en el video */}
+          {!done&&camOn&&showGrid&&(
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute left-1/3 top-0 bottom-0 w-px" style={{background:'rgba(255,255,255,0.35)'}}/>
+              <div className="absolute left-2/3 top-0 bottom-0 w-px" style={{background:'rgba(255,255,255,0.35)'}}/>
+              <div className="absolute top-1/3 left-0 right-0 h-px" style={{background:'rgba(255,255,255,0.35)'}}/>
+              <div className="absolute top-2/3 left-0 right-0 h-px" style={{background:'rgba(255,255,255,0.35)'}}/>
+            </div>
+          )}
+
+          {/* Cuenta atrás del temporizador */}
+          {countdown!==null&&(
+            <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+              <span className="text-8xl font-black text-white" style={{textShadow:'0 0 30px rgba(0,0,0,0.8)'}}>{countdown}</span>
+            </div>
+          )}
           <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-3 pointer-events-auto">
             {done?(
               <div className="w-full px-6 space-y-3">
@@ -276,6 +436,7 @@ export default function CameraPage() {
                 <div className="px-4 py-2 rounded-xl text-center" style={{background:'rgba(0,0,0,0.7)'}}>
                   <div className="flex items-center gap-2 justify-center"><CheckCircle size={16} className="text-green-400"/><span className="text-sm text-white font-medium">Video grabado — 15s ✓</span></div>
                   {selectedSound&&<div className="flex items-center gap-1.5 justify-center mt-1"><Music2 size={11} style={{color:'#00F5FF'}}/><span className="text-xs text-gray-300">{selectedSound.title}</span></div>}
+                  {selectedFilter.id!=='normal'&&<div className="flex items-center gap-1.5 justify-center mt-1"><Palette size={11} style={{color:'#00F5FF'}}/><span className="text-xs text-gray-300">Filtro {selectedFilter.label}</span></div>}
                 </div>
 
                 {/* Leyenda opcional — los #hashtags que escribas aquí se podrán buscar luego */}
@@ -302,12 +463,28 @@ export default function CameraPage() {
               <button onClick={startCam} className="px-8 py-3 rounded-2xl font-bold text-black flex items-center gap-2" style={{background:'#00F5FF',boxShadow:'0 0 20px rgba(0,245,255,0.4)'}}><Camera size={18}/>Activar cámara</button>
             ):(
               <div className="flex flex-col items-center gap-3">
-                <p className="text-xs text-gray-300">{rec?`Grabando... ${secs}s`:'Pulsa para grabar'}</p>
+                {/* Fila de duración igual que TikTok — DOMINO es un reto de 15s
+                    exactos (es el concepto central de la app), así que solo
+                    esa opción funciona de verdad; las demás avisan por qué. */}
+                {!rec&&countdown===null&&(
+                  <div className="flex items-center gap-4 mb-1">
+                    {['10 min','60 s'].map(l=>(
+                      <button key={l} onClick={()=>{setDurationMsg('Los retos DOMINO son siempre de 15 segundos');setTimeout(()=>setDurationMsg(null),2500);}} className="text-sm font-semibold text-gray-400">{l}</button>
+                    ))}
+                    <span className="text-sm font-bold text-black px-3 py-1 rounded-full" style={{background:'#fff'}}>15 s</span>
+                    {['FOTO','TEXTO'].map(l=>(
+                      <button key={l} onClick={()=>{setDurationMsg('DOMINO solo graba video, de momento');setTimeout(()=>setDurationMsg(null),2500);}} className="text-sm font-semibold text-gray-400">{l}</button>
+                    ))}
+                  </div>
+                )}
+                {durationMsg&&<div className="px-3 py-1.5 rounded-full text-xs font-semibold text-white" style={{background:'rgba(0,0,0,0.75)'}}>{durationMsg}</div>}
+
+                <p className="text-xs text-gray-300">{rec?`Grabando... ${secs}s`:countdown!==null?'Empezando...':'Pulsa para grabar'}</p>
                 {rec&&<div className="w-16 h-16 rounded-full flex items-center justify-center border-4" style={{borderColor:'#FF007F',boxShadow:'0 0 20px rgba(255,0,127,0.5)'}}><span className="text-2xl font-black text-white font-mono">{secs}</span></div>}
-                <button onClick={rec?stopRec:startRec} className={cn('w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all active:scale-95',rec?'scale-110':'border-white')} style={rec?{background:'#FF007F',borderColor:'#FF007F',boxShadow:'0 0 30px rgba(255,0,127,0.6)'}:{background:'rgba(255,255,255,0.1)'}}>
-                  {rec?<div className="w-7 h-7 bg-white rounded-sm"/>:<div className="w-14 h-14 bg-white rounded-full"/>}
+                <button onClick={rec?stopRec:beginRecording} className={cn('w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all active:scale-95',rec?'scale-110':'border-white')} style={rec?{background:'#FF007F',borderColor:'#FF007F',boxShadow:'0 0 30px rgba(255,0,127,0.6)'}:countdown!==null?{background:'rgba(255,0,127,0.3)',borderColor:'#FF007F'}:{background:'rgba(255,255,255,0.1)'}}>
+                  {rec?<div className="w-7 h-7 bg-white rounded-sm"/>:countdown!==null?<X size={22} className="text-white"/>:<div className="w-14 h-14 bg-white rounded-full"/>}
                 </button>
-                <p className="text-xs text-gray-500">{rec?'Pulsa para detener antes':'Se detiene a los 15s'}</p>
+                <p className="text-xs text-gray-500">{rec?'Pulsa para detener antes':countdown!==null?'Pulsa para cancelar':timerDelay>0?`Empieza con ${timerDelay}s de retraso`:'Se detiene a los 15s'}</p>
               </div>
             )}
           </div>
