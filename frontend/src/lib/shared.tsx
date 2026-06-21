@@ -13,7 +13,7 @@ export const CLOUDINARY_PRESET = import.meta.env.VITE_CLOUDINARY_PRESET || 'domi
 // ===================== TYPES =====================
 export interface AppUser { _id: string; username: string; email: string; avatarUrl: string; country: string; city: string; flag: string; impactPoints: number; currentStreak: number; bio: string; coins: number; }
 export interface Challenge { _id: string; title: string; description: string; category: string; expiresAt: string; globalCounter: number; }
-export interface DominoVideo { _id: string; userId: AppUser; videoUrl: string; thumbnailUrl: string; chainDepth: number; likes: string[]; createdAt: string; geoCoordinates: { lat: number; lng: number }; }
+export interface DominoVideo { _id: string; userId: AppUser; videoUrl: string; thumbnailUrl: string; chainDepth: number; likes: string[]; createdAt: string; geoCoordinates: { lat: number; lng: number }; isPublic: boolean; }
 export interface Notification { _id: string; type: string; fromUserId: { username: string; avatarUrl: string; flag: string }; message: string; read: boolean; createdAt: string; }
 export interface RankingEntry { _id: string; username: string; avatarUrl: string; country: string; flag: string; impactPoints: number; currentStreak: number; coins?: number; }
 export interface Comment { _id: string; userId: { _id: string; username: string; avatarUrl: string; flag: string }; text: string; createdAt: string; }
@@ -283,13 +283,59 @@ export function CommentsPanel({ videoId, onClose }: { videoId: string; onClose: 
         ))}
         {(!comments||comments.length===0)&&<p className="text-center text-gray-500 text-sm py-8">Sin comentarios</p>}
       </div>
-      {user&&(
+      {/* FIX: antes este bloque entero desaparecía si `user` era null/undefined,
+          dejando el panel sin ningún campo de texto y sin explicación.
+          Ahora siempre se muestra algo: el input si hay sesión, o un aviso
+          con enlace a /auth si no la hay. */}
+      {user ? (
         <div className="p-4 border-t flex gap-2" style={{borderColor:'#1e1e2a'}}>
           <Av u={user} s={32}/>
           <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Añade un comentario..." className="flex-1 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/>
           <button onClick={send} disabled={sending||!text.trim()} className="p-2 rounded-xl disabled:opacity-50" style={{background:'#00F5FF'}}><Send size={16} className="text-black"/></button>
         </div>
+      ) : (
+        <div className="p-4 border-t text-center" style={{borderColor:'#1e1e2a'}}>
+          <Link href="/auth" onClick={onClose} className="text-sm font-semibold" style={{color:'#00F5FF'}}>Inicia sesión para comentar</Link>
+        </div>
       )}
     </div>
+  );
+}
+
+// ===================== TOGGLE PÚBLICO / PRIVADO =====================
+// Pastilla pequeña para marcar un video propio como público o privado,
+// pensada para usarse sobre la miniatura en el Dashboard (igual que TikTok
+// permite cambiar la visibilidad de cada video desde el propio perfil).
+export function VisibilityToggle({ videoId, initialIsPublic, onChanged }: { videoId: string; initialIsPublic: boolean; onChanged?: (isPublic: boolean) => void }) {
+  const { token } = useAuth();
+  const [isPublic, setIsPublic] = useState(initialIsPublic);
+  const [busy, setBusy] = useState(false);
+
+  const toggle = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!token || busy) return;
+    setBusy(true);
+    const next = !isPublic;
+    try {
+      const r = await fetch(`${API}/api/videos/${videoId}/visibility`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPublic: next })
+      });
+      if (r.ok) { setIsPublic(next); onChanged?.(next); }
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <button
+      onClick={toggle}
+      disabled={busy}
+      className="absolute top-1.5 left-1.5 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold disabled:opacity-60"
+      style={{ background: isPublic ? 'rgba(0,0,0,0.55)' : 'rgba(255,0,127,0.85)', color: 'white' }}
+      title={isPublic ? 'Público — toca para hacerlo privado' : 'Privado — toca para hacerlo público'}
+    >
+      {isPublic ? '🌍 Público' : '🔒 Privado'}
+    </button>
   );
 }
