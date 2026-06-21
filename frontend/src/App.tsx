@@ -24,6 +24,7 @@ interface AppUser {
   impactPoints: number; currentStreak: number; coins: number;
   followers: string[]; following: string[];
   savedVideos: DominoVideo[]; likedVideos: DominoVideo[];
+  isAI?: boolean; // true = cuenta gestionada por IA. SIEMPRE debe mostrarse de forma visible, nunca ocultarse.
 }
 interface Challenge { _id: string; title: string; description: string; category: string; expiresAt: string; globalCounter: number; }
 interface DominoVideo {
@@ -31,13 +32,15 @@ interface DominoVideo {
   chainDepth: number; likes: string[]; createdAt: string;
   geoCoordinates: { lat: number; lng: number };
   challengeId: string; nominatedUsers: string[]; rootVideoId: string;
+  isAIGenerated?: boolean; // declarado por quien sube el vídeo, igual que el "AI-generated content" de TikTok
 }
-interface Notification { _id: string; type: string; fromUserId: { username: string; avatarUrl: string; flag: string }; message: string; read: boolean; createdAt: string; }
-interface RankingEntry { _id: string; username: string; avatarUrl: string; country: string; flag: string; impactPoints: number; currentStreak: number; followers: string[]; }
-interface Comment { _id: string; userId: { _id: string; username: string; avatarUrl: string; flag: string }; text: string; createdAt: string; }
+interface Notification { _id: string; type: string; fromUserId: { username: string; avatarUrl: string; flag: string; isAI?: boolean }; message: string; read: boolean; createdAt: string; }
+interface RankingEntry { _id: string; username: string; avatarUrl: string; country: string; flag: string; impactPoints: number; currentStreak: number; followers: string[]; isAI?: boolean; }
+interface Comment { _id: string; userId: { _id: string; username: string; avatarUrl: string; flag: string; isAI?: boolean }; text: string; createdAt: string; }
 interface LiveStream { _id: string; userId: AppUser; title: string; status: string; viewerCount: number; category: string; isBattle: boolean; battleScore: { host: number; opponent: number }; }
-interface Message { _id: string; fromUserId: { _id: string; username: string; avatarUrl: string; flag: string }; toUserId: { _id: string; username: string; avatarUrl: string; flag: string }; text: string; read: boolean; createdAt: string; }
-interface Conversation { user: { _id: string; username: string; avatarUrl: string; flag: string }; lastMessage: Message; unread: number; }
+interface Message { _id: string; fromUserId: { _id: string; username: string; avatarUrl: string; flag: string; isAI?: boolean }; toUserId: { _id: string; username: string; avatarUrl: string; flag: string; isAI?: boolean }; text: string; read: boolean; createdAt: string; }
+interface Conversation { user: { _id: string; username: string; avatarUrl: string; flag: string; isAI?: boolean }; lastMessage: Message; unread: number; }
+
 
 const GIFT_CATALOG: Record<string, { name: string; emoji: string; coins: number }> = {
   domino:{ name:'Dominó', emoji:'🎲', coins:5 }, chain:{ name:'Cadena', emoji:'⛓️', coins:20 },
@@ -182,9 +185,30 @@ function DominoLogo({ size=24 }: { size?: number }) {
 function Spinner() { return <Loader2 size={20} className="animate-spin" style={{color:'#00F5FF'}}/>; }
 function Av({ u, s=36 }: { u: Partial<AppUser>; s?: number }) {
   return (
-    <div className="rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center" style={{width:s,height:s,background:'#7c3aed',border:'2px solid #2a2a3a'}}>
-      {u.avatarUrl?<img src={u.avatarUrl} alt={u.username} className="w-full h-full object-cover"/>:<span className="text-white font-bold" style={{fontSize:s*0.35}}>{u.username?.[0]?.toUpperCase()}</span>}
+    <div className="relative flex-shrink-0" style={{width:s,height:s}}>
+      <div className="rounded-full overflow-hidden w-full h-full flex items-center justify-center" style={{background:'#7c3aed',border:'2px solid #2a2a3a'}}>
+        {u.avatarUrl?<img src={u.avatarUrl} alt={u.username} className="w-full h-full object-cover"/>:<span className="text-white font-bold" style={{fontSize:s*0.35}}>{u.username?.[0]?.toUpperCase()}</span>}
+      </div>
+      {u.isAI && (
+        <span
+          title="Cuenta gestionada por inteligencia artificial"
+          aria-label="Cuenta de IA"
+          className="absolute -bottom-0.5 -right-0.5 flex items-center justify-center rounded-full leading-none"
+          style={{width:Math.max(13,s*0.4),height:Math.max(13,s*0.4),background:'#7c3aed',border:'1.5px solid #0b0b12',fontSize:Math.max(7,s*0.22)}}
+        >🤖</span>
+      )}
     </div>
+  );
+}
+
+/** Insignia textual "IA" — úsala junto al @username en perfil, vídeos y directos para que la divulgación no dependa solo del avatar. */
+function AIBadge({ size='sm' }: { size?: 'sm'|'md' }) {
+  return (
+    <span
+      title="Cuenta gestionada por inteligencia artificial"
+      className={cn('inline-flex items-center gap-1 rounded-full font-bold flex-shrink-0', size==='sm' ? 'text-[9px] px-1.5 py-0.5' : 'text-xs px-2 py-1')}
+      style={{background:'rgba(124,58,237,0.18)', color:'#c4b5fd', border:'1px solid rgba(124,58,237,0.5)'}}
+    >🤖 IA</span>
   );
 }
 
@@ -373,10 +397,11 @@ function VideoModal({ video, onClose }: { video: DominoVideo; onClose: () => voi
         ) : (
           <div className="w-full h-full rounded-2xl flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={48} className="text-gray-600"/></div>
         )}
+        {video.isAIGenerated && <div className="absolute top-4 left-4 z-10"><AIBadge size="md"/></div>}
         <div className="absolute inset-0 rounded-2xl" style={{background:'linear-gradient(to top,rgba(0,0,0,0.8) 0%,transparent 60%)',pointerEvents:'none'}}/>
         {/* Info */}
         <div className="absolute bottom-16 left-4 right-16">
-          <div className="flex items-center gap-2 mb-2"><Av u={video.userId} s={36}/><div><p className="text-white text-sm font-bold">@{video.userId?.username}</p><p className="text-gray-300 text-xs">{video.userId?.flag} {video.userId?.city}</p></div></div>
+          <div className="flex items-center gap-2 mb-2"><Av u={video.userId} s={36}/><div><p className="text-white text-sm font-bold flex items-center gap-1.5">@{video.userId?.username}{video.userId?.isAI && <AIBadge/>}</p><p className="text-gray-300 text-xs">{video.userId?.flag} {video.userId?.city}</p></div></div>
           <div className="flex items-center gap-2"><span className="text-xs rounded-full px-2 py-0.5 text-gray-300" style={{background:'rgba(0,0,0,0.5)'}}>⛓️ Profundidad {video.chainDepth+1}</span></div>
         </div>
         {/* Acciones */}
@@ -405,7 +430,7 @@ function CommentsPanel({ videoId, onClose }: { videoId: string; onClose: () => v
     <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl flex flex-col" style={{background:'#13131f',border:'1px solid #1e1e2a',maxHeight:'70vh'}}>
       <div className="flex items-center justify-between p-4 border-b" style={{borderColor:'#1e1e2a'}}><h3 className="font-bold text-white">Comentarios</h3><button onClick={onClose}><X size={18} className="text-gray-400"/></button></div>
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {(Array.isArray(comments)?comments:[]).map((c:Comment)=><div key={c._id} className="flex gap-3"><Av u={c.userId} s={32}/><div className="flex-1"><span className="text-xs font-bold text-white">{c.userId?.username} </span><span className="text-xs text-gray-400">{c.text}</span><div className="text-xs text-gray-600 mt-0.5">{ago(c.createdAt)}</div></div></div>)}
+        {(Array.isArray(comments)?comments:[]).map((c:Comment)=><div key={c._id} className="flex gap-3"><Av u={c.userId} s={32}/><div className="flex-1"><span className="text-xs font-bold text-white">{c.userId?.username} </span>{c.userId?.isAI && <AIBadge/>}<span className="text-xs text-gray-400"> {c.text}</span><div className="text-xs text-gray-600 mt-0.5">{ago(c.createdAt)}</div></div></div>)}
         {(!comments||comments.length===0)&&<p className="text-center text-gray-500 text-sm py-8">Sin comentarios</p>}
       </div>
       {user&&<div className="p-4 border-t flex gap-2" style={{borderColor:'#1e1e2a'}}><Av u={user} s={32}/><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Añade un comentario..." className="flex-1 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/><button onClick={send} disabled={sending||!text.trim()} className="p-2 rounded-xl disabled:opacity-50" style={{background:'#00F5FF'}}><Send size={16} className="text-black"/></button></div>}
@@ -456,9 +481,10 @@ function FeedPage() {
       {list.map((v:DominoVideo,idx:number)=>(
         <div key={v._id} className="relative w-full snap-start flex-shrink-0 overflow-hidden bg-black" style={{height:'calc(100vh - 112px)'}}>
           {v.videoUrl?<video ref={el=>{videoRefs.current[idx]=el;}} src={v.videoUrl} className="absolute inset-0 w-full h-full object-cover" loop playsInline muted onDoubleClick={()=>doLike(v._id)}/>:v.thumbnailUrl?<img src={v.thumbnailUrl} alt={`Reto DOMINO de @${v.userId?.username||'usuario'}, cadena nivel ${v.chainDepth+1}`} loading={idx===0?'eager':'lazy'} className="absolute inset-0 w-full h-full object-cover"/>:<div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={48} className="text-gray-600"/></div>}
+          {v.isAIGenerated && <div className="absolute top-3 left-3 z-10"><AIBadge size="md"/></div>}
           <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.85) 0%,rgba(0,0,0,0.1) 50%,transparent 100%)'}}/>
           <div className="absolute bottom-16 left-4 right-20 z-10">
-            <div className="flex items-center gap-2 mb-2"><Av u={v.userId} s={40}/><div><p className="text-white text-sm font-bold">@{v.userId?.username}</p><p className="text-gray-300 text-xs">{v.userId?.flag} {v.userId?.city}</p></div></div>
+            <div className="flex items-center gap-2 mb-2"><Av u={v.userId} s={40}/><div><p className="text-white text-sm font-bold flex items-center gap-1.5">@{v.userId?.username}{v.userId?.isAI && <AIBadge/>}</p><p className="text-gray-300 text-xs">{v.userId?.flag} {v.userId?.city}</p></div></div>
             <div className="flex items-center gap-2"><span className="text-xs rounded-full px-2 py-0.5 text-gray-300" style={{background:'rgba(0,0,0,0.4)',border:'1px solid rgba(255,255,255,0.1)'}}>⛓️ {v.chainDepth+1}</span><span className="text-xs text-gray-400">{ago(v.createdAt)}</span></div>
           </div>
           <div className="absolute right-3 bottom-20 flex flex-col gap-4 items-center z-10">
@@ -608,7 +634,7 @@ function ProfilePage({ userId }: { userId?: string }) {
           ) : null}
 
           {/* Username */}
-          <p className="text-gray-400 text-sm mb-3">@{displayUser.username}</p>
+          <p className="text-gray-400 text-sm mb-3 flex items-center gap-1.5">@{displayUser.username}{displayUser.isAI && <AIBadge size="md"/>}</p>
 
           {/* Stats — igual que TikTok: Siguiendo | Seguidores | Me gusta */}
           <div className="flex items-center gap-0 mb-3">
@@ -947,6 +973,8 @@ function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showNomModal, setShowNomModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [isAIGenerated, setIsAIGenerated] = useState<boolean|null>(null); // null = sin responder todavía (obligatorio, como TikTok)
   const [geo] = useState({ lat: 40.4168, lng: -3.7038 });
   const { user } = useAuth();
 
@@ -956,7 +984,15 @@ function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
   const publish = async () => {
     if (!token || !challenge) return;
     if (selected.length < 3) { setShowNomModal(true); return; }
+    if (isAIGenerated === null) { setShowAIModal(true); return; } // pregunta obligatoria antes de poder publicar
     setShowPrivacyModal(true);
+  };
+
+  const confirmAIChoice = (val: boolean) => {
+    const wasUnanswered = isAIGenerated === null;
+    setIsAIGenerated(val);
+    setShowAIModal(false);
+    if (wasUnanswered) setShowPrivacyModal(true); // primera vez (flujo obligatorio) → sigue a publicar; si solo está editando su respuesta, no le forzamos a publicar
   };
 
   const doPublish = async () => {
@@ -968,7 +1004,7 @@ function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
       try { const r = await uploadToCloudinary(blob, p => setUploadProgress(p)); videoUrl = r.videoUrl; thumbnailUrl = r.thumbnailUrl; } catch {}
       const r = await fetch(`${API}/api/videos`, {
         method: 'POST', headers: { Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
-        body: JSON.stringify({ challengeId: challenge._id, videoUrl, thumbnailUrl, geoCoordinates: geo, nominatedUserIds: selected, description, isPublic: privacy === 'public' })
+        body: JSON.stringify({ challengeId: challenge._id, videoUrl, thumbnailUrl, geoCoordinates: geo, nominatedUserIds: selected, description, isPublic: privacy === 'public', isAIGenerated: !!isAIGenerated })
       });
       if (r.ok) setLocation('/profile');
       else { const d = await r.json(); alert(d.error || 'Error'); }
@@ -1014,6 +1050,18 @@ function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
           <span className="text-gray-400">›</span>
         </button>
 
+        {/* Contenido generado con IA — obligatorio, estilo TikTok */}
+        <button onClick={()=>setShowAIModal(true)} className="w-full flex items-center justify-between py-3 border-t border-gray-100">
+          <div className="flex items-center gap-3">
+            <span className="text-lg">🤖</span>
+            <div className="text-left">
+              <p className="text-sm font-medium text-gray-800">Contenido generado con IA</p>
+              <p className="text-xs text-gray-500">{isAIGenerated===null ? 'Sin responder (obligatorio)' : isAIGenerated ? 'Sí, está marcado como IA' : 'No, es contenido real'}</p>
+            </div>
+          </div>
+          <span className="text-gray-400">›</span>
+        </button>
+
         {/* Ubicación */}
         <div className="flex items-center justify-between py-3 border-t border-gray-100">
           <div className="flex items-center gap-3"><MapPin size={20} className="text-gray-600"/><p className="text-sm font-medium text-gray-800">Ubicación</p></div>
@@ -1039,10 +1087,25 @@ function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
         <div className="fixed inset-0 z-50 flex items-end justify-center" style={{background:'rgba(0,0,0,0.5)'}}>
           <div className="w-full max-w-md rounded-t-2xl p-5" style={{background:'#13131f',maxHeight:'80vh',overflow:'auto'}}>
             <div className="flex items-center justify-between mb-4"><div><h2 className="font-bold text-white">Nominar 3 personas</h2><p className="text-xs text-gray-400">Obligatorio ({selected.length}/3)</p></div><button onClick={()=>setShowNomModal(false)}><X size={18} className="text-gray-400"/></button></div>
-            {selected.length>0&&<div className="flex gap-2 flex-wrap mb-3">{selected.map(id=>{const u=(Array.isArray(users)?users:[]).find((x:RankingEntry)=>x._id===id);return u?<button key={id} onClick={()=>setSelected(s=>s.filter(x=>x!==id))} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border" style={{borderColor:'#FF007F',color:'#FF007F',background:'rgba(255,0,127,0.1)'}}>{u.username}<X size={10}/></button>:null;})}</div>}
+            {selected.length>0&&<div className="flex gap-2 flex-wrap mb-3">{selected.map(id=>{const u=(Array.isArray(users)?users:[]).find((x:RankingEntry)=>x._id===id);return u?<button key={id} onClick={()=>setSelected(s=>s.filter(x=>x!==id))} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border" style={{borderColor:'#FF007F',color:'#FF007F',background:'rgba(255,0,127,0.1)'}}>{u.isAI && '🤖 '}{u.username}<X size={10}/></button>:null;})}</div>}
             <div className="relative mb-3"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar usuarios..." className="w-full rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/></div>
-            <div className="space-y-2 max-h-48 overflow-y-auto mb-4">{filtered.map((u:RankingEntry)=><button key={u._id} onClick={()=>selected.length<3&&setSelected(s=>[...s,u._id])} disabled={selected.length>=3} className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/5 text-left disabled:opacity-40"><Av u={u} s={32}/><div className="flex-1 min-w-0"><div className="text-sm font-medium text-white">{u.username}</div><div className="text-xs text-gray-400">{u.flag} {u.country}</div></div>{selected.includes(u._id)&&<CheckCircle size={16} className="text-[#00F5FF]"/>}</button>)}</div>
+            <div className="space-y-2 max-h-48 overflow-y-auto mb-4">{filtered.map((u:RankingEntry)=><button key={u._id} onClick={()=>selected.length<3&&setSelected(s=>[...s,u._id])} disabled={selected.length>=3} className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/5 text-left disabled:opacity-40"><Av u={u} s={32}/><div className="flex-1 min-w-0"><div className="text-sm font-medium text-white flex items-center gap-1.5">{u.username}{u.isAI && <AIBadge/>}</div><div className="text-xs text-gray-400">{u.flag} {u.country}</div></div>{selected.includes(u._id)&&<CheckCircle size={16} className="text-[#00F5FF]"/>}</button>)}</div>
             <button onClick={()=>setShowNomModal(false)} disabled={selected.length<3} className="w-full py-3 rounded-xl font-bold text-white disabled:opacity-50" style={{background:selected.length===3?'#FF007F':'#1e1e2a'}}>Confirmar ({selected.length}/3)</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: ¿contenido generado con IA? — obligatorio, como en TikTok */}
+      {showAIModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.5)'}}>
+          <div className="w-full max-w-sm rounded-2xl p-6 text-center" style={{background:'white'}}>
+            <div className="text-4xl mb-2">🤖</div>
+            <h2 className="text-black font-bold text-lg mb-2">¿Este vídeo está generado o editado significativamente con IA?</h2>
+            <p className="text-gray-500 text-sm mb-6">Incluye vídeo, voz o imagen creados o alterados con inteligencia artificial. Si tu respuesta no es precisa, tu cuenta podría tener restricciones.</p>
+            <div className="flex flex-col gap-2">
+              <button onClick={()=>confirmAIChoice(true)} className="w-full py-3 rounded-xl text-white font-bold" style={{background:'#7c3aed'}}>Sí, contiene contenido de IA</button>
+              <button onClick={()=>confirmAIChoice(false)} className="w-full py-3 rounded-xl text-gray-700 font-semibold border border-gray-200">No, es contenido real</button>
+            </div>
           </div>
         </div>
       )}
@@ -1233,7 +1296,7 @@ function MessagesPage() {
                 <button key={c.user._id} onClick={()=>setLocation(`/messages/${c.user._id}`)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors">
                   <Av u={c.user} s={48}/>
                   <div className="flex-1 min-w-0 text-left">
-                    <div className="flex items-center justify-between"><span className="text-white font-semibold text-sm">{c.user.username}</span><span className="text-gray-500 text-xs">{ago(c.lastMessage.createdAt)}</span></div>
+                    <div className="flex items-center justify-between"><span className="text-white font-semibold text-sm flex items-center gap-1.5">{c.user.username}{c.user.isAI && <AIBadge/>}</span><span className="text-gray-500 text-xs">{ago(c.lastMessage.createdAt)}</span></div>
                     <p className="text-gray-400 text-xs truncate mt-0.5">{c.lastMessage.text}</p>
                   </div>
                   {c.unread>0&&<span className="w-5 h-5 rounded-full text-xs font-bold text-black flex items-center justify-center flex-shrink-0" style={{background:'#FF007F'}}>{c.unread}</span>}
@@ -1274,7 +1337,7 @@ function ChatPage({ userId }: { userId: string }) {
       {/* Header chat */}
       <div className="flex items-center gap-3 px-4 py-3 border-b sticky top-14 z-10" style={{background:'#0b0b12',borderColor:'#1e1e2a'}}>
         <button onClick={()=>setLocation('/messages')}><ChevronLeft size={24} className="text-gray-400"/></button>
-        {other&&<><Av u={other} s={36}/><div><p className="text-white font-bold text-sm">@{other.username}</p><p className="text-gray-400 text-xs">{other.flag} {other.city}</p></div></>}
+        {other&&<><Av u={other} s={36}/><div><p className="text-white font-bold text-sm flex items-center gap-1.5">@{other.username}{other.isAI && <AIBadge/>}</p><p className="text-gray-400 text-xs">{other.flag} {other.city}</p></div></>}
       </div>
 
       {/* Mensajes */}
@@ -1327,7 +1390,7 @@ function LiveListPage() {
               <Link key={l._id} href={`/live/${l._id}`} className="relative rounded-xl overflow-hidden cursor-pointer" style={{aspectRatio:'9/16',background:'#13131f',border:'1px solid #1e1e2a'}}>
                 <div className="absolute inset-0 flex items-center justify-center"><Av u={l.userId} s={80}/></div>
                 <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.85) 0%,transparent 60%)'}}/>
-                <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE</div>
+                <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background: l.userId?.isAI ? '#7c3aed' : '#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>{l.userId?.isAI ? '🤖 IA LIVE' : 'LIVE'}</div>
                 <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs text-white" style={{background:'rgba(0,0,0,0.6)'}}><Eye size={9}/>{l.viewerCount}</div>
                 <div className="absolute bottom-3 left-3 right-3"><p className="text-white text-xs font-bold truncate">@{l.userId?.username}</p><p className="text-gray-300 text-xs truncate">{l.title}</p></div>
               </Link>
@@ -1374,8 +1437,8 @@ function LiveViewerPage({ id }: { id: string }) {
   const chatRef = useRef<HTMLDivElement>(null);
   const live = Array.isArray(lives)?lives.find((l:LiveStream)=>l._id===id):null;
   useSEO({
-    title: live ? `🔴 ${live.title} — @${live.userId?.username} en directo — DOMINO` : 'Live — DOMINO',
-    description: live ? `Sigue en directo a @${live.userId?.username}: ${live.title}. ${live.viewerCount||0} espectadores ahora en DOMINO.` : 'Live en DOMINO.',
+    title: live ? `🔴 ${live.userId?.isAI?'🤖 ':''}${live.title} — @${live.userId?.username}${live.userId?.isAI?' (IA)':''} en directo — DOMINO` : 'Live — DOMINO',
+    description: live ? `Sigue en directo a @${live.userId?.username}${live.userId?.isAI?' (cuenta de IA)':''}: ${live.title}. ${live.viewerCount||0} espectadores ahora en DOMINO.` : 'Live en DOMINO.',
     path: `/live/${id}`,
     image: live?.userId?.avatarUrl,
     type: 'video.other',
@@ -1400,8 +1463,8 @@ function LiveViewerPage({ id }: { id: string }) {
   return(
     <div className="fixed inset-0 flex" style={{paddingTop:'0',background:'#000'}}>
       <div className="relative flex-1">
-        <div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><div className="text-center"><Av u={live.userId} s={120}/><p className="text-white font-bold mt-4 text-xl">@{live.userId?.username}</p><p className="text-gray-400 text-sm mt-1">{live.title}</p><div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full" style={{background:'rgba(255,0,127,0.2)',border:'1px solid #FF007F'}}><div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#FF007F'}}/><span className="text-white text-sm font-bold">EN DIRECTO</span></div></div></div>
-        <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-10"><div className="flex items-center gap-2"><div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE</div><div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs text-white" style={{background:'rgba(0,0,0,0.6)'}}><Eye size={10}/>{Math.max(0,viewers)}</div></div><Link href="/live" className="p-1.5 rounded-full" style={{background:'rgba(0,0,0,0.6)'}}><X size={16} className="text-white"/></Link></div>
+        <div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><div className="text-center"><Av u={live.userId} s={120}/><p className="text-white font-bold mt-4 text-xl flex items-center justify-center gap-2">@{live.userId?.username}{live.userId?.isAI && <AIBadge size="md"/>}</p><p className="text-gray-400 text-sm mt-1">{live.title}</p><div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full" style={{background:'rgba(255,0,127,0.2)',border:'1px solid #FF007F'}}><div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#FF007F'}}/><span className="text-white text-sm font-bold">{live.userId?.isAI ? '🤖 IA EN DIRECTO' : 'EN DIRECTO'}</span></div>{live.userId?.isAI && <p className="text-gray-500 text-xs mt-2 max-w-xs mx-auto">Este directo está generado y conducido por una inteligencia artificial, no por una persona real.</p>}</div></div>
+        <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-10"><div className="flex items-center gap-2"><div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE</div>{live.userId?.isAI && <AIBadge/>}<div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs text-white" style={{background:'rgba(0,0,0,0.6)'}}><Eye size={10}/>{Math.max(0,viewers)}</div></div><Link href="/live" className="p-1.5 rounded-full" style={{background:'rgba(0,0,0,0.6)'}}><X size={16} className="text-white"/></Link></div>
         {giftAnim&&<div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center animate-bounce z-20"><div className="text-5xl mb-2">{giftAnim.split(' ')[0]}</div><p className="text-white font-bold">{giftAnim}</p></div>}
         <div className="absolute bottom-4 left-2 flex items-center gap-2 z-10">
           <button onClick={()=>setShowGifts(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold text-white" style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)'}}><Gift size={16}/>Regalar</button>
@@ -1410,7 +1473,7 @@ function LiveViewerPage({ id }: { id: string }) {
         {showGifts&&<div className="absolute bottom-16 left-2 z-20 rounded-2xl p-4 w-72" style={{background:'#13131f',border:'1px solid #1e1e2a'}}><div className="flex items-center justify-between mb-3"><h3 className="font-bold text-white text-sm">Enviar Regalo</h3><button onClick={()=>setShowGifts(false)}><X size={16} className="text-gray-400"/></button></div><div className="grid grid-cols-3 gap-2">{Object.entries(GIFT_CATALOG).map(([k,g])=><button key={k} onClick={()=>sendGift(k)} disabled={(user?.coins||0)<g.coins} className="flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-white/10 disabled:opacity-40 border border-transparent hover:border-[#FF007F]"><span className="text-2xl">{g.emoji}</span><span className="text-white text-xs font-bold">{g.name}</span><span className="text-yellow-400 text-xs">{g.coins}🪙</span></button>)}</div></div>}
       </div>
       <div className="w-72 flex flex-col" style={{background:'#13131f',borderLeft:'1px solid #1e1e2a'}}>
-        <div className="p-3 border-b flex items-center gap-2" style={{borderColor:'#1e1e2a'}}><Av u={live.userId} s={28}/><div><p className="text-white text-xs font-bold">@{live.userId?.username}</p><p className="text-gray-400 text-xs truncate">{live.title}</p></div></div>
+        <div className="p-3 border-b flex items-center gap-2" style={{borderColor:'#1e1e2a'}}><Av u={live.userId} s={28}/><div><p className="text-white text-xs font-bold flex items-center gap-1.5">@{live.userId?.username}{live.userId?.isAI && <AIBadge/>}</p><p className="text-gray-400 text-xs truncate">{live.title}</p></div></div>
         <div ref={chatRef} className="flex-1 overflow-y-auto p-3 space-y-2">{msgs.map((m,i)=><div key={i} className={cn('text-xs',m.type==='system'?'text-center text-gray-500':m.type==='gift'?'text-center':'')}>{m.type==='gift'?<span className="px-2 py-1 rounded-full font-bold" style={{background:'rgba(255,0,127,0.2)',color:'#FF007F'}}>🎁 {m.user} {m.text}</span>:m.type==='system'?<span>{m.text}</span>:<span><span className="font-bold" style={{color:'#00F5FF'}}>{m.user}: </span><span className="text-gray-300">{m.text}</span></span>}</div>)}</div>
         {user&&<div className="p-3 border-t flex gap-2" style={{borderColor:'#1e1e2a'}}><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendMsg()} placeholder="Escribe algo..." className="flex-1 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/><button onClick={sendMsg} className="p-2 rounded-xl" style={{background:'#00F5FF'}}><Send size={14} className="text-black"/></button></div>}
       </div>
@@ -1487,7 +1550,7 @@ function SearchPage() {
         <div className="space-y-2">
           {results.map((u:RankingEntry)=>(
             <button key={u._id} onClick={()=>setLocation(`/user/${u._id}`)} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors">
-              <Av u={u} s={44}/><div className="flex-1 text-left"><p className="text-white font-semibold">@{u.username}</p><p className="text-gray-400 text-xs">{u.flag} {u.country} · {fmt(u.impactPoints)} pts</p></div><div className="flex items-center gap-1 text-xs text-gray-500"><Users size={12}/>{u.followers?.length||0}</div>
+              <Av u={u} s={44}/><div className="flex-1 text-left"><p className="text-white font-semibold flex items-center gap-1.5">@{u.username}{u.isAI && <AIBadge/>}</p><p className="text-gray-400 text-xs">{u.flag} {u.country} · {fmt(u.impactPoints)} pts</p></div><div className="flex items-center gap-1 text-xs text-gray-500"><Users size={12}/>{u.followers?.length||0}</div>
             </button>
           ))}
           {q.length>=2&&!loading&&results.length===0&&<p className="text-center text-gray-500 py-8">Sin resultados para "{q}"</p>}
@@ -1550,7 +1613,7 @@ function HomePage() {
                 <Link key={l._id} href={`/live/${l._id}`} className="relative rounded-xl overflow-hidden" style={{aspectRatio:'9/16',background:'#13131f',border:'1px solid #1e1e2a'}}>
                   <div className="absolute inset-0 flex items-center justify-center"><Av u={l.userId} s={64}/></div>
                   <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.8) 0%,transparent 60%)'}}/>
-                  <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE</div>
+                  <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background: l.userId?.isAI ? '#7c3aed' : '#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>{l.userId?.isAI ? '🤖 IA LIVE' : 'LIVE'}</div>
                   <div className="absolute bottom-2 left-2 right-2"><p className="text-white text-xs font-bold truncate">@{l.userId?.username}</p><p className="text-gray-300 text-xs truncate">{l.title}</p></div>
                 </Link>
               ))}
@@ -1581,7 +1644,7 @@ function HomePage() {
               {ranking.map((e:RankingEntry,i:number)=>(
                 <Link key={e._id} href={`/user/${e._id}`} className="flex items-center gap-3 p-3 border-b last:border-0 hover:bg-white/5 transition-colors" style={{borderColor:'#1e1e2a'}}>
                   <span className="w-7 text-center text-sm font-bold">{i<3?['🥇','🥈','🥉'][i]:<span className="text-gray-500">#{i+1}</span>}</span>
-                  <Av u={e} s={36}/><div className="flex-1 min-w-0"><div className="text-sm font-semibold text-white truncate">{e.username} {e.flag}</div><div className="text-xs text-gray-500">{e.country}</div></div>
+                  <Av u={e} s={36}/><div className="flex-1 min-w-0"><div className="text-sm font-semibold text-white truncate flex items-center gap-1.5">{e.username} {e.flag}{e.isAI && <AIBadge/>}</div><div className="text-xs text-gray-500">{e.country}</div></div>
                   <div className="text-right"><div className="text-sm font-bold" style={{color:'#00F5FF'}}>{fmt(e.impactPoints)}</div><div className="text-xs text-gray-500">{e.currentStreak}d</div></div>
                 </Link>
               ))}
