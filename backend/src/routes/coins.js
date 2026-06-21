@@ -22,8 +22,11 @@ const COIN_PACKAGES = [
   { id: 'whale', coins: 6500, price: 49.99, label: 'Whale', emoji: '👑', badge: 'MEJOR VALOR' },
 ];
 
-function frontendUrl() {
-  return process.env.FRONTEND_URL || 'https://domino-chain-1kd0xo6ew-rrhhmilchollos-jpgs-projects.vercel.app';
+function frontendUrl(req) {
+  if (process.env.FRONTEND_URL) return process.env.FRONTEND_URL;
+  const origin = req?.headers?.origin || req?.headers?.referer;
+  if (origin) return origin.replace(/\/$/, '');
+  return 'https://www.domino-chain.app'; // último recurso si no hay env var ni cabecera Origin
 }
 
 // GET /api/coins/packages
@@ -53,8 +56,8 @@ router.post('/checkout', auth, async (req, res) => {
         quantity: 1,
       }],
       metadata: { userId: req.user._id.toString(), packageId: pkg.id },
-      success_url: `${frontendUrl()}/coins?success=true`,
-      cancel_url: `${frontendUrl()}/coins?canceled=true`,
+      success_url: `${frontendUrl(req)}/coins?success=true`,
+      cancel_url: `${frontendUrl(req)}/coins?canceled=true`,
     });
 
     await Purchase.create({

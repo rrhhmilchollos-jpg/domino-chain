@@ -57,10 +57,28 @@ export default function LiveViewerPage({ id }: { id: string }) {
       const room = new Room();
       roomRef.current = room;
 
+      // BUG CRÍTICO arreglado: antes solo se adjuntaba la pista de Vídeo.
+      // El micrófono del streamer SÍ se publicaba (setMicrophoneEnabled),
+      // pero como aquí se ignoraba el track de Audio, ningún espectador
+      // llegaba a escucharlo nunca.
       room.on(RoomEvent.TrackSubscribed, (track) => {
-        if (track.kind === Track.Kind.Video && videoRef.current) track.attach(videoRef.current);
+        if ((track.kind === Track.Kind.Video || track.kind === Track.Kind.Audio) && videoRef.current) {
+          track.attach(videoRef.current);
+        }
       });
       room.on(RoomEvent.Disconnected, () => { if (!cancelled) setConnState('unavailable'); });
+
+      // Chat real por el canal de datos de LiveKit: antes sendMsg() solo
+      // tocaba el estado local de React, así que un mensaje nunca salía
+      // del navegador de quien lo escribía. Ahora se emite a la sala y
+      // todos (incluido el streamer) lo reciben aquí.
+      const decoder = new TextDecoder();
+      room.on(RoomEvent.DataReceived, (payload) => {
+        try {
+          const msg = JSON.parse(decoder.decode(payload));
+          setMsgs(m => [...m, msg]);
+        } catch { /* paquete no reconocido, se ignora */ }
+      });
 
       try {
         await room.connect(livekitUrl, lkToken);
@@ -85,7 +103,17 @@ export default function LiveViewerPage({ id }: { id: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live?._id, isOwner]);
 
-  const sendMsg=()=>{if(!input.trim()||!user)return;setMsgs(m=>[...m,{user:user.username,text:input}]);setInput('');};
+  const encoder = new TextEncoder();
+  const broadcast = (msg: {user:string;text:string;type?:string}) => {
+    try { roomRef.current?.localParticipant.publishData(encoder.encode(JSON.stringify(msg)), { reliable: true }); } catch { /* sala no conectada todavía */ }
+  };
+  const sendMsg=()=>{
+    if(!input.trim()||!user)return;
+    const msg = {user:user.username,text:input};
+    setMsgs(m=>[...m,msg]); // eco local instantáneo para quien lo envía
+    broadcast(msg);
+    setInput('');
+  };
   const sendGift=async(type:string)=>{
     if(!token||!user)return;
     const g=GIFT_CATALOG[type];
@@ -94,7 +122,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
     try{
       const r=await fetch(`${API}/api/coins/gift`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({liveId:id,giftType:type,quantity:1})});
       const d=await r.json();
-      if(r.ok){setGiftAnim(`${g.emoji} ${g.name}`);setTimeout(()=>setGiftAnim(null),3000);setMsgs(m=>[...m,{user:user.username,text:`envió ${g.emoji} ${g.name}!`,type:'gift'}]);await refreshUser();}
+      if(r.ok){setGiftAnim(`${g.emoji} ${g.name}`);setTimeout(()=>setGiftAnim(null),3000);const msg={user:user.username,text:`envió ${g.emoji} ${g.name}!`,type:'gift'};setMsgs(m=>[...m,msg]);broadcast(msg);await refreshUser();}
       else if(r.status===400){setInsufficientCoins(true);setTimeout(()=>setInsufficientCoins(false),3000);}
     }finally{setSending(false);setShowGifts(false);}
   };
