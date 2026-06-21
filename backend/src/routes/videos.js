@@ -17,7 +17,11 @@ router.get('/feed', async (req, res) => {
     // Solo videos con archivo real y públicos: uno sin videoUrl no tiene nada
     // que reproducir, y uno privado no debe verlo nadie salvo su dueño (que
     // accede a sus propios videos desde el Dashboard, no desde este feed).
-    const pool = await Video.find({ isPublished: true, isPublic: true, videoUrl: { $ne: '' } })
+    // FIX: usamos $ne:false en vez de true — los videos creados antes de
+    // añadir el campo isPublic al schema no lo tienen guardado en Mongo
+    // (el default de Mongoose solo aplica a documentos nuevos), así que
+    // exigir isPublic:true los excluía aunque siguieran siendo públicos.
+    const pool = await Video.find({ isPublished: true, isPublic: { $ne: false }, videoUrl: { $ne: '' } })
       .populate('userId', 'username avatarUrl country city flag impactPoints currentStreak')
       .sort({ createdAt: -1 })
       .limit(200); // ventana de candidatos recientes sobre la que rankear/diversificar
@@ -52,7 +56,7 @@ router.get('/feed', async (req, res) => {
 // GET /api/videos/chain/:rootId
 router.get('/chain/:rootId', async (req, res) => {
   try {
-    const chain = await Video.find({ rootVideoId: req.params.rootId, isPublished: true, isPublic: true })
+    const chain = await Video.find({ rootVideoId: req.params.rootId, isPublished: true, isPublic: { $ne: false } })
       .populate('userId', 'username avatarUrl country city flag')
       .sort({ chainDepth: 1 });
     res.json(chain);
@@ -68,7 +72,7 @@ router.get('/user/:userId', optionalAuth, async (req, res) => {
   try {
     const isOwner = req.user && String(req.user._id) === String(req.params.userId);
     const filter = { userId: req.params.userId, isPublished: true };
-    if (!isOwner) filter.isPublic = true;
+    if (!isOwner) filter.isPublic = { $ne: false };
 
     const videos = await Video.find(filter)
       .populate('userId', 'username avatarUrl country city flag')
