@@ -6,9 +6,21 @@ const Challenge = require('../models/Challenge');
 const Notification = require('../models/Notification');
 const Comment = require('../models/Comment');
 const User = require('../models/User');
+const SavedVideo = require('../models/SavedVideo');
+
+// Marca isSaved en cada video de una lista según quién pregunta (una sola
+// consulta batch) — así el icono de guardado sale correcto desde el primer
+// render en vez de asumir que nada está guardado.
+async function withIsSaved(videos, requester) {
+  if (!requester || videos.length === 0) return videos.map(v => ({ ...v.toObject(), isSaved: false }));
+  const ids = videos.map(v => v._id);
+  const mySaves = await SavedVideo.find({ userId: requester._id, videoId: { $in: ids } }).select('videoId');
+  const savedSet = new Set(mySaves.map(s => s.videoId.toString()));
+  return videos.map(v => ({ ...v.toObject(), isSaved: savedSet.has(v._id.toString()) }));
+}
 
 // GET /api/videos/feed
-router.get('/feed', async (req, res) => {
+router.get('/feed', optionalAuth, async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
     const pageNum = Number(page);
@@ -47,7 +59,8 @@ router.get('/feed', async (req, res) => {
     }
 
     const start = (pageNum - 1) * limitNum;
-    res.json(diversified.slice(start, start + limitNum));
+    const pageItems = diversified.slice(start, start + limitNum);
+    res.json(await withIsSaved(pageItems, req.user));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -77,7 +90,7 @@ router.get('/feed/following', auth, async (req, res) => {
       .skip((pageNum - 1) * limitNum)
       .limit(limitNum);
 
-    res.json(videos);
+    res.json(await withIsSaved(videos, req.user));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -120,6 +133,27 @@ router.get('/liked/:userId', async (req, res) => {
       .populate('userId', 'username avatarUrl country city flag')
       .sort({ createdAt: -1 });
     res.json(videos);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/videos/saved/:userId — videos guardados/favoritos. A diferencia
+// de /liked, esto SÍ se protege en el servidor (no solo se oculta en el
+// frontend): los guardados son una lista privada y solo su dueño puede verla.
+router.get('/saved/:userId', auth, async (req, res) => {
+  try {
+    if (req.user._id.toString() !== req.params.userId) {
+      return res.status(403).json({ error: 'Solo puedes ver tus propios videos guardados' });
+    }
+    const saves = await SavedVideo.find({ userId: req.params.userId }).sort({ createdAt: -1 }).limit(200);
+    const videoIds = saves.map(s => s.videoId);
+    const videos = await Video.find({ _id: { $in: videoIds } })
+      .populate('userId', 'username avatarUrl country city flag');
+    // Mantener el orden "guardado más reciente primero", no el orden de Mongo
+    const byId = new Map(videos.map(v => [v._id.toString(), v]));
+    const ordered = videoIds.map(id => byId.get(id.toString())).filter(Boolean);
+    res.json(ordered);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -220,6 +254,26 @@ router.put('/:id/visibility', auth, async (req, res) => {
     video.isPublic = isPublic;
     await video.save();
     res.json({ ok: true, isPublic: video.isPublic });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/videos/:id/save — guardar/quitar de guardados (toggle, privado — sin notificación, a diferencia del like)
+router.post('/:id/save', auth, async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id);
+    if (!video) return res.status(404).json({ error: 'Video no encontrado' });
+
+    const existing = await SavedVideo.findOne({ userId: req.user._id, videoId: video._id });
+    if (existing) {
+      await existing.deleteOne();
+      await Video.findByIdAndUpdate(video._id, { $inc: { savesCount: -1 } });
+      return res.json({ saved: false, savesCount: Math.max(0, (video.savesCount || 0) - 1) });
+    }
+    await SavedVideo.create({ userId: req.user._id, videoId: video._id });
+    await Video.findByIdAndUpdate(video._id, { $inc: { savesCount: 1 } });
+    res.status(201).json({ saved: true, savesCount: (video.savesCount || 0) + 1 });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

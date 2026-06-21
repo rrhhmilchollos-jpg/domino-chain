@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { Camera, Heart, MessageCircle, Share, Volume2, VolumeX } from 'lucide-react';
+import { Camera, Heart, MessageCircle, Bookmark, Share, Volume2, VolumeX } from 'lucide-react';
 import { useApi, useAuth, CommentsPanel, Spinner, Av, cn, fmt, ago, API, DominoVideo } from '../lib/shared';
 
 type Tab = 'forYou' | 'following';
@@ -15,15 +15,25 @@ export default function FeedPage() {
   const { data: challenge } = useApi('/api/challenges/active');
   const { token } = useAuth();
   const [liked, setLiked] = useState<Set<string>>(new Set());
+  const [saved, setSaved] = useState<Set<string>>(new Set());
   const [commentId, setCommentId] = useState<string|null>(null);
   const [muted, setMuted] = useState(true);
   const videoRefs = useRef<(HTMLVideoElement|null)[]>([]);
   const doLike = async (id:string) => { if(!token)return; setLiked(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;}); await fetch(`${API}/api/videos/${id}/like`,{method:'POST',headers:{Authorization:`Bearer ${token}`}}); };
+  // Guardar/quitar de guardados — el backend ya nos dice qué está guardado
+  // de verdad (isSaved), así que partimos de ese estado real, no de vacío.
+  const doSave = async (id:string) => { if(!token)return; setSaved(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;}); await fetch(`${API}/api/videos/${id}/save`,{method:'POST',headers:{Authorization:`Bearer ${token}`}}); };
   const doShare = (id:string) => { const url=`${window.location.origin}/video/${id}`; if(navigator.share)navigator.share({title:'DOMINO',url});else navigator.clipboard?.writeText(url); };
   useEffect(()=>{
     const obs=new IntersectionObserver(entries=>{entries.forEach(e=>{const v=e.target as HTMLVideoElement;if(e.isIntersecting)v.play().catch(()=>{});else{v.pause();v.currentTime=0;}});},{threshold:0.8});
     videoRefs.current.forEach(v=>{if(v)obs.observe(v);});
     return()=>obs.disconnect();
+  },[videos]);
+  // Sincroniza el estado real de "guardado" que viene del servidor cada vez
+  // que cambia la lista (cambio de pestaña, recarga...).
+  useEffect(()=>{
+    const list = Array.isArray(videos)?videos:[];
+    setSaved(new Set(list.filter((v:DominoVideo)=>v.isSaved).map((v:DominoVideo)=>v._id)));
   },[videos]);
 
   const list = tab==='following'&&!user ? [] : (Array.isArray(videos)?videos:[]);
@@ -60,10 +70,11 @@ export default function FeedPage() {
             <div className="flex items-center gap-2 mb-2"><Av u={v.userId} s={40}/><div><p className="text-white text-sm font-bold">@{v.userId?.username}</p><p className="text-gray-300 text-xs">{v.userId?.flag} {v.userId?.city}</p></div></div>
             <div className="flex items-center gap-2"><span className="text-xs rounded-full px-2 py-0.5 text-gray-300" style={{background:'rgba(0,0,0,0.4)',border:'1px solid rgba(255,255,255,0.1)'}}>⛓️ {v.chainDepth+1}</span><span className="text-xs text-gray-400">{ago(v.createdAt)}</span></div>
           </Link>
-          {/* Botones acción derecha */}
+          {/* Botones acción derecha — orden TikTok: me gusta, comentar, guardar, compartir */}
           <div className="absolute right-3 z-10 flex flex-col gap-5 items-center" style={{bottom:'72px'}}>
             <button onClick={()=>doLike(v._id)} className="flex flex-col items-center gap-1"><div className="w-11 h-11 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}><Heart size={24} className={liked.has(v._id)?'fill-red-500 text-red-500':'text-white'}/></div><span className="text-xs text-white font-semibold">{fmt((v.likes?.length||0)+(liked.has(v._id)?1:0))}</span></button>
             <button onClick={()=>setCommentId(v._id)} className="flex flex-col items-center gap-1"><div className="w-11 h-11 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}><MessageCircle size={24} className="text-white"/></div><span className="text-xs text-white font-semibold">Comentar</span></button>
+            <button onClick={()=>doSave(v._id)} className="flex flex-col items-center gap-1"><div className="w-11 h-11 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}><Bookmark size={24} className={saved.has(v._id)?'fill-[#00F5FF] text-[#00F5FF]':'text-white'}/></div><span className="text-xs text-white font-semibold">{fmt(Math.max(0,(v.savesCount||0)+(saved.has(v._id)?1:0)-(v.isSaved?1:0)))}</span></button>
             <button onClick={()=>doShare(v._id)} className="flex flex-col items-center gap-1"><div className="w-11 h-11 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}><Share size={24} className="text-white"/></div><span className="text-xs text-white font-semibold">Compartir</span></button>
           </div>
           {/* Barra de cadena abajo */}

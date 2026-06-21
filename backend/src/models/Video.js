@@ -14,6 +14,7 @@ const videoSchema = new mongoose.Schema({
   chainDepth: { type: Number, default: 0 },
   likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   isPublished: { type: Boolean, default: false },
-  isPublic: { type: Boolean, default: true } // false = solo visible para el propio dueño
+  isPublic: { type: Boolean, default: true }, // false = solo visible para el propio dueño
+  savesCount: { type: Number, default: 0 } // solo para mostrar el número rápido; el detalle de quién vive en SavedVideo
 }, { timestamps: true });
 module.exports = mongoose.model('Video', videoSchema);

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
-import { Zap, Bell, ChevronRight, Camera, Heart, Grid3x3, Settings, Share2 } from 'lucide-react';
+import { Zap, Bell, ChevronRight, Camera, Heart, Bookmark, Grid3x3, Settings, Share2 } from 'lucide-react';
 import { cn, useAuth, useApi, Av, Spinner, fmt, ago, API, RankingEntry, Notification, DominoVideo, VisibilityToggle } from '../lib/shared';
 
-type Tab = 'videos' | 'liked';
+type Tab = 'videos' | 'liked' | 'saved';
 
 function VideoThumb({ v, isOwner }: { v: DominoVideo; isOwner?: boolean }) {
   const [isPublic, setIsPublic] = useState(v.isPublic !== false); // default true si viene undefined (videos antiguos)
@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const { data: notifs, setData: setNotifs } = useApi('/api/notifications', [user?._id]);
   const { data: myVideos } = useApi(user?._id ? `/api/videos/user/${user._id}` : '/api/videos/user/_', [user?._id]);
   const { data: likedVideos } = useApi(user?._id ? `/api/videos/liked/${user._id}` : '/api/videos/liked/_', [user?._id]);
+  const { data: savedVideos } = useApi(user?._id ? `/api/videos/saved/${user._id}` : '/api/videos/saved/_', [user?._id]);
   const { data: meFull } = useApi(user?._id ? '/api/users/me' : '/api/users/_', [user?._id]);
   const markRead=async(id:string)=>{if(!token)return;await fetch(`${API}/api/notifications/${id}/read`,{method:'PUT',headers:{Authorization:`Bearer ${token}`}});setNotifs((p:Notification[])=>Array.isArray(p)?p.map(n=>n._id===id?{...n,read:true}:n):p);};
   const unread=Array.isArray(notifs)?notifs.filter((n:Notification)=>!n.read).length:0;
@@ -42,8 +43,8 @@ export default function DashboardPage() {
 
   if(!user)return<div className="min-h-screen flex items-center justify-center" style={{paddingTop:'80px',background:'#0b0b12'}}><div className="text-center"><p className="text-gray-400 mb-4">Inicia sesión</p><Link href="/auth" className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Entrar</Link></div></div>;
 
-  const activeList: DominoVideo[] = tab==='videos' ? (Array.isArray(myVideos)?myVideos:[]) : (Array.isArray(likedVideos)?likedVideos:[]);
-  const activeLoading = tab==='videos' ? !myVideos : !likedVideos;
+  const activeList: DominoVideo[] = tab==='videos' ? (Array.isArray(myVideos)?myVideos:[]) : tab==='liked' ? (Array.isArray(likedVideos)?likedVideos:[]) : (Array.isArray(savedVideos)?savedVideos:[]);
+  const activeLoading = tab==='videos' ? !myVideos : tab==='liked' ? !likedVideos : !savedVideos;
 
   return(
     <div className="min-h-screen" style={{paddingTop:'80px',background:'#0b0b12'}}>
@@ -81,6 +82,9 @@ export default function DashboardPage() {
           <button onClick={()=>setTab('liked')} className={cn('flex-1 py-3 flex items-center justify-center gap-1.5 text-sm font-semibold border-b-2 -mb-px transition-colors',tab==='liked'?'text-white':'text-gray-500 border-transparent')} style={tab==='liked'?{borderColor:'#00F5FF'}:{}}>
             <Heart size={16}/>Me Gusta
           </button>
+          <button onClick={()=>setTab('saved')} className={cn('flex-1 py-3 flex items-center justify-center gap-1.5 text-sm font-semibold border-b-2 -mb-px transition-colors',tab==='saved'?'text-white':'text-gray-500 border-transparent')} style={tab==='saved'?{borderColor:'#00F5FF'}:{}}>
+            <Bookmark size={16}/>Guardados
+          </button>
         </div>
 
         {/* ===== Grid de videos (3 columnas, estilo TikTok) ===== */}
@@ -89,8 +93,8 @@ export default function DashboardPage() {
             <div className="text-center py-10"><Spinner/></div>
           ):activeList.length===0?(
             <div className="text-center py-12 px-4">
-              <div className="text-4xl mb-2">{tab==='videos'?'🎲':'❤️'}</div>
-              <p className="text-gray-400 text-sm mb-4">{tab==='videos'?'Todavía no has publicado ningún dominó':'Todavía no le has dado me gusta a ningún video'}</p>
+              <div className="text-4xl mb-2">{tab==='videos'?'🎲':tab==='liked'?'❤️':'🔖'}</div>
+              <p className="text-gray-400 text-sm mb-4">{tab==='videos'?'Todavía no has publicado ningún dominó':tab==='liked'?'Todavía no le has dado me gusta a ningún video':'Todavía no has guardado ningún video'}</p>
               <Link href={tab==='videos'?'/camera':'/feed'} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-black text-sm" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}>{tab==='videos'?<><Camera size={16}/>Grabar mi primer reto</>:<>Explorar feed</>}</Link>
             </div>
           ):(
