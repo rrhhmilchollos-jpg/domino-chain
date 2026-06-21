@@ -1,30 +1,48 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
 import { useAuth, useApi, Spinner, GIFT_CATALOG, API, CoinPackage } from '../lib/shared';
 
 export default function CoinsStorePage() {
   const { user, token, refreshUser } = useAuth();
   const { data: packages } = useApi('/api/coins/packages');
-  const { data: balance, setData: setBalance } = useApi('/api/coins/balance', [user?._id]);
+  const { data: balance } = useApi('/api/coins/balance', [user?._id]);
   const [buying, setBuying] = useState<string|null>(null);
-  const [success, setSuccess] = useState<string|null>(null);
+  const [error, setError] = useState<string|null>(null);
+  const [notice, setNotice] = useState<string|null>(null);
+
+  // Vuelta desde Stripe Checkout (?success=true / ?canceled=true)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('success') === 'true') {
+      setNotice('¡Pago recibido! Tus monedas se añaden en unos segundos.');
+      // El saldo lo actualiza el webhook de Stripe en el servidor, no esta pestaña:
+      // refrescamos el usuario un par de veces por si el webhook tarda un poco.
+      refreshUser();
+      const t = setTimeout(() => refreshUser(), 3000);
+      window.history.replaceState({}, '', '/coins');
+      return () => clearTimeout(t);
+    }
+    if (params.get('canceled') === 'true') {
+      setNotice('Pago cancelado. No se ha cobrado nada.');
+      window.history.replaceState({}, '', '/coins');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const buy = async (pkg: CoinPackage) => {
     if (!token) return;
-    setBuying(pkg.id);
+    setBuying(pkg.id); setError(null);
     try {
-      const r = await fetch(`${API}/api/coins/purchase`, {
+      const r = await fetch(`${API}/api/coins/checkout`, {
         method:'POST', headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
         body: JSON.stringify({ packageId: pkg.id })
       });
       const d = await r.json();
-      if (r.ok) {
-        setBalance((b: any) => ({...b, coins: d.newBalance}));
-        setSuccess(`¡${pkg.coins.toLocaleString()} monedas añadidas! 🎉`);
-        await refreshUser();
-        setTimeout(() => setSuccess(null), 4000);
-      }
-    } finally { setBuying(null); }
+      if (!r.ok || !d.url) throw new Error(d.error || 'No se pudo iniciar el pago');
+      window.location.href = d.url; // redirige a la pasarela de pago de Stripe
+    } catch (e: any) {
+      setError(e.message); setBuying(null);
+    }
   };
 
   if (!user) return (
@@ -41,14 +59,19 @@ export default function CoinsStorePage() {
           <p className="text-gray-400 mt-2">Compra monedas para enviar regalos en los directos</p>
           <div className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-full" style={{background:'rgba(0,245,255,0.1)',border:'1px solid #00F5FF'}}>
             <span className="text-2xl">🪙</span>
-            <span className="text-2xl font-black text-white">{(balance?.coins || user?.coins || 0).toLocaleString()}</span>
+            <span className="text-2xl font-black text-white">{(balance?.coins ?? user?.coins ?? 0).toLocaleString()}</span>
             <span className="text-gray-400 text-sm">monedas</span>
           </div>
         </div>
 
-        {success && (
+        {notice && (
           <div className="mb-6 p-4 rounded-xl text-center font-bold text-white" style={{background:'rgba(0,245,255,0.15)',border:'1px solid #00F5FF'}}>
-            {success}
+            {notice}
+          </div>
+        )}
+        {error && (
+          <div className="mb-6 p-4 rounded-xl text-center font-bold text-white" style={{background:'rgba(255,0,127,0.15)',border:'1px solid #FF007F'}}>
+            {error}
           </div>
         )}
 
@@ -64,6 +87,9 @@ export default function CoinsStorePage() {
               </div>
             </button>
           ))}
+          {Array.isArray(packages)&&packages.length===0&&(
+            <p className="col-span-2 text-center text-gray-500 text-sm py-6">Los pagos no están disponibles ahora mismo.</p>
+          )}
         </div>
 
         <div className="rounded-2xl p-5" style={{background:'#13131f',border:'1px solid #1e1e2a'}}>
@@ -79,7 +105,7 @@ export default function CoinsStorePage() {
           </div>
         </div>
 
-        <p className="text-center text-xs text-gray-600 mt-6">Los pagos son seguros. Las monedas no son reembolsables.</p>
+        <p className="text-center text-xs text-gray-600 mt-6">Pago seguro procesado por Stripe. Las monedas no son reembolsables.</p>
       </div>
     </div>
   );

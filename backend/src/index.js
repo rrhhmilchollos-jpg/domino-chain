@@ -10,11 +10,19 @@ const videoRoutes = require('./routes/videos');
 const notificationRoutes = require('./routes/notifications');
 const rankingRoutes = require('./routes/ranking');
 const livesRoutes = require('./routes/lives');
+const coinsRoutes = require('./routes/coins');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors({ origin: '*', credentials: false }));
+
+// El webhook de Stripe necesita el body SIN parsear para poder verificar la
+// firma (stripe-signature). Tiene que ir ANTES de express.json() global, si
+// no, cuando llegue aquí el body ya estaría parseado como objeto y la
+// verificación de firma fallaría siempre.
+app.post('/api/coins/webhook', express.raw({ type: 'application/json' }), coinsRoutes.stripeWebhookHandler);
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -26,6 +34,7 @@ app.use('/api/videos', videoRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/ranking', rankingRoutes);
 app.use('/api/lives', livesRoutes);
+app.use('/api/coins', coinsRoutes);
 
 app.get('/api/health', (req, res) => res.json({
   status: 'ok',

@@ -139,54 +139,11 @@ router.get('/catalog/gifts', (req, res) => {
   });
 });
 
-// POST /api/lives/:id/gift — enviar regalo
+// POST /api/lives/:id/gift — DEPRECATED: el envío de regalos vive ahora en
+// POST /api/coins/gift (esta versión nunca restaba monedas al remitente).
+// Se deja un 410 explícito por si quedaba algún cliente antiguo apuntando aquí.
 router.post('/:id/gift', auth, async (req, res) => {
-  try {
-    const { giftType, quantity = 1 } = req.body;
-    const live = await Live.findById(req.params.id).populate('userId');
-    if (!live || live.status !== 'active') return res.status(404).json({ error: 'Live no encontrado' });
-
-    const catalog = Gift.CATALOG || {
-      domino: { coins: 5, points: 10 }, chain: { coins: 20, points: 50 },
-      star: { coins: 50, points: 100 }, rocket: { coins: 100, points: 200 },
-      crown: { coins: 500, points: 1000 }, diamond: { coins: 1000, points: 2500 }
-    };
-
-    if (!catalog[giftType]) return res.status(400).json({ error: 'Tipo de regalo inválido' });
-
-    const gift = await Gift.create({
-      fromUserId: req.user._id,
-      toUserId: live.userId._id,
-      liveId: live._id,
-      giftType,
-      coins: catalog[giftType].coins * quantity,
-      quantity
-    });
-
-    // Sumar puntos al streamer
-    const pointsEarned = catalog[giftType].points * quantity;
-    await User.findByIdAndUpdate(live.userId._id, { $inc: { impactPoints: pointsEarned } });
-    await Live.findByIdAndUpdate(live._id, { $inc: { totalGiftsReceived: quantity } });
-
-    // Si es batalla, sumar al marcador del host
-    if (live.isBattle) {
-      await Live.findByIdAndUpdate(live._id, { $inc: { 'battleScore.host': pointsEarned } });
-    }
-
-    // Notificación al streamer
-    await Notification.create({
-      userId: live.userId._id,
-      type: 'liked',
-      fromUserId: req.user._id,
-      videoId: null,
-      chainId: null,
-      message: `${req.user.username} te ha enviado ${quantity}x ${catalog[giftType]?.name || giftType} 🎁`
-    });
-
-    res.status(201).json({ ok: true, gift, pointsEarned });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  res.status(410).json({ error: 'Usa POST /api/coins/gift' });
 });
 
 module.exports = router;
