@@ -222,6 +222,9 @@ router.post('/', auth, async (req, res) => {
     if (remixOfVideoId && ['duet', 'stitch'].includes(remixType)) {
       const original = await Video.findById(remixOfVideoId).populate('userId', 'username');
       if (!original) return res.status(404).json({ error: 'El video original del dueto/stitch no existe' });
+      if (original.isPublic === false && original.userId._id.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ error: 'No puedes hacer un dueto/stitch sobre un video privado' });
+      }
       remixOf = { videoId: original._id, type: remixType, authorId: original.userId._id, authorUsername: original.userId.username };
     }
 

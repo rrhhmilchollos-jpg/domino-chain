@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Camera, Heart, MessageCircle, Bookmark, Share, Search, Volume2, VolumeX } from 'lucide-react';
+import { Camera, Heart, MessageCircle, Bookmark, Share, Search, Repeat2, Users2, Scissors, Volume2, VolumeX } from 'lucide-react';
 import { useApi, useAuth, CommentsPanel, Spinner, Av, cn, fmt, ago, API, DominoVideo, shareLink, Toast } from '../lib/shared';
 
 type Tab = 'forYou' | 'following';
@@ -25,6 +25,7 @@ export default function FeedPage() {
   // de verdad (isSaved), así que partimos de ese estado real, no de vacío.
   const doSave = async (id:string) => { if(!token)return; setSaved(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;}); await fetch(`${API}/api/videos/${id}/save`,{method:'POST',headers:{Authorization:`Bearer ${token}`}}); };
   const [toast, setToast] = useState<string|null>(null);
+  const [remixPickerId, setRemixPickerId] = useState<string|null>(null);
   const doShare = async (id:string) => {
     const url=`${window.location.origin}/video/${id}`;
     const result = await shareLink('DOMINO', url);
@@ -88,6 +89,18 @@ export default function FeedPage() {
             <button onClick={()=>setCommentId(v._id)} className="flex flex-col items-center gap-1"><div className="w-11 h-11 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}><MessageCircle size={24} className="text-white"/></div><span className="text-xs text-white font-semibold">Comentar</span></button>
             <button onClick={()=>doSave(v._id)} className="flex flex-col items-center gap-1"><div className="w-11 h-11 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}><Bookmark size={24} className={saved.has(v._id)?'fill-[#00F5FF] text-[#00F5FF]':'text-white'}/></div><span className="text-xs text-white font-semibold">{fmt(Math.max(0,(v.savesCount||0)+(saved.has(v._id)?1:0)-(v.isSaved?1:0)))}</span></button>
             <button onClick={()=>doShare(v._id)} className="flex flex-col items-center gap-1"><div className="w-11 h-11 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}><Share size={24} className="text-white"/></div><span className="text-xs text-white font-semibold">Compartir</span></button>
+            <div className="relative">
+              <button onClick={()=>setRemixPickerId(p=>p===v._id?null:v._id)} className="flex flex-col items-center gap-1"><div className="w-11 h-11 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}><Repeat2 size={24} className="text-white"/></div><span className="text-xs text-white font-semibold">Remix</span></button>
+              {remixPickerId===v._id&&(
+                <>
+                  <div className="fixed inset-0 z-20" onClick={()=>setRemixPickerId(null)}/>
+                  <div className="absolute z-30 rounded-xl overflow-hidden flex flex-col" style={{right:'56px',bottom:'0',background:'#13131f',border:'1px solid #2a2a3a',minWidth:'140px'}}>
+                    <Link href={`/remix/${v._id}?mode=duet`} onClick={()=>setRemixPickerId(null)} className="px-4 py-3 text-sm text-white flex items-center gap-2 hover:bg-white/5"><Users2 size={15} style={{color:'#00F5FF'}}/>Dueto</Link>
+                    <Link href={`/remix/${v._id}?mode=stitch`} onClick={()=>setRemixPickerId(null)} className="px-4 py-3 text-sm text-white flex items-center gap-2 hover:bg-white/5 border-t" style={{borderColor:'#2a2a3a'}}><Scissors size={15} style={{color:'#00F5FF'}}/>Stitch</Link>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
           {/* Barra de cadena abajo */}
           <div className="absolute z-10 left-4 right-4" style={{bottom:'60px'}}><div className="flex items-center gap-2"><div className="flex-1 h-0.5 rounded-full" style={{background:'rgba(255,255,255,0.2)'}}><div className="h-full rounded-full" style={{width:`${Math.min(100,(v.chainDepth+1)*10)}%`,background:'linear-gradient(90deg,#00F5FF,#FF007F)'}}/></div><span className="text-xs text-gray-400">⛓️ {v.chainDepth+1}</span></div></div>
