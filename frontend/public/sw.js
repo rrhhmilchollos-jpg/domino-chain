@@ -1,4 +1,4 @@
-const CACHE = 'domino-v1';
+const CACHE = 'domino-v2';
 const STATIC = ['/', '/index.html', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', e => {
