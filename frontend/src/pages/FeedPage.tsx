@@ -33,11 +33,11 @@ export default function FeedPage() {
           {v.videoUrl?<video ref={el=>{videoRefs.current[idx]=el;}} src={v.videoUrl} className="absolute inset-0 w-full h-full object-cover" loop playsInline muted={muted} onDoubleClick={()=>doLike(v._id)}/>:v.thumbnailUrl?<img src={v.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy"/>:<div className="absolute inset-0 flex items-center justify-center" style={{background:'#111'}}><Camera size={48} className="text-gray-600"/></div>}
           <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.85) 0%,rgba(0,0,0,0.1) 50%,transparent 100%)'}}/>
           {v.videoUrl&&<button onClick={()=>setMuted(m=>!m)} className="absolute top-12 right-3 z-10 p-2 rounded-full" style={{background:'rgba(0,0,0,0.45)'}}>{muted?<VolumeX size={16} className="text-white"/>:<Volume2 size={16} className="text-white"/>}</button>}
-          {/* Info usuario abajo izquierda */}
-          <div className="absolute z-10" style={{bottom:'72px',left:'12px',right:'80px'}}>
+          {/* Info usuario abajo izquierda — FIX: ahora es un link clicable al perfil público del usuario, igual que en TikTok */}
+          <Link href={`/user/${v.userId?._id}`} className="absolute z-10 block" style={{bottom:'72px',left:'12px',right:'80px'}}>
             <div className="flex items-center gap-2 mb-2"><Av u={v.userId} s={40}/><div><p className="text-white text-sm font-bold">@{v.userId?.username}</p><p className="text-gray-300 text-xs">{v.userId?.flag} {v.userId?.city}</p></div></div>
             <div className="flex items-center gap-2"><span className="text-xs rounded-full px-2 py-0.5 text-gray-300" style={{background:'rgba(0,0,0,0.4)',border:'1px solid rgba(255,255,255,0.1)'}}>⛓️ {v.chainDepth+1}</span><span className="text-xs text-gray-400">{ago(v.createdAt)}</span></div>
-          </div>
+          </Link>
           {/* Botones acción derecha */}
           <div className="absolute right-3 z-10 flex flex-col gap-5 items-center" style={{bottom:'72px'}}>
             <button onClick={()=>doLike(v._id)} className="flex flex-col items-center gap-1"><div className="w-11 h-11 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}><Heart size={24} className={liked.has(v._id)?'fill-red-500 text-red-500':'text-white'}/></div><span className="text-xs text-white font-semibold">{fmt((v.likes?.length||0)+(liked.has(v._id)?1:0))}</span></button>
