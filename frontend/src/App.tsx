@@ -5,7 +5,7 @@ import {
   Search, Activity, Heart, Share, RefreshCw, Users, Clock,
   CheckCircle, LogOut, Loader2, MessageCircle, Send, Video,
   Eye, Gift, Download, Upload, Settings, BookmarkPlus,
-  UserPlus, UserCheck, ChevronLeft, Hash, AtSign, MapPin,
+  UserPlus, UserCheck, ChevronLeft, ChevronRight, Hash, AtSign, MapPin,
   Lock, Grid, Bookmark, ThumbsUp, Plus, Mic, Image as ImageIcon
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -235,7 +235,7 @@ function TopNav() {
         {(loc==='/'||loc==='/feed') && (
           <div className="flex items-center gap-4">
             <button onClick={()=>setLocation('/')} className={cn('text-sm font-semibold pb-1',loc==='/'?'text-white border-b-2 border-white':'text-gray-500')}>Para ti</button>
-            <button onClick={()=>setLocation('/following')} className={cn('text-sm font-semibold pb-1',loc==='/following'?'text-white border-b-2 border-white':'text-gray-500')}>Siguiendo</button>
+            <button onClick={()=>setLocation('/following')} className={cn('text-sm font-semibold pb-1',(loc as string)==='/following'?'text-white border-b-2 border-white':'text-gray-500')}>Siguiendo</button>
           </div>
         )}
         <div className="flex items-center gap-2">
