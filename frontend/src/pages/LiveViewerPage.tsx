@@ -1,16 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { Eye, X, Gift, Send, Volume2, VolumeX, Share2 } from 'lucide-react';
+import { Eye, X, Gift, Send, Volume2, VolumeX, Share2, UserX } from 'lucide-react';
 import { Room, RoomEvent, Track } from 'livekit-client';
 import { cn, useAuth, useApi, Av, GIFT_CATALOG, API, uploadToCloudinary, LiveStream } from '../lib/shared';
 
-type ConnState = 'idle' | 'connecting' | 'connected' | 'error' | 'unavailable';
+// 'blocked': el streamer te ha expulsado de este directo — no se reintenta conexión
+type ConnState = 'idle' | 'connecting' | 'connected' | 'error' | 'unavailable' | 'blocked';
 type EndSummary = { totalUniqueViewers: number; peakViewerCount: number; totalGiftsReceived: number; durationSeconds: number; recordingUrl: string | null; liveId: string } | null;
+// Mensajes de chat ahora incluyen el userId real del remitente, necesario para poder bloquearlo (antes solo viajaba el username)
+type ChatMsg = { user: string; userId?: string; text: string; type?: string };
 
 export default function LiveViewerPage({ id }: { id: string }) {
   const { user, token, refreshUser } = useAuth();
   const { data: lives } = useApi('/api/lives', [id]);
-  const [msgs, setMsgs] = useState<{user:string;text:string;type?:string}[]>([{user:'Sistema',text:'¡Bienvenido! 🎲',type:'system'}]);
+  const [msgs, setMsgs] = useState<ChatMsg[]>([{user:'Sistema',text:'¡Bienvenido! 🎲',type:'system'}]);
   const [input, setInput] = useState('');
   const [showGifts, setShowGifts] = useState(false);
   const [giftAnim, setGiftAnim] = useState<string|null>(null);
@@ -24,10 +27,10 @@ export default function LiveViewerPage({ id }: { id: string }) {
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [blockingUserId, setBlockingUserId] = useState<string|null>(null); // evita doble-click mientras se procesa el bloqueo
   const chatRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const roomRef = useRef<Room | null>(null);
-  // Grabación local del live (solo para el host)
   const mrRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const localBlobRef = useRef<Blob | null>(null);
@@ -37,7 +40,6 @@ export default function LiveViewerPage({ id }: { id: string }) {
   useEffect(()=>{if(live)setViewers(live.viewerCount||0);},[live]);
   useEffect(()=>{if(chatRef.current)chatRef.current.scrollTop=chatRef.current.scrollHeight;},[msgs]);
 
-  // ===== Grabación local del stream del host usando MediaRecorder =====
   const startLocalRecording = (stream: MediaStream) => {
     if (!isOwner) return;
     chunksRef.current = [];
@@ -79,6 +81,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
       try {
         const r = await fetch(`${API}/api/lives/${live._id}/join`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
         const d = await r.json();
+        if (r.status === 403 && d.error === 'blocked') { if (!cancelled) setConnState('blocked'); return; }
         if (r.ok && d.token && d.livekitUrl) { lkToken = d.token; livekitUrl = d.livekitUrl; }
       } catch { }
 
@@ -93,7 +96,24 @@ export default function LiveViewerPage({ id }: { id: string }) {
           track.attach(videoRef.current);
         }
       });
-      room.on(RoomEvent.Disconnected, () => { if (!cancelled) setConnState('unavailable'); });
+      room.on(RoomEvent.Disconnected, () => {
+        if (cancelled) return;
+        // Puede ser una desconexión normal (red, fin del live) o una expulsión
+        // por bloqueo del host. Comprobamos con /join para diferenciarlas y
+        // mostrar el mensaje correcto en vez de confundir ambos casos.
+        if (!isOwner && token) {
+          fetch(`${API}/api/lives/${live._id}/join`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+            .then(r => r.json().then(d => ({ status: r.status, d })))
+            .then(({ status, d }) => {
+              if (cancelled) return;
+              if (status === 403 && d.error === 'blocked') setConnState('blocked');
+              else setConnState('unavailable');
+            })
+            .catch(() => { if (!cancelled) setConnState('unavailable'); });
+        } else {
+          setConnState('unavailable');
+        }
+      });
 
       const updateViewerCount = () => setViewers(Math.max(0, room.numParticipants - (isOwner ? 0 : 1)));
       room.on(RoomEvent.ParticipantConnected, updateViewerCount);
@@ -112,10 +132,8 @@ export default function LiveViewerPage({ id }: { id: string }) {
           if (camPub?.track && videoRef.current) camPub.track.attach(videoRef.current);
           await room.localParticipant.setMicrophoneEnabled(true);
 
-          // Capturar el stream local del host para grabarlo
           try {
             if (videoRef.current) {
-              // Crear stream combinando video del elemento y audio del micrófono
               const videoEl = videoRef.current as any;
               const captureStream: MediaStream = videoEl.captureStream ? videoEl.captureStream(30) : videoEl.mozCaptureStream?.();
               if (captureStream) startLocalRecording(captureStream);
@@ -139,7 +157,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
   }, [live?._id, isOwner]);
 
   const encoder = new TextEncoder();
-  const broadcast = (msg: {user:string;text:string;type?:string}) => {
+  const broadcast = (msg: ChatMsg) => {
     try { roomRef.current?.localParticipant.publishData(encoder.encode(JSON.stringify(msg)), { reliable: true }); } catch { }
   };
   const doShare = () => {
@@ -148,27 +166,42 @@ export default function LiveViewerPage({ id }: { id: string }) {
     else navigator.clipboard?.writeText(url);
   };
 
+  // El host bloquea a un espectador desde el chat: lo expulsa en tiempo real
+  // y le impide volver a entrar a este directo mientras siga activo.
+  const blockUser = async (targetUserId: string, targetUsername: string) => {
+    if (!token || !isOwner || blockingUserId) return;
+    if (!window.confirm(`¿Bloquear a @${targetUsername} de este directo?`)) return;
+    setBlockingUserId(targetUserId);
+    try {
+      const r = await fetch(`${API}/api/lives/${id}/block`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: targetUserId })
+      });
+      if (r.ok) {
+        const sysMsg: ChatMsg = { user: 'Sistema', text: `@${targetUsername} ha sido bloqueado de este directo`, type: 'system' };
+        setMsgs(m => [...m, sysMsg]);
+        broadcast(sysMsg);
+      }
+    } finally { setBlockingUserId(null); }
+  };
+
   const endLive = async () => {
     if (!token || !window.confirm('¿Terminar el directo para todos?')) return;
     setEnding(true);
     try {
-      // 1. Parar la grabación local y obtener el blob
       const blob = await stopLocalRecording();
-
-      // 2. Terminar el live en el backend
       const r = await fetch(`${API}/api/lives/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       const d = await r.json();
       roomRef.current?.disconnect();
 
       let recordingUrl: string | null = d.recordingUrl || null;
 
-      // 3. Si tenemos grabación local, subirla a Cloudinary
       if (blob && blob.size > 10000) {
         try {
           setPublishing(true);
           const result = await uploadToCloudinary(blob, (pct) => setUploadProgress(pct));
           recordingUrl = result.videoUrl;
-          // Guardar la URL en el backend
           await fetch(`${API}/api/lives/${d.liveId || id}/recording`, {
             method: 'PATCH',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -190,12 +223,10 @@ export default function LiveViewerPage({ id }: { id: string }) {
     if (!token || !endSummary) return;
     setPublishing(true);
     try {
-      // Si hay recordingUrl local, publicar directamente como video
       if (endSummary.recordingUrl) {
         const r = await fetch(`${API}/api/lives/${endSummary.liveId}/publish-as-video`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
         if (r.ok) { setPublished(true); return; }
       }
-      // Fallback: publicar el blob local si existe
       if (localBlobRef.current) {
         setUploadProgress(0);
         const result = await uploadToCloudinary(localBlobRef.current, pct => setUploadProgress(pct));
@@ -211,8 +242,8 @@ export default function LiveViewerPage({ id }: { id: string }) {
 
   const sendMsg=()=>{
     if(!input.trim()||!user)return;
-    const msg = {user:user.username,text:input};
-    setMsgs(m=>[...m,msg]); // eco local instantáneo para quien lo envía
+    const msg: ChatMsg = {user:user.username,userId:user._id,text:input};
+    setMsgs(m=>[...m,msg]);
     broadcast(msg);
     setInput('');
   };
@@ -224,7 +255,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
     try{
       const r=await fetch(`${API}/api/coins/gift`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({liveId:id,giftType:type,quantity:1})});
       const d=await r.json();
-      if(r.ok){setGiftAnim(`${g.emoji} ${g.name}`);setTimeout(()=>setGiftAnim(null),3000);const msg={user:user.username,text:`envió ${g.emoji} ${g.name}!`,type:'gift'};setMsgs(m=>[...m,msg]);broadcast(msg);await refreshUser();}
+      if(r.ok){setGiftAnim(`${g.emoji} ${g.name}`);setTimeout(()=>setGiftAnim(null),3000);const msg:ChatMsg={user:user.username,userId:user._id,text:`envió ${g.emoji} ${g.name}!`,type:'gift'};setMsgs(m=>[...m,msg]);broadcast(msg);await refreshUser();}
       else if(r.status===400){setInsufficientCoins(true);setTimeout(()=>setInsufficientCoins(false),3000);}
     }finally{setSending(false);setShowGifts(false);}
   };
@@ -267,10 +298,8 @@ export default function LiveViewerPage({ id }: { id: string }) {
         {connState!=='connected'&&(
           <div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><div className="text-center"><Av u={live.userId} s={120}/><p className="text-white font-bold mt-4 text-xl">@{live.userId?.username}</p><p className="text-gray-400 text-sm mt-1">{live.title}</p><div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full" style={{background:'rgba(255,0,127,0.2)',border:'1px solid #FF007F'}}><div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#FF007F'}}/><span className="text-white text-sm font-bold">EN DIRECTO</span></div><p className="text-gray-500 text-xs mt-2">{connState==='connecting'?'Conectando con el directo...':connState==='unavailable'?(isOwner?'El streaming todavía no está configurado en el servidor':'Esperando a que el streamer se conecte...'):'No se pudo conectar al directo'}</p></div></div>
         )}
-        {/* Degradado inferior para que el chat se lea bien sobre cualquier vídeo, igual que TikTok */}
         <div className="absolute inset-x-0 bottom-0 h-2/5 pointer-events-none" style={{background:'linear-gradient(to top,rgba(0,0,0,0.75) 0%,transparent 100%)'}}/>
 
-        {/* Identidad del streamer + LIVE + espectadores (siempre visible, también con el vídeo ya cargado) */}
         <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-10 gap-2">
           <div className="flex items-center gap-1.5 flex-wrap">
             <div className="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full" style={{background:'rgba(0,0,0,0.55)'}}><Av u={live.userId} s={24}/><span className="text-white text-xs font-bold">@{live.userId?.username}</span></div>
@@ -306,7 +335,6 @@ export default function LiveViewerPage({ id }: { id: string }) {
           </div>
         )}
 
-        {/* Chat + barra de comentario superpuestos abajo, sobre el vídeo — igual que TikTok */}
         <div className="absolute inset-x-0 bottom-0 z-10 pb-3">
           <div ref={chatRef} className="overflow-y-auto px-3 space-y-1.5 mb-2" style={{maxHeight:'32vh',WebkitMaskImage:'linear-gradient(to top, black 70%, transparent 100%)',maskImage:'linear-gradient(to top, black 70%, transparent 100%)'}}>
             {msgs.map((m,i)=>(
