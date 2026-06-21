@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
 import { Zap, Bell, ChevronRight, Camera, Heart, Grid3x3, Settings, Share2 } from 'lucide-react';
-import { cn, useAuth, useApi, Av, Spinner, fmt, ago, API, RankingEntry, Notification, DominoVideo } from '../lib/shared';
+import { cn, useAuth, useApi, Av, Spinner, fmt, ago, API, RankingEntry, Notification, DominoVideo, VisibilityToggle } from '../lib/shared';
 
 type Tab = 'videos' | 'liked';
 
 function VideoThumb({ v, isOwner }: { v: DominoVideo; isOwner?: boolean }) {
+  const [isPublic, setIsPublic] = useState(v.isPublic !== false); // default true si viene undefined (videos antiguos)
   return (
     <Link href={`/feed`} className="relative block rounded-md overflow-hidden" style={{aspectRatio:'9/16',background:'#13131f',border:'1px solid #1e1e2a'}}>
       {v.videoUrl?(
@@ -19,6 +20,8 @@ function VideoThumb({ v, isOwner }: { v: DominoVideo; isOwner?: boolean }) {
         </div>
       )}
       <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.75) 0%,transparent 45%)'}}/>
+      {/* Toggle público/privado — solo visible y editable en tus propios videos, igual que TikTok */}
+      {isOwner && <VisibilityToggle videoId={v._id} initialIsPublic={isPublic} onChanged={setIsPublic}/>}
       <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1"><Heart size={10} className="text-white fill-white"/><span className="text-[10px] text-white font-bold">{fmt(v.likes?.length||0)}</span></div>
       <div className="absolute top-1.5 right-1.5 text-[9px] text-gray-300" style={{textShadow:'0 1px 2px rgba(0,0,0,0.8)'}}>{ago(v.createdAt)}</div>
     </Link>
