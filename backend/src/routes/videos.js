@@ -373,6 +373,7 @@ router.post('/:id/comments', auth, async (req, res) => {
       parentCommentId: parentCommentId || null
     });
     await comment.populate('userId', 'username avatarUrl flag');
+    await Video.findByIdAndUpdate(req.params.id, { $inc: { commentsCount: 1 } });
     res.status(201).json(comment);
   } catch (e) {
     res.status(500).json({ error: e.message });
