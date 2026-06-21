@@ -1,4 +1,6 @@
-const CACHE = 'domino-v2';
+const CACHE = 'domino-v3'; // BUG ARREGLADO: este nombre nunca cambiaba entre despliegues, así que
+                            // la caché del dispositivo se quedaba con archivos viejos para siempre.
+                            // Subir este número fuerza a borrar la caché antigua de cada usuario.
 const STATIC = ['/', '/index.html', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -7,8 +9,10 @@ self.addEventListener('install', e => {
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))));
-  self.clients.claim();
+  e.waitUntil(
+    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener('fetch', e => {
@@ -25,15 +29,21 @@ self.addEventListener('fetch', e => {
     return;
   }
 
+  // BUG ARREGLADO: script/style/image/font usaban "primero caché" — una vez
+  // guardado un archivo, nunca se volvía a comprobar si había uno nuevo.
+  // Los bundles de Vite llevan hash en el nombre así que en teoría cambian
+  // de URL solos, pero en un WebView/APK no podemos fiarnos del todo de
+  // eso. Ahora es "red primero, caché solo si falla la red" — así un
+  // archivo nunca se queda obsoleto de forma permanente.
   if (['script', 'style', 'image', 'font'].includes(e.request.destination)) {
     e.respondWith(
-      caches.match(e.request).then(cached => cached || fetch(e.request).then(r => {
+      fetch(e.request).then(r => {
         if (r.ok) {
           const clone = r.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
         return r;
-      }))
+      }).catch(() => caches.match(e.request))
     );
   }
 });
