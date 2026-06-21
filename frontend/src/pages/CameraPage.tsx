@@ -40,24 +40,66 @@ export default function CameraPage() {
   const startCam=async()=>{
     try{
       let s:MediaStream;
-      try{s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}},audio:{echoCancellation:true,noiseSuppression:true}});}
-      catch{try{s=await navigator.mediaDevices.getUserMedia({video:true,audio:true});}catch{s=await navigator.mediaDevices.getUserMedia({video:true,audio:false});}}
-      streamRef.current=s;setCamOn(true);
-      setHasAudio(s.getAudioTracks().length>0);
+      // Primero pedimos SOLO audio para forzar el permiso del micrófono por separado
+      let audioStream:MediaStream|null=null;
+      try{
+        audioStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,sampleRate:44100}});
+      }catch{ /* sin audio */ }
+
+      try{
+        // Video con las mejores constraints posibles
+        const videoStream=await navigator.mediaDevices.getUserMedia({
+          video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}},
+          audio:false
+        });
+        // Combinar pistas de audio y video en un solo stream
+        const tracks=[...videoStream.getVideoTracks(),...(audioStream?.getAudioTracks()||[])];
+        s=new MediaStream(tracks);
+      }catch{
+        // Fallback: todo en una sola llamada
+        try{s=await navigator.mediaDevices.getUserMedia({video:true,audio:true});}
+        catch{s=await navigator.mediaDevices.getUserMedia({video:true,audio:false});}
+      }
+
+      streamRef.current=s;
+      const audioTracks=s.getAudioTracks();
+      setHasAudio(audioTracks.length>0);
+      if(audioTracks.length>0){
+        // Asegurar que el micrófono está activo
+        audioTracks.forEach(t=>{t.enabled=true;});
+      }
+      setCamOn(true);
       await new Promise(r=>setTimeout(r,100));
       if(videoRef.current){videoRef.current.srcObject=s;videoRef.current.muted=true;videoRef.current.playsInline=true;try{await videoRef.current.play();}catch{}}
-    }catch(err:any){setCamOn(false);if(err.name==='NotAllowedError')alert('❌ Permiso denegado.');else alert('❌ Error: '+err.message);}
+    }catch(err:any){setCamOn(false);if(err.name==='NotAllowedError')alert('❌ Permiso denegado. Ve a Ajustes del navegador y permite el acceso al micrófono y la cámara.');else alert('❌ Error: '+err.message);}
   };
 
   const stopRec=useCallback(()=>{if(timerRef.current)clearInterval(timerRef.current);if(mrRef.current&&mrRef.current.state!=='inactive')mrRef.current.stop();setRec(false);},[]);
 
   const startRec=()=>{
     if(!streamRef.current)return;chunksRef.current=[];
-    const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm;codecs=opus','video/webm'].find(t=>MediaRecorder.isTypeSupported(t))||'';
-    const mr=new MediaRecorder(streamRef.current,mime?{mimeType:mime}:{});
-    mr.ondataavailable=e=>{if(e.data.size>0)chunksRef.current.push(e.data);};
+
+    // Verificar que el stream tiene audio antes de grabar
+    const audioTracks=streamRef.current.getAudioTracks();
+    if(audioTracks.length>0) audioTracks.forEach(t=>{t.enabled=true;});
+
+    // Codecs en orden de preferencia — Android Chrome soporta mejor mp4/avc
+    const mimeOptions=[
+      'video/mp4;codecs=avc1,mp4a.40.2', // Android Chrome — mejor compatibilidad audio
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm;codecs=h264,opus',
+      'video/webm',
+      'video/mp4',
+    ];
+    const mime=mimeOptions.find(t=>{try{return MediaRecorder.isTypeSupported(t);}catch{return false;}})||'';
+
+    const mrOptions:MediaRecorderOptions=mime?{mimeType:mime,audioBitsPerSecond:128000,videoBitsPerSecond:2500000}:{};
+    const mr=new MediaRecorder(streamRef.current,mrOptions);
+    mr.ondataavailable=e=>{if(e.data&&e.data.size>0)chunksRef.current.push(e.data);};
     mr.onstop=()=>{
-      const b=new Blob(chunksRef.current,{type:'video/webm'});
+      const mimeType=mime||'video/webm';
+      const b=new Blob(chunksRef.current,{type:mimeType});
       setBlob(b);
       const url=URL.createObjectURL(b);
       setBlobUrl(url);
@@ -65,7 +107,8 @@ export default function CameraPage() {
       streamRef.current?.getTracks().forEach(t=>t.stop());
       setCamOn(false);
     };
-    mrRef.current=mr;mr.start();setRec(true);setSecs(15);
+    // timeslice de 250ms para capturar datos frecuentemente (mejor audio en Android)
+    mrRef.current=mr;mr.start(250);setRec(true);setSecs(15);
     timerRef.current=setInterval(()=>setSecs(t=>{if(t<=1){stopRec();return 0;}return t-1;}),1000);
   };
 
