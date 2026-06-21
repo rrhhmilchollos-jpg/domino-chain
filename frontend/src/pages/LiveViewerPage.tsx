@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
 import { Eye, X, Gift, Send, Volume2, VolumeX, Share2, UserX } from 'lucide-react';
 import { Room, RoomEvent, Track } from 'livekit-client';
-import { cn, useAuth, useApi, Av, GIFT_CATALOG, API, uploadToCloudinary, LiveStream } from '../lib/shared';
+import { cn, useAuth, useApi, Av, FollowButton, GIFT_CATALOG, API, uploadToCloudinary, LiveStream } from '../lib/shared';
 
 // 'blocked': el streamer te ha expulsado de este directo — no se reintenta conexión
 type ConnState = 'idle' | 'connecting' | 'connected' | 'error' | 'unavailable' | 'blocked';
@@ -42,6 +42,9 @@ export default function LiveViewerPage({ id }: { id: string }) {
   // isOpponent: solo true si la cuenta logueada es la que ACEPTÓ la invitación
   // a esta batalla concreta — nunca se inventa, sale de battleOpponentId real.
   const isOpponent = !!user && !!live && !!live.battleOpponentId && live.battleOpponentId._id === user._id;
+  // Estado real de "sigues a este streamer" — se pide aparte porque /api/lives
+  // no calcula isFollowing (es un dato de la relación entre cuentas, no del live).
+  const { data: hostProfile } = useApi(live?.userId?._id ? `/api/users/${live.userId._id}` : '/api/users/_', [live?.userId?._id]);
   useEffect(()=>{if(live)setViewers(live.viewerCount||0);},[live]);
   useEffect(()=>{if(chatRef.current)chatRef.current.scrollTop=chatRef.current.scrollHeight;},[msgs]);
 
@@ -327,6 +330,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
         <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-10 gap-2">
           <div className="flex items-center gap-1.5 flex-wrap">
             <div className="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full" style={{background:'rgba(0,0,0,0.55)'}}><Av u={live.userId} s={24}/><span className="text-white text-xs font-bold">@{live.userId?.username}</span></div>
+            {!isOwner&&<FollowButton userId={live.userId?._id} initialIsFollowing={!!hostProfile?.isFollowing} compact/>}
             <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE</div>
             <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs text-white" style={{background:'rgba(0,0,0,0.55)'}}><Eye size={10}/>{Math.max(0,viewers)}</div>
           </div>
