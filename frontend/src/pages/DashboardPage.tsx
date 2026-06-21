@@ -1,11 +1,12 @@
 import { Link } from 'wouter';
-import { Zap, Activity, Bell, ChevronRight } from 'lucide-react';
-import { cn, useAuth, useApi, Av, Spinner, fmt, ago, API, RankingEntry, Notification } from '../lib/shared';
+import { Zap, Activity, Bell, ChevronRight, Camera, Play } from 'lucide-react';
+import { cn, useAuth, useApi, Av, Spinner, fmt, ago, API, RankingEntry, Notification, DominoVideo } from '../lib/shared';
 
 export default function DashboardPage() {
   const { user, token } = useAuth();
   const { data: ranking } = useApi('/api/ranking');
   const { data: notifs, setData: setNotifs } = useApi('/api/notifications', [user?._id]);
+  const { data: myVideos } = useApi(user?._id ? `/api/videos/user/${user._id}` : '/api/videos/user/_', [user?._id]);
   const markRead=async(id:string)=>{if(!token)return;await fetch(`${API}/api/notifications/${id}/read`,{method:'PUT',headers:{Authorization:`Bearer ${token}`}});setNotifs((p:Notification[])=>Array.isArray(p)?p.map(n=>n._id===id?{...n,read:true}:n):p);};
   const unread=Array.isArray(notifs)?notifs.filter((n:Notification)=>!n.read).length:0;
   if(!user)return<div className="min-h-screen flex items-center justify-center" style={{paddingTop:'80px',background:'#0b0b12'}}><div className="text-center"><p className="text-gray-400 mb-4">Inicia sesión</p><Link href="/auth" className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Entrar</Link></div></div>;
@@ -17,6 +18,28 @@ export default function DashboardPage() {
           {[{icon:<Zap size={18}/>,value:fmt(user.impactPoints),label:'Puntos',color:'bg-yellow-500/20 text-yellow-400'},{icon:<Activity size={18}/>,value:`${user.currentStreak}d`,label:'Racha',color:'bg-cyan-500/20 text-cyan-400'},{icon:<span className="text-base">🪙</span>,value:(user.coins||0).toLocaleString(),label:'Monedas',color:'bg-yellow-500/20 text-yellow-300'},{icon:<Bell size={18}/>,value:String(unread),label:'Notificaciones',color:'bg-pink-500/20 text-pink-400'}].map((k,i)=><div key={i} className="rounded-xl p-4 border" style={{background:'#13131f',borderColor:'#1e1e2a'}}><div className={cn('p-2 rounded-lg w-fit mb-3',k.color)}>{k.icon}</div><div className="text-2xl font-bold text-white">{k.value}</div><div className="text-xs text-gray-400 mt-1">{k.label}</div></div>)}
         </div>
         <div className="mb-4"><Link href="/coins" className="flex items-center justify-between p-4 rounded-xl border hover:border-[#00F5FF] transition-all" style={{background:'#13131f',borderColor:'#1e1e2a'}}><div className="flex items-center gap-3"><span className="text-2xl">🪙</span><div><p className="text-white font-bold">Comprar Monedas</p><p className="text-xs text-gray-400">Envía regalos en los directos</p></div></div><ChevronRight size={18} className="text-gray-400"/></Link></div>
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4"><h2 className="font-bold text-white">Mis Videos {Array.isArray(myVideos)&&myVideos.length>0&&<span className="text-gray-500 font-normal">({myVideos.length})</span>}</h2><Link href="/camera" className="text-xs font-semibold flex items-center gap-1" style={{color:'#00F5FF'}}><Camera size={12}/>Grabar nuevo</Link></div>
+          {!myVideos?(
+            <div className="text-center py-8"><Spinner/></div>
+          ):myVideos.length===0?(
+            <div className="rounded-2xl p-8 border text-center" style={{background:'#13131f',borderColor:'#1e1e2a'}}>
+              <div className="text-4xl mb-2">🎲</div>
+              <p className="text-gray-400 text-sm mb-4">Todavía no has publicado ningún dominó</p>
+              <Link href="/camera" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-black text-sm" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}><Camera size={16}/>Grabar mi primer reto</Link>
+            </div>
+          ):(
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+              {myVideos.map((v:DominoVideo)=>(
+                <div key={v._id} className="relative rounded-xl overflow-hidden" style={{aspectRatio:'9/16',background:'#13131f',border:'1px solid #1e1e2a'}}>
+                  {v.videoUrl?<video src={v.videoUrl} className="absolute inset-0 w-full h-full object-cover" muted playsInline preload="metadata"/>:v.thumbnailUrl?<img src={v.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy"/>:<div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-center px-2"><Camera size={20} className="text-gray-600"/><span className="text-[10px] text-gray-500">Sin archivo de video — vuelve a publicarlo</span></div>}
+                  <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.7) 0%,transparent 50%)'}}/>
+                  <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between"><span className="text-[10px] text-white font-bold flex items-center gap-0.5"><Play size={9}/>{v.likes?.length||0}</span><span className="text-[10px] text-gray-300">{ago(v.createdAt)}</span></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 rounded-2xl p-5 border" style={{background:'#13131f',borderColor:'#1e1e2a'}}>
             <h2 className="font-bold text-white mb-4">Ranking Global</h2>

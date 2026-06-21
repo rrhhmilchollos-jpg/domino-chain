@@ -15,6 +15,7 @@ export default function CameraPage() {
   const streamRef = useRef<MediaStream|null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval>|null>(null);
   const [camOn, setCamOn] = useState(false);
+  const [hasAudio, setHasAudio] = useState(true);
   const [rec, setRec] = useState(false);
   const [secs, setSecs] = useState(15);
   const [done, setDone] = useState(false);
@@ -38,9 +39,10 @@ export default function CameraPage() {
   const startCam=async()=>{
     try{
       let s:MediaStream;
-      try{s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}},audio:true});}
+      try{s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}},audio:{echoCancellation:true,noiseSuppression:true}});}
       catch{try{s=await navigator.mediaDevices.getUserMedia({video:true,audio:true});}catch{s=await navigator.mediaDevices.getUserMedia({video:true,audio:false});}}
       streamRef.current=s;setCamOn(true);
+      setHasAudio(s.getAudioTracks().length>0);
       await new Promise(r=>setTimeout(r,100));
       if(videoRef.current){videoRef.current.srcObject=s;videoRef.current.muted=true;videoRef.current.playsInline=true;try{await videoRef.current.play();}catch{}}
     }catch(err:any){setCamOn(false);if(err.name==='NotAllowedError')alert('❌ Permiso denegado.');else alert('❌ Error: '+err.message);}
@@ -50,7 +52,7 @@ export default function CameraPage() {
 
   const startRec=()=>{
     if(!streamRef.current)return;chunksRef.current=[];
-    const mime=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':MediaRecorder.isTypeSupported('video/webm')?'video/webm':'';
+    const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm;codecs=opus','video/webm'].find(t=>MediaRecorder.isTypeSupported(t))||'';
     const mr=new MediaRecorder(streamRef.current,mime?{mimeType:mime}:{});
     mr.ondataavailable=e=>{if(e.data.size>0)chunksRef.current.push(e.data);};
     mr.onstop=()=>{
@@ -82,7 +84,11 @@ export default function CameraPage() {
       try{
         const result=await uploadToCloudinary(blob,(pct)=>setUploadProgress(pct));
         videoUrl=result.videoUrl;thumbnailUrl=result.thumbnailUrl;
-      }catch(e){console.warn('Cloudinary upload failed, publishing without video URL');setUploading(false);}
+      }catch(e){
+        setUploading(false);setPublishing(false);
+        alert('No se pudo subir el video. Revisa tu conexión e inténtalo de nuevo. Si el problema persiste, contacta con soporte.');
+        return;
+      }
       setUploading(false);
       // Publicar en backend
       const r=await fetch(`${API}/api/videos`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({challengeId:challenge._id,videoUrl,thumbnailUrl,geoCoordinates:geo,nominatedUserIds:ids})});
@@ -113,6 +119,10 @@ export default function CameraPage() {
 
       <div className="relative h-screen max-h-screen overflow-hidden">
         <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay muted playsInline style={{display:camOn?'block':'none'}}/>
+
+        {camOn&&!hasAudio&&(
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded-full text-xs font-bold text-white flex items-center gap-1.5" style={{background:'rgba(255,0,127,0.85)'}}>🔇 Grabando sin audio — revisa el permiso del micrófono</div>
+        )}
 
         {/* Preview del video grabado */}
         {done&&blobUrl&&!camOn&&(

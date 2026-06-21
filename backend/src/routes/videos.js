@@ -33,6 +33,18 @@ router.get('/chain/:rootId', async (req, res) => {
   }
 });
 
+// GET /api/videos/user/:userId — videos publicados por un usuario (para su dashboard/perfil)
+router.get('/user/:userId', async (req, res) => {
+  try {
+    const videos = await Video.find({ userId: req.params.userId, isPublished: true })
+      .populate('userId', 'username avatarUrl country city flag')
+      .sort({ createdAt: -1 });
+    res.json(videos);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/videos/:id
 router.get('/:id', async (req, res) => {
   try {
