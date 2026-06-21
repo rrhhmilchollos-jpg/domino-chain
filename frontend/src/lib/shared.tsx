@@ -34,9 +34,10 @@ const AuthContext = React.createContext<{
   user: AppUser | null; token: string | null;
   login: (e: string, p: string) => Promise<void>;
   register: (d: any) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   logout: () => void; loading: boolean;
   refreshUser: () => Promise<void>;
-}>({ user: null, token: null, login: async()=>{}, register: async()=>{}, logout:()=>{}, loading: true, refreshUser: async()=>{} });
+}>({ user: null, token: null, login: async()=>{}, register: async()=>{}, loginWithGoogle: async()=>{}, logout:()=>{}, loading: true, refreshUser: async()=>{} });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
@@ -64,10 +65,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const d = await r.json(); if (!r.ok) throw new Error(d.error||'Error');
     localStorage.setItem('domino_token', d.token); setToken(d.token); setUser(d.user);
   };
+  const loginWithGoogle = async (credential: string) => {
+    const r = await fetch(`${API}/api/auth/google`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({credential}) });
+    const d = await r.json(); if (!r.ok) throw new Error(d.error||'Error');
+    localStorage.setItem('domino_token', d.token); setToken(d.token); setUser(d.user);
+  };
   const logout = () => { localStorage.removeItem('domino_token'); setToken(null); setUser(null); };
   const refreshUser = async () => { if (token) await fetchUser(token); };
 
-  return <AuthContext.Provider value={{user,token,login,register,logout,loading,refreshUser}}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{user,token,login,register,loginWithGoogle,logout,loading,refreshUser}}>{children}</AuthContext.Provider>;
 }
 export function useAuth() { return React.useContext(AuthContext); }
 
@@ -148,7 +154,57 @@ export function saveVideoToGallery(blob: Blob) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// ===================== NAVBAR =====================
+// ===================== GOOGLE SIGN-IN =====================
+declare global {
+  interface Window { google?: any; }
+}
+
+let gisScriptPromise: Promise<void> | null = null;
+function loadGoogleScript(): Promise<void> {
+  if (gisScriptPromise) return gisScriptPromise;
+  gisScriptPromise = new Promise((resolve, reject) => {
+    if (window.google?.accounts?.id) return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.async = true; s.defer = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('No se pudo cargar Google Sign-In'));
+    document.head.appendChild(s);
+  });
+  return gisScriptPromise;
+}
+
+/** Botón oficial "Continuar con Google". No hace nada si VITE_GOOGLE_CLIENT_ID no está configurado. */
+export function GoogleSignInButton({ onError, onSuccess }: { onError?: (msg: string) => void; onSuccess?: () => void }) {
+  const { loginWithGoogle } = useAuth();
+  const btnRef = useRef<HTMLDivElement>(null);
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
+  useEffect(() => {
+    if (!clientId || !btnRef.current) return;
+    let cancelled = false;
+    loadGoogleScript().then(() => {
+      if (cancelled || !window.google || !btnRef.current) return;
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (resp: { credential: string }) => {
+          try { await loginWithGoogle(resp.credential); onSuccess?.(); }
+          catch (e: any) { onError?.(e.message || 'No se pudo iniciar sesión con Google'); }
+        },
+      });
+      window.google.accounts.id.renderButton(btnRef.current, {
+        theme: 'filled_black', size: 'large', shape: 'pill', width: 320, text: 'continue_with',
+      });
+    }).catch(() => onError?.('No se pudo cargar Google Sign-In'));
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
+  if (!clientId) return null; // no configurado: no mostramos un botón roto
+  return <div ref={btnRef} className="flex justify-center"/>;
+}
+
+
 export function Navbar() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);

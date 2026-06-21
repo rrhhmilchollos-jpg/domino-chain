@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { cn, useAuth, DominoLogo, Spinner } from '../lib/shared';
+import { cn, useAuth, DominoLogo, Spinner, GoogleSignInButton } from '../lib/shared';
 
 export default function AuthPage() {
   const { login, register } = useAuth();
@@ -24,6 +24,8 @@ export default function AuthPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8"><DominoLogo size={40}/><h1 className="text-4xl font-black mt-4" style={{fontFamily:'Syne,sans-serif',color:'#00F5FF',textShadow:'0 0 12px #00F5FF'}}>DOMINO</h1><p className="text-gray-400 text-sm mt-1">The Real-World Chain Reaction</p></div>
         <div className="rounded-2xl p-6 space-y-4" style={{background:'#13131f',border:'1px solid #1e1e2a'}}>
+          <GoogleSignInButton onError={setError} onSuccess={()=>setLocation('/feed')}/>
+          <div className="flex items-center gap-3"><div className="flex-1 h-px" style={{background:'#2a2a3a'}}/><span className="text-xs text-gray-500">o con email</span><div className="flex-1 h-px" style={{background:'#2a2a3a'}}/></div>
           <div className="flex gap-1 rounded-xl p-1" style={{background:'#0b0b12'}}>{(['login','register'] as const).map(m=><button key={m} onClick={()=>{setMode(m);setError('');}} className={cn('flex-1 py-2 rounded-lg text-sm font-semibold transition-all',mode===m?'text-[#0b0b12]':'text-gray-400')} style={mode===m?{background:'#00F5FF'}:{}}>{m==='login'?'Entrar':'Registrarse'}</button>)}</div>
           {mode==='register'&&<input placeholder="@username" value={form.username} onChange={set('username')} className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/>}
           <input placeholder="Email" type="email" value={form.email} onChange={set('email')} className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/>
