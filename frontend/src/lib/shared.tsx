@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation } from 'wouter';
 import { Home, Play, Video, Map, BarChart2, Camera, Bell, Menu, LogOut, Loader2, X, Send } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -343,7 +344,10 @@ export async function shareLink(title: string, url: string, text?: string): Prom
 
 export function Toast({ message }: { message: string | null }) {
   if (!message) return null;
-  return <div className="fixed left-1/2 z-[70] px-4 py-2 rounded-full text-sm font-semibold text-white pointer-events-none" style={{bottom:'90px',transform:'translateX(-50%)',background:'rgba(0,0,0,0.85)'}}>{message}</div>;
+  return createPortal(
+    <div className="fixed left-1/2 z-[70] px-4 py-2 rounded-full text-sm font-semibold text-white pointer-events-none" style={{bottom:'90px',transform:'translateX(-50%)',background:'rgba(0,0,0,0.85)'}}>{message}</div>,
+    document.body
+  );
 }
 
 // ===================== COMMENTS PANEL =====================
@@ -361,19 +365,24 @@ export function CommentsPanel({ videoId, onClose }: { videoId: string; onClose: 
       if (r.ok) { setData((p:Comment[])=>[c,...(Array.isArray(p)?p:[])]); setText(''); }
     } finally { setSending(false); }
   };
-  return (
+  return createPortal(
     <>
       {/* Fondo oscurecido al estilo TikTok — además, tocar fuera cierra el panel */}
       <div className="fixed inset-0 z-[55]" style={{background:'rgba(0,0,0,0.5)'}} onClick={onClose}/>
-      {/* BUG ARREGLADO (1): este panel tenía el mismo z-50 que el BottomNav de
-          la app, y al pintarse el BottomNav después en el DOM, tapaba
-          físicamente la caja de texto de abajo. Ahora va en una capa
-          claramente superior (z-[60]).
-          BUG ARREGLADO (2): en apps empaquetadas como WebView/APK, el
-          teclado virtual no siempre reduce el viewport visual, así que el
-          input se quedaba tapado por el propio teclado al escribir aunque
-          el panel estuviera bien posicionado. translateY con kbOffset
-          empuja todo el panel hacia arriba la altura exacta del teclado. */}
+      {/* BUG ARREGLADO (1): z-50 igual que el BottomNav, el BottomNav se
+          pintaba después y tapaba la caja de texto.
+          BUG ARREGLADO (2): teclado virtual en WebView/APK tapaba el input.
+          BUG ARREGLADO (3) — el de verdad: aunque subiera el z-index a 60,
+          este panel vivía DENTRO del contenedor "fixed" del feed, y ese
+          contenedor crea su PROPIO contexto de apilamiento (cualquier
+          position:fixed lo hace). Eso significa que el z-index de aquí
+          dentro nunca llegaba a compararse con el z-50 del BottomNav, que
+          vive fuera, como hermano en App.tsx — el feed entero (con todo lo
+          que tuviera dentro, sin importar su z-index) siempre quedaba por
+          debajo del menú. Por eso seguía tapado pasara lo que pasara con
+          el número. La solución real es renderizar este panel con un
+          portal directamente en <body>, fuera de ese contenedor, para que
+          su z-index compita de verdad contra el del menú inferior. */}
       <div className="fixed inset-x-0 bottom-0 z-[60] rounded-t-2xl flex flex-col" style={{background:'#13131f',border:'1px solid #1e1e2a',maxHeight:'70vh',transform:kbOffset?`translateY(-${kbOffset}px)`:undefined,transition:'transform 0.15s ease-out'}}>
         <div className="flex items-center justify-between p-4 border-b" style={{borderColor:'#1e1e2a'}}><h3 className="font-bold text-white">Comentarios</h3><button onClick={onClose}><X size={18} className="text-gray-400"/></button></div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -398,7 +407,8 @@ export function CommentsPanel({ videoId, onClose }: { videoId: string; onClose: 
           </div>
         )}
       </div>
-    </>
+    </>,
+    document.body
   );
 }
 
