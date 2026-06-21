@@ -64,6 +64,7 @@ export default function CameraPage() {
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState(FILTERS[0]);
   const [durationMsg, setDurationMsg] = useState<string|null>(null);
+  const [mixWarning, setMixWarning] = useState<string|null>(null);
   const rafRef = useRef<number|null>(null);
 
   useEffect(()=>{
@@ -191,6 +192,13 @@ export default function CameraPage() {
         const Ctx=window.AudioContext||(window as any).webkitAudioContext;
         const ctx=new Ctx();
         audioCtxRef.current=ctx;
+        // BUG ARREGLADO: en bastantes navegadores/WebView (sobre todo Android)
+        // un AudioContext nuevo arranca en estado 'suspended' hasta que se
+        // reanuda explícitamente — si no se hace, NADA de lo que pase por él
+        // suena, ni la música ni el propio micrófono, aunque el código no
+        // lance ningún error (por eso el video se publicaba sin audio).
+        if(ctx.state==='suspended') await ctx.resume();
+
         const dest=ctx.createMediaStreamDestination();
         if(audioTracks.length>0){
           const micSource=ctx.createMediaStreamSource(new MediaStream([audioTracks[0]]));
@@ -199,15 +207,18 @@ export default function CameraPage() {
         const audioEl=new Audio();
         audioEl.crossOrigin='anonymous';
         audioEl.src=selectedSound.audioUrl;
-        audioEl.currentTime=0;
         soundElRef.current=audioEl;
-        await audioEl.play().catch(()=>{});
+        // Conectamos el grafo ANTES de reproducir (más fiable que al revés)
         const musicSource=ctx.createMediaElementSource(audioEl);
         musicSource.connect(dest);
         musicSource.connect(ctx.destination);
+        audioEl.currentTime=0;
+        await audioEl.play().catch(e=>console.error('No se pudo reproducir la música elegida',e));
         audioOutTracks=dest.stream.getAudioTracks();
       }catch(e){
         console.error('No se pudo mezclar la música, se graba sin ella',e);
+        setMixWarning('No se pudo añadir la música — se grabó solo con tu micrófono');
+        setTimeout(()=>setMixWarning(null),4000);
       }
     }
 
@@ -431,6 +442,7 @@ export default function CameraPage() {
               <div className="w-full px-6 space-y-3">
                 {/* Estado guardado */}
                 {savedToGallery&&<div className="text-center py-2 rounded-xl font-bold text-white text-sm" style={{background:'rgba(0,245,255,0.2)',border:'1px solid #00F5FF'}}>✅ Guardado en tu dispositivo</div>}
+                {mixWarning&&<div className="text-center py-2 rounded-xl font-bold text-white text-sm" style={{background:'rgba(255,0,127,0.25)',border:'1px solid #FF007F'}}>⚠️ {mixWarning}</div>}
 
                 {/* Info del video */}
                 <div className="px-4 py-2 rounded-xl text-center" style={{background:'rgba(0,0,0,0.7)'}}>
