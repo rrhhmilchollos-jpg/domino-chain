@@ -171,32 +171,47 @@ function AuthPage() {
   );
 }
 
-// ===================== BOTTOM NAVBAR (TikTok style) =====================
+// ===================== BOTTOM NAVBAR — Clon exacto TikTok =====================
 function BottomNav() {
   const [loc, setLocation] = useLocation();
   const { user } = useAuth();
   const { data: nd } = useApi('/api/notifications', [user?._id]);
   const unread = Array.isArray(nd)?nd.filter((n:Notification)=>!n.read).length:0;
 
+  if (loc==='/create'||loc==='/camera'||loc==='/auth') return null;
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t" style={{background:'rgba(11,11,18,0.97)',backdropFilter:'blur(20px)',borderColor:'#1e1e2a'}}>
-      <div className="flex items-center justify-around h-14 max-w-lg mx-auto px-2">
-        <button onClick={()=>setLocation('/')} className={cn('flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition-all',loc==='/'?'text-white':'text-gray-500')}>
-          <Home size={22} className={loc==='/'?'fill-white':''}/><span className="text-[10px] font-medium">Inicio</span>
+      <div className="flex items-center justify-around h-14 max-w-lg mx-auto">
+        <button onClick={()=>setLocation('/')} className="flex flex-col items-center gap-0.5 px-4 py-1">
+          <Home size={24} className={loc==='/'?'text-white':' text-gray-500'}/>
+          <span className={cn('text-[10px] font-medium',loc==='/'?'text-white':'text-gray-500')}>Inicio</span>
         </button>
-        <button onClick={()=>setLocation('/live')} className={cn('flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl',loc.startsWith('/live')?'text-white':'text-gray-500')}>
-          <Video size={22}/><span className="text-[10px] font-medium">En Vivo</span>
+        <button onClick={()=>setLocation('/search')} className="flex flex-col items-center gap-0.5 px-4 py-1">
+          <Users size={24} className={loc==='/search'?'text-white':'text-gray-500'}/>
+          <span className={cn('text-[10px] font-medium',loc==='/search'?'text-white':'text-gray-500')}>Amigos</span>
         </button>
-        {/* Botón crear central */}
-        <button onClick={()=>setLocation('/create')} className="relative flex items-center justify-center w-12 h-8 rounded-xl" style={{background:'linear-gradient(135deg,#00F5FF,#FF007F)'}}>
-          <Plus size={22} className="text-white font-black"/>
+        <button onClick={()=>setLocation('/create')} className="flex items-center justify-center px-2 py-1">
+          <div className="relative flex items-center justify-center h-8 rounded-lg overflow-hidden" style={{width:'46px'}}>
+            <div className="absolute left-0 top-0 bottom-0 w-3 rounded-l-lg" style={{background:'#00F5FF'}}/>
+            <div className="absolute right-0 top-0 bottom-0 w-3 rounded-r-lg" style={{background:'#FF007F'}}/>
+            <div className="relative z-10 flex items-center justify-center w-8 h-full rounded-md" style={{background:'white'}}>
+              <Plus size={20} className="text-black" strokeWidth={3}/>
+            </div>
+          </div>
         </button>
-        <button onClick={()=>setLocation('/notifications')} className={cn('relative flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl',loc==='/notifications'?'text-white':'text-gray-500')}>
-          <Bell size={22}/>{unread>0&&<span className="absolute top-0 right-1 w-4 h-4 rounded-full text-[9px] font-bold text-black flex items-center justify-center" style={{background:'#FF007F'}}>{unread}</span>}
-          <span className="text-[10px] font-medium">Avisos</span>
+        <button onClick={()=>setLocation('/messages')} className="relative flex flex-col items-center gap-0.5 px-4 py-1">
+          <MessageCircle size={24} className={loc==='/messages'?'text-white':'text-gray-500'}/>
+          {unread>0&&<span className="absolute top-0 right-2 w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center" style={{background:'#FF007F'}}>{unread}</span>}
+          <span className={cn('text-[10px] font-medium',loc==='/messages'?'text-white':'text-gray-500')}>Mensajes</span>
         </button>
-        <button onClick={()=>user?setLocation('/profile'):setLocation('/auth')} className={cn('flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl',loc==='/profile'?'text-white':'text-gray-500')}>
-          {user?<Av u={user} s={24}/>:<BarChart2 size={22}/>}<span className="text-[10px] font-medium">Perfil</span>
+        <button onClick={()=>user?setLocation('/profile'):setLocation('/auth')} className="flex flex-col items-center gap-0.5 px-4 py-1">
+          {user ? (
+            <div className={cn('rounded-full overflow-hidden',loc==='/profile'?'ring-2 ring-white':'')} style={{width:24,height:24}}>
+              {user.avatarUrl?<img src={user.avatarUrl} alt="" className="w-full h-full object-cover"/>:<div className="w-full h-full flex items-center justify-center text-white font-bold text-xs" style={{background:'#7c3aed'}}>{user.username?.[0]?.toUpperCase()}</div>}
+            </div>
+          ) : <BarChart2 size={24} className="text-gray-500"/>}
+          <span className={cn('text-[10px] font-medium',loc==='/profile'?'text-white':'text-gray-500')}>Perfil</span>
         </button>
       </div>
     </nav>
