@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Camera, X, Search, CheckCircle, Download, Upload, RefreshCw, Play, Map } from 'lucide-react';
+import { Camera, X, Search, CheckCircle, Download, Upload, RefreshCw, Play, Map, Volume2, VolumeX } from 'lucide-react';
 import { cn, useAuth, useApi, Spinner, Av, DominoLogo, uploadToCloudinary, saveVideoToGallery, API, RankingEntry } from '../lib/shared';
 
 export default function CameraPage() {
@@ -27,6 +27,7 @@ export default function CameraPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [savedToGallery, setSavedToGallery] = useState(false);
+  const [previewMuted, setPreviewMuted] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [geo, setGeo] = useState({lat:40.4168,lng:-3.7038});
@@ -126,7 +127,10 @@ export default function CameraPage() {
 
         {/* Preview del video grabado */}
         {done&&blobUrl&&!camOn&&(
-          <video ref={previewRef} src={blobUrl} className="absolute inset-0 w-full h-full object-cover" loop playsInline autoPlay muted controls={false}/>
+          <>
+            <video ref={previewRef} src={blobUrl} className="absolute inset-0 w-full h-full object-cover" loop playsInline autoPlay muted={previewMuted} controls={false}/>
+            <button onClick={()=>{const next=!previewMuted;setPreviewMuted(next);if(!next)previewRef.current?.play().catch(()=>{});}} className="absolute top-16 right-4 z-10 p-2.5 rounded-full" style={{background:'rgba(0,0,0,0.55)'}}>{previewMuted?<VolumeX size={18} className="text-white"/>:<Volume2 size={18} className="text-white"/>}</button>
+          </>
         )}
 
         {!camOn&&!done&&(
