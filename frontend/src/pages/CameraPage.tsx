@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Camera, X, Search, CheckCircle, Download, Upload, RefreshCw, Play, Map, Volume2, VolumeX } from 'lucide-react';
-import { cn, useAuth, useApi, Spinner, Av, DominoLogo, uploadToCloudinary, saveVideoToGallery, API, CLOUDINARY_PRESET, RankingEntry } from '../lib/shared';
+import { Camera, X, Search, CheckCircle, Download, Upload, RefreshCw, Play, Map, Volume2, VolumeX, Music2 } from 'lucide-react';
+import { cn, useAuth, useApi, Spinner, Av, DominoLogo, uploadToCloudinary, saveVideoToGallery, API, CLOUDINARY_PRESET, RankingEntry, SoundPicker, Sound } from '../lib/shared';
 
 export default function CameraPage() {
   const { user, token } = useAuth();
@@ -32,10 +32,21 @@ export default function CameraPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [caption, setCaption] = useState('');
   const [geo, setGeo] = useState({lat:40.4168,lng:-3.7038});
+  // Música — sonido elegido del catálogo CC0, mezclado con el micrófono al grabar
+  const [showSoundPicker, setShowSoundPicker] = useState(false);
+  const [selectedSound, setSelectedSound] = useState<Sound|null>(null);
+  const audioCtxRef = useRef<AudioContext|null>(null);
+  const soundElRef = useRef<HTMLAudioElement|null>(null);
 
   useEffect(()=>{
     navigator.geolocation?.getCurrentPosition(p=>setGeo({lat:p.coords.latitude,lng:p.coords.longitude}));
-    return()=>{streamRef.current?.getTracks().forEach(t=>t.stop());if(blobUrl)URL.revokeObjectURL(blobUrl);};
+    // Si se viene desde el feed con "Usar este sonido" (?soundId=...), lo
+    // precargamos automáticamente — mismo patrón que ?q= en SearchPage.
+    const soundId=new URLSearchParams(window.location.search).get('soundId');
+    if(soundId){
+      fetch(`${API}/api/sounds/${soundId}`).then(r=>r.ok?r.json():null).then(s=>{if(s)setSelectedSound(s);}).catch(()=>{});
+    }
+    return()=>{streamRef.current?.getTracks().forEach(t=>t.stop());if(blobUrl)URL.revokeObjectURL(blobUrl);soundElRef.current?.pause();audioCtxRef.current?.close().catch(()=>{});};
   },[]);
 
   const startCam=async()=>{
@@ -77,12 +88,49 @@ export default function CameraPage() {
 
   const stopRec=useCallback(()=>{if(timerRef.current)clearInterval(timerRef.current);if(mrRef.current&&mrRef.current.state!=='inactive')mrRef.current.stop();setRec(false);},[]);
 
-  const startRec=()=>{
+  const startRec=async()=>{
     if(!streamRef.current)return;chunksRef.current=[];
 
     // Verificar que el stream tiene audio antes de grabar
     const audioTracks=streamRef.current.getAudioTracks();
     if(audioTracks.length>0) audioTracks.forEach(t=>{t.enabled=true;});
+
+    // Si hay música elegida, mezclamos micrófono + sonido en un único stream
+    // de audio usando Web Audio API, y construimos un stream nuevo para
+    // MediaRecorder con el video de la cámara + ese audio ya mezclado.
+    // También conectamos la música al altavoz (ctx.destination) para que
+    // el usuario la oiga en directo mientras graba y pueda seguirla — el
+    // micrófono NO se conecta al altavoz para evitar eco.
+    let recordStream:MediaStream=streamRef.current;
+    if(selectedSound){
+      try{
+        const Ctx=window.AudioContext||(window as any).webkitAudioContext;
+        const ctx=new Ctx();
+        audioCtxRef.current=ctx;
+        const dest=ctx.createMediaStreamDestination();
+
+        if(audioTracks.length>0){
+          const micSource=ctx.createMediaStreamSource(new MediaStream([audioTracks[0]]));
+          micSource.connect(dest);
+        }
+
+        const audioEl=new Audio();
+        audioEl.crossOrigin='anonymous';
+        audioEl.src=selectedSound.audioUrl;
+        audioEl.currentTime=0;
+        soundElRef.current=audioEl;
+        await audioEl.play().catch(()=>{});
+        const musicSource=ctx.createMediaElementSource(audioEl);
+        musicSource.connect(dest);
+        musicSource.connect(ctx.destination); // para que se oiga en directo mientras se graba
+
+        const videoTrack=streamRef.current.getVideoTracks()[0];
+        recordStream=new MediaStream([videoTrack,...dest.stream.getAudioTracks()]);
+      }catch(e){
+        console.error('No se pudo mezclar la música, se graba sin ella',e);
+        recordStream=streamRef.current;
+      }
+    }
 
     // Codecs en orden de preferencia — Android Chrome soporta mejor mp4/avc
     const mimeOptions=[
@@ -96,7 +144,7 @@ export default function CameraPage() {
     const mime=mimeOptions.find(t=>{try{return MediaRecorder.isTypeSupported(t);}catch{return false;}})||'';
 
     const mrOptions:MediaRecorderOptions=mime?{mimeType:mime,audioBitsPerSecond:128000,videoBitsPerSecond:2500000}:{};
-    const mr=new MediaRecorder(streamRef.current,mrOptions);
+    const mr=new MediaRecorder(recordStream,mrOptions);
     mr.ondataavailable=e=>{if(e.data&&e.data.size>0)chunksRef.current.push(e.data);};
     mr.onstop=()=>{
       const mimeType=mime||'video/webm';
@@ -107,6 +155,9 @@ export default function CameraPage() {
       setDone(true);
       streamRef.current?.getTracks().forEach(t=>t.stop());
       setCamOn(false);
+      // Limpiar la mezcla de audio si la había
+      if(soundElRef.current){soundElRef.current.pause();soundElRef.current=null;}
+      if(audioCtxRef.current){audioCtxRef.current.close().catch(()=>{});audioCtxRef.current=null;}
     };
     // timeslice de 250ms para capturar datos frecuentemente (mejor audio en Android)
     mrRef.current=mr;mr.start(250);setRec(true);setSecs(15);
@@ -142,7 +193,7 @@ export default function CameraPage() {
       }
       setUploading(false);
       // Publicar en backend
-      const r=await fetch(`${API}/api/videos`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({challengeId:challenge._id,videoUrl,thumbnailUrl,caption,geoCoordinates:geo,nominatedUserIds:ids})});
+      const r=await fetch(`${API}/api/videos`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({challengeId:challenge._id,videoUrl,thumbnailUrl,caption,geoCoordinates:geo,nominatedUserIds:ids,soundId:selectedSound?.id})});
       if(r.ok){setPublished(true);setShowNom(false);}
       else{const d=await r.json();alert(d.error||'Error al publicar');}
     }catch{alert('Error de red.');}finally{setPublishing(false);setUploading(false);}
@@ -168,6 +219,8 @@ export default function CameraPage() {
         </div>
       )}
 
+      {showSoundPicker&&<SoundPicker onSelect={s=>{setSelectedSound(s);setShowSoundPicker(false);}} onClose={()=>setShowSoundPicker(false)}/>}
+
       <div className="relative h-screen max-h-screen overflow-hidden">
         <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay muted playsInline style={{display:camOn?'block':'none'}}/>
 
@@ -191,8 +244,20 @@ export default function CameraPage() {
           <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 pointer-events-auto">
             <button onClick={()=>{streamRef.current?.getTracks().forEach(t=>t.stop());setLocation('/feed');}} className="p-2 rounded-full" style={{background:'rgba(0,0,0,0.5)'}}><X size={20} className="text-white"/></button>
             <div className="px-3 py-1.5 rounded-xl flex items-center gap-2" style={{background:'rgba(0,0,0,0.5)'}}><DominoLogo size={14}/><span className="text-xs font-bold text-white">DOMINO</span></div>
-            <div className="w-10"/>
+            {!done?(
+              <button onClick={()=>setShowSoundPicker(true)} className="p-2 rounded-full" style={{background:selectedSound?'rgba(0,245,255,0.25)':'rgba(0,0,0,0.5)'}} title="Añadir música">
+                <Music2 size={20} className={selectedSound?'':'text-white'} style={selectedSound?{color:'#00F5FF'}:undefined}/>
+              </button>
+            ):<div className="w-10"/>}
           </div>
+
+          {!done&&selectedSound&&(
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full pointer-events-auto" style={{background:'rgba(0,0,0,0.6)'}}>
+              <Music2 size={12} style={{color:'#00F5FF'}}/>
+              <span className="text-xs text-white font-semibold max-w-[140px] truncate">{selectedSound.title}</span>
+              {!rec&&<button onClick={()=>setSelectedSound(null)} className="p-0.5 rounded-full" style={{background:'rgba(255,255,255,0.15)'}}><X size={11} className="text-white"/></button>}
+            </div>
+          )}
 
           {!done&&<>
             <div className="absolute top-32 left-4 w-8 h-8 border-t-2 border-l-2 rounded-tl-lg" style={{borderColor:'#00F5FF'}}/>
@@ -210,6 +275,7 @@ export default function CameraPage() {
                 {/* Info del video */}
                 <div className="px-4 py-2 rounded-xl text-center" style={{background:'rgba(0,0,0,0.7)'}}>
                   <div className="flex items-center gap-2 justify-center"><CheckCircle size={16} className="text-green-400"/><span className="text-sm text-white font-medium">Video grabado — 15s ✓</span></div>
+                  {selectedSound&&<div className="flex items-center gap-1.5 justify-center mt-1"><Music2 size={11} style={{color:'#00F5FF'}}/><span className="text-xs text-gray-300">{selectedSound.title}</span></div>}
                 </div>
 
                 {/* Leyenda opcional — los #hashtags que escribas aquí se podrán buscar luego */}

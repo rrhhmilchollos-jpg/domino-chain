@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation } from 'wouter';
-import { Home, Play, Video, Map, BarChart2, Camera, Bell, Menu, LogOut, Loader2, X, Send } from 'lucide-react';
+import { Home, Play, Pause, Video, Map, BarChart2, Camera, Bell, Menu, LogOut, Loader2, X, Send, Music2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -15,7 +15,8 @@ export const CLOUDINARY_PRESET = import.meta.env.VITE_CLOUDINARY_PRESET || 'domi
 export interface AppUser { _id: string; username: string; email: string; avatarUrl: string; country: string; city: string; flag: string; impactPoints: number; currentStreak: number; bio: string; coins: number; followersCount?: number; followingCount?: number; isFollowing?: boolean; }
 export interface Challenge { _id: string; title: string; description: string; category: string; expiresAt: string; globalCounter: number; }
 export interface RemixOf { videoId: string; type: 'duet'|'stitch'; authorId: string; authorUsername: string; }
-export interface DominoVideo { _id: string; userId: AppUser; videoUrl: string; thumbnailUrl: string; caption?: string; hashtags?: string[]; remixOf?: RemixOf; chainDepth: number; likes: string[]; savesCount?: number; commentsCount?: number; isSaved?: boolean; createdAt: string; geoCoordinates: { lat: number; lng: number }; isPublic: boolean; }
+export interface Sound { id: string; title: string; mood: string; duration: number; audioUrl: string; attribution: string; }
+export interface DominoVideo { _id: string; userId: AppUser; videoUrl: string; thumbnailUrl: string; caption?: string; hashtags?: string[]; remixOf?: RemixOf; sound?: { id: string; title: string }; chainDepth: number; likes: string[]; savesCount?: number; commentsCount?: number; isSaved?: boolean; createdAt: string; geoCoordinates: { lat: number; lng: number }; isPublic: boolean; }
 export interface Notification { _id: string; type: string; fromUserId: { _id: string; username: string; avatarUrl: string; flag: string }; liveId?: string; message: string; read: boolean; createdAt: string; }
 export interface RankingEntry { _id: string; username: string; avatarUrl: string; country: string; flag: string; impactPoints: number; currentStreak: number; coins?: number; }
 export interface Comment { _id: string; userId: { _id: string; username: string; avatarUrl: string; flag: string }; text: string; createdAt: string; }
@@ -447,5 +448,65 @@ export function VisibilityToggle({ videoId, initialIsPublic, onChanged }: { vide
     >
       {isPublic ? '🌍 Público' : '🔒 Privado'}
     </button>
+  );
+}
+
+// ===================== SELECTOR DE MÚSICA =====================
+// Selector de sonidos al estilo TikTok para la pantalla de grabar. El
+// catálogo viene de /api/sounds — pistas reales con licencia CC0 (dominio
+// público), no canciones de artistas con derechos de autor (eso requiere
+// acuerdos de licencia comerciales, no es algo que se pueda "instalar").
+export function SoundPicker({ onSelect, onClose }: { onSelect: (s: Sound) => void; onClose: () => void }) {
+  const { data: sounds, loading } = useApi('/api/sounds');
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const previewRef = useRef<HTMLAudioElement | null>(null);
+
+  const togglePreview = (s: Sound) => {
+    if (previewRef.current) { previewRef.current.pause(); previewRef.current = null; }
+    if (playingId === s.id) { setPlayingId(null); return; }
+    const a = new Audio(s.audioUrl);
+    a.crossOrigin = 'anonymous';
+    a.onended = () => setPlayingId(null);
+    a.play().catch(() => {});
+    previewRef.current = a;
+    setPlayingId(s.id);
+  };
+
+  useEffect(() => () => { previewRef.current?.pause(); }, []);
+
+  const pick = (s: Sound) => {
+    previewRef.current?.pause();
+    setPlayingId(null);
+    onSelect(s);
+  };
+
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[55]" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose} />
+      <div className="fixed inset-x-0 bottom-0 z-[60] rounded-t-2xl flex flex-col" style={{ background: '#13131f', border: '1px solid #1e1e2a', maxHeight: '75vh' }}>
+        <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: '#1e1e2a' }}>
+          <h3 className="font-bold text-white">Añadir música</h3>
+          <button onClick={onClose}><X size={18} className="text-gray-400" /></button>
+        </div>
+        <p className="px-4 pt-2.5 text-[11px] text-gray-500">🎵 Sonidos de dominio público (CC0) — libres de derechos, sin copyright</p>
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {loading && <div className="flex justify-center py-8"><Spinner /></div>}
+          {(Array.isArray(sounds) ? sounds : []).map((s: Sound) => (
+            <div key={s.id} className="flex items-center gap-3 p-2.5 rounded-xl" style={{ background: '#0b0b12', border: '1px solid #1e1e2a' }}>
+              <button onClick={() => togglePreview(s)} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: playingId === s.id ? '#00F5FF' : '#1e1e2a' }}>
+                {playingId === s.id ? <Pause size={16} className="text-black" /> : <Play size={16} className="text-white" />}
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white truncate">{s.title}</p>
+                <p className="text-xs text-gray-500">{s.mood} · {Math.round(s.duration)}s</p>
+              </div>
+              <button onClick={() => pick(s)} className="text-xs font-bold px-3.5 py-1.5 rounded-full flex-shrink-0" style={{ background: '#00F5FF', color: '#000' }}>Usar</button>
+            </div>
+          ))}
+          {!loading && (!sounds || sounds.length === 0) && <p className="text-center text-gray-500 text-sm py-8">No hay sonidos disponibles</p>}
+        </div>
+      </div>
+    </>,
+    document.body
   );
 }

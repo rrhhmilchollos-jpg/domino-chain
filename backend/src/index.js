@@ -12,6 +12,7 @@ const rankingRoutes = require('./routes/ranking');
 const livesRoutes = require('./routes/lives');
 const coinsRoutes = require('./routes/coins');
 const searchRoutes = require('./routes/search');
+const soundsRoutes = require('./routes/sounds');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -37,6 +38,7 @@ app.use('/api/ranking', rankingRoutes);
 app.use('/api/lives', livesRoutes);
 app.use('/api/coins', coinsRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/sounds', soundsRoutes);
 
 app.get('/api/health', (req, res) => res.json({
   status: 'ok',

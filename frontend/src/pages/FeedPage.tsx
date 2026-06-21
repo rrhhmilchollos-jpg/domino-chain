@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Camera, Heart, MessageCircle, Bookmark, Share, Search, Repeat2, Users2, Scissors, Volume2, VolumeX, Plus, Tv, ChevronRight } from 'lucide-react';
+import { Camera, Heart, MessageCircle, Bookmark, Share, Search, Repeat2, Users2, Scissors, Volume2, VolumeX, Plus, Tv, ChevronRight, Music2 } from 'lucide-react';
 import { useApi, useAuth, CommentsPanel, Spinner, Av, cn, fmt, ago, API, DominoVideo, shareLink, Toast } from '../lib/shared';
 
 type Tab = 'forYou' | 'following';
@@ -144,6 +144,12 @@ export default function FeedPage() {
                 <p className="text-gray-200 text-sm mt-1">{v.caption.split(/(\s+)/).map((part,i)=>part.startsWith('#')?<span key={i} onClick={(e)=>{e.preventDefault();e.stopPropagation();setLocation(`/search?q=${encodeURIComponent(part)}`);}} style={{color:'#3CC8FF'}}>{part}</span>:part)}</p>
               ):(
                 <p className="text-gray-400 text-sm mt-1">{v.userId?.flag} {v.userId?.city} · ⛓️ Cadena {v.chainDepth+1} · {ago(v.createdAt)}</p>
+              )}
+              {v.sound&&(
+                <span onClick={(e)=>{e.preventDefault();e.stopPropagation();setLocation(`/camera?soundId=${v.sound!.id}`);}} className="flex items-center gap-1 mt-1">
+                  <Music2 size={11} className="text-gray-300 flex-shrink-0"/>
+                  <span className="text-gray-300 text-xs truncate">{v.sound.title}</span>
+                </span>
               )}
             </Link>
             <Av u={v.userId} s={34}/>

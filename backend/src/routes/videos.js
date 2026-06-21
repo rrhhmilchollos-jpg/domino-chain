@@ -7,6 +7,7 @@ const Notification = require('../models/Notification');
 const Comment = require('../models/Comment');
 const User = require('../models/User');
 const SavedVideo = require('../models/SavedVideo');
+const { SOUND_LIBRARY } = require('./sounds');
 
 // Marca isSaved en cada video de una lista según quién pregunta (una sola
 // consulta batch) — así el icono de guardado sale correcto desde el primer
@@ -197,7 +198,7 @@ router.get('/:id', async (req, res) => {
 // POST /api/videos — publicar video
 router.post('/', auth, async (req, res) => {
   try {
-    const { challengeId, videoUrl, thumbnailUrl, parentVideoId, geoCoordinates, nominatedUserIds, caption, remixOfVideoId, remixType } = req.body;
+    const { challengeId, videoUrl, thumbnailUrl, parentVideoId, geoCoordinates, nominatedUserIds, caption, remixOfVideoId, remixType, soundId } = req.body;
     if (!challengeId || !geoCoordinates || !nominatedUserIds || nominatedUserIds.length !== 3) {
       return res.status(400).json({ error: 'Faltan campos obligatorios o no has nominado 3 personas' });
     }
@@ -228,6 +229,14 @@ router.post('/', auth, async (req, res) => {
       remixOf = { videoId: original._id, type: remixType, authorId: original.userId._id, authorUsername: original.userId.username };
     }
 
+    // Música — validamos contra el catálogo real para no guardar nunca un
+    // título inventado; si el id no existe simplemente se publica sin sonido.
+    let sound = undefined;
+    if (soundId) {
+      const s = SOUND_LIBRARY.find(s => s.id === soundId);
+      if (s) sound = { id: s.id, title: s.title };
+    }
+
     const video = await Video.create({
       challengeId,
       userId: req.user._id,
@@ -238,6 +247,7 @@ router.post('/', auth, async (req, res) => {
       parentVideoId: parentVideoId || null,
       rootVideoId,
       remixOf,
+      sound,
       geoCoordinates,
       nominatedUsers: nominatedUserIds,
       chainDepth,

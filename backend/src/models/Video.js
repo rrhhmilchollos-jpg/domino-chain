@@ -27,7 +27,13 @@ const videoSchema = new mongoose.Schema({
   isPublished: { type: Boolean, default: false },
   isPublic: { type: Boolean, default: true }, // false = solo visible para el propio dueño
   savesCount: { type: Number, default: 0 }, // solo para mostrar el número rápido; el detalle de quién vive en SavedVideo
-  commentsCount: { type: Number, default: 0 } // idem, el detalle de cada comentario vive en la colección Comment
+  commentsCount: { type: Number, default: 0 }, // idem, el detalle de cada comentario vive en la colección Comment
+  // Música añadida al grabar — desnormalizado (igual que remixOf) para no
+  // tener que consultar el catálogo de sonidos cada vez que se pinta el feed.
+  sound: {
+    id: { type: String },
+    title: { type: String }
+  }
 }, { timestamps: true });
 
 videoSchema.index({ hashtags: 1 });
