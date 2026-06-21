@@ -10,12 +10,39 @@ const User = require('../models/User');
 router.get('/feed', async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    const videos = await Video.find({ isPublished: true })
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+
+    // Solo videos con archivo real: uno sin videoUrl no tiene nada que
+    // reproducir y antes aparecía en el feed como un hueco negro con un
+    // icono de cámara. Mejor no mostrarlo en absoluto.
+    const pool = await Video.find({ isPublished: true, videoUrl: { $ne: '' } })
       .populate('userId', 'username avatarUrl country city flag impactPoints currentStreak')
       .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
-    res.json(videos);
+      .limit(200); // ventana de candidatos recientes sobre la que rankear/diversificar
+
+    const now = Date.now();
+    const scored = pool.map(v => {
+      const hours = Math.max(0.5, (now - new Date(v.createdAt).getTime()) / 3.6e6);
+      // Más interacción (likes) sube el video; cuanto más viejo, más decae —
+      // parecido a cómo TikTok pesa interacción + recencia, sin pretender
+      // ser su modelo de ML real.
+      const score = ((v.likes?.length || 0) * 3 + 1) / Math.pow(hours + 2, 1.3);
+      return { v, score };
+    }).sort((a, b) => b.score - a.score).map(x => x.v);
+
+    // Diversidad: nunca dos publicaciones seguidas del mismo autor (igual
+    // que documenta TikTok para su Following/For You feed).
+    const diversified = [];
+    const pending = [...scored];
+    while (pending.length) {
+      let idx = pending.findIndex(v => diversified.length === 0 || String(v.userId?._id) !== String(diversified[diversified.length - 1].userId?._id));
+      if (idx === -1) idx = 0; // no hay alternativa (p.ej. solo queda un autor): se permite repetir
+      diversified.push(pending.splice(idx, 1)[0]);
+    }
+
+    const start = (pageNum - 1) * limitNum;
+    res.json(diversified.slice(start, start + limitNum));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
