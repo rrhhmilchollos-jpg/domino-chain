@@ -426,8 +426,13 @@ export default function LiveViewerPage({ id }: { id: string }) {
               <Link href="/auth" className="flex-1 rounded-full px-4 py-2.5 text-sm text-gray-200 text-center" style={{background:'rgba(255,255,255,0.12)'}}>Inicia sesión para chatear</Link>
             )}
             {user&&<button onClick={sendMsg} className="p-2.5 rounded-full flex-shrink-0" style={{background:'rgba(255,255,255,0.15)'}}><Send size={16} className="text-white"/></button>}
-            {user&&<button onClick={()=>sendGift('domino')} disabled={sending} title="Regalo rápido 🎲 (5 monedas)" className="p-2.5 rounded-full flex-shrink-0 disabled:opacity-50 text-lg leading-none" style={{background:'rgba(255,255,255,0.15)'}}>🎲</button>}
-            <button onClick={()=>setShowGifts(true)} disabled={sending} className="p-2.5 rounded-full flex-shrink-0 disabled:opacity-50" style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)'}}><Gift size={18} className="text-white"/></button>
+            {user&&!isOwner&&!isOpponent&&<button onClick={()=>sendGift('domino')} disabled={sending} title="Regalo rápido 🎲 (5 monedas)" className="p-2.5 rounded-full flex-shrink-0 disabled:opacity-50 text-lg leading-none" style={{background:'rgba(255,255,255,0.15)'}}>🎲</button>}
+            {/* BUG ARREGLADO: este botón no comprobaba si eras tú mismo el que
+                está en directo (o el rival de la batalla) — el host podía
+                intentar regalarse a sí mismo, lo cual el backend ya rechazaba
+                pero con un mensaje confuso de "monedas insuficientes". Ahora
+                el botón de regalos solo lo ven los espectadores de verdad. */}
+            {user&&!isOwner&&!isOpponent&&<button onClick={()=>setShowGifts(true)} disabled={sending} className="p-2.5 rounded-full flex-shrink-0 disabled:opacity-50" style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)'}}><Gift size={18} className="text-white"/></button>}
             <button onClick={doShare} className="p-2.5 rounded-full flex-shrink-0" style={{background:'rgba(255,255,255,0.15)'}}><Share2 size={18} className="text-white"/></button>
           </div>
         </div>
