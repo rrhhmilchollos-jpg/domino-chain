@@ -16,6 +16,7 @@ const CoinsStorePage = lazy(() => import('./pages/CoinsStorePage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const UserProfilePage = lazy(() => import('./pages/UserProfilePage'));
 const FollowListPage = lazy(() => import('./pages/FollowListPage'));
+const SearchPage = lazy(() => import('./pages/SearchPage'));
 
 function PageFallback() {
   return <div className="min-h-screen flex items-center justify-center" style={{background:'#000'}}><Spinner/></div>;
@@ -91,6 +92,7 @@ function AppInner() {
           <Route path="/live/:id">{(p:any)=><LiveViewerPage id={p.id}/>}</Route>
           <Route path="/map" component={WorldMapPage}/>
           <Route path="/dashboard" component={DashboardPage}/>
+          <Route path="/search"><SearchPage/></Route>
           <Route path="/user/:id/followers">{(p:any)=><FollowListPage id={p.id} type="followers"/>}</Route>
           <Route path="/user/:id/following">{(p:any)=><FollowListPage id={p.id} type="following"/>}</Route>
           <Route path="/user/:id">{(p:any)=><UserProfilePage id={p.id}/>}</Route>

@@ -30,6 +30,7 @@ export default function CameraPage() {
   const [previewMuted, setPreviewMuted] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
+  const [caption, setCaption] = useState('');
   const [geo, setGeo] = useState({lat:40.4168,lng:-3.7038});
 
   useEffect(()=>{
@@ -141,7 +142,7 @@ export default function CameraPage() {
       }
       setUploading(false);
       // Publicar en backend
-      const r=await fetch(`${API}/api/videos`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({challengeId:challenge._id,videoUrl,thumbnailUrl,geoCoordinates:geo,nominatedUserIds:ids})});
+      const r=await fetch(`${API}/api/videos`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({challengeId:challenge._id,videoUrl,thumbnailUrl,caption,geoCoordinates:geo,nominatedUserIds:ids})});
       if(r.ok){setPublished(true);setShowNom(false);}
       else{const d=await r.json();alert(d.error||'Error al publicar');}
     }catch{alert('Error de red.');}finally{setPublishing(false);setUploading(false);}
@@ -211,6 +212,9 @@ export default function CameraPage() {
                   <div className="flex items-center gap-2 justify-center"><CheckCircle size={16} className="text-green-400"/><span className="text-sm text-white font-medium">Video grabado — 15s ✓</span></div>
                 </div>
 
+                {/* Leyenda opcional — los #hashtags que escribas aquí se podrán buscar luego */}
+                <input value={caption} onChange={e=>setCaption(e.target.value.slice(0,150))} placeholder="Añade una leyenda... #hashtag" maxLength={150} className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'rgba(0,0,0,0.6)',border:'1px solid #2a2a3a'}}/>
+
                 {/* Botones de acción */}
                 <div className="grid grid-cols-2 gap-3">
                   {/* Guardar en galería */}
@@ -224,7 +228,7 @@ export default function CameraPage() {
                 </div>
 
                 {/* Repetir */}
-                <button onClick={()=>{setDone(false);setBlob(null);if(blobUrl)URL.revokeObjectURL(blobUrl);setBlobUrl(null);setSecs(15);setSavedToGallery(false);}} className="w-full text-sm text-gray-400 hover:text-white flex items-center justify-center gap-1 py-2">
+                <button onClick={()=>{setDone(false);setBlob(null);if(blobUrl)URL.revokeObjectURL(blobUrl);setBlobUrl(null);setSecs(15);setSavedToGallery(false);setCaption('');}} className="w-full text-sm text-gray-400 hover:text-white flex items-center justify-center gap-1 py-2">
                   <RefreshCw size={14}/>Grabar de nuevo
                 </button>
               </div>

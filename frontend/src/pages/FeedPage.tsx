@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'wouter';
-import { Camera, Heart, MessageCircle, Bookmark, Share, Volume2, VolumeX } from 'lucide-react';
+import { Link, useLocation } from 'wouter';
+import { Camera, Heart, MessageCircle, Bookmark, Share, Search, Volume2, VolumeX } from 'lucide-react';
 import { useApi, useAuth, CommentsPanel, Spinner, Av, cn, fmt, ago, API, DominoVideo, shareLink, Toast } from '../lib/shared';
 
 type Tab = 'forYou' | 'following';
 
 export default function FeedPage() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [tab, setTab] = useState<Tab>('forYou');
   // Pestaña "Siguiendo" solo pide al backend si hay sesión — si no, ni lo
   // intentamos (evita un 401 inútil y dejamos claro que hace falta cuenta).
@@ -49,10 +50,13 @@ export default function FeedPage() {
       {commentId&&<CommentsPanel videoId={commentId} onClose={()=>setCommentId(null)}/>}
       <Toast message={toast}/>
       {/* Header TikTok style — tabs Para Ti / Siguiendo, ahora funcionales de verdad */}
-      <div className="fixed top-0 left-0 right-0 z-30 flex items-center justify-center gap-6 pt-3 pb-2" style={{background:'linear-gradient(to bottom,rgba(0,0,0,0.6),transparent)'}}>
-        <button onClick={()=>setTab('following')} className={cn('font-bold text-base pb-0.5 border-b-2',tab==='following'?'text-white border-white':'text-gray-400 border-transparent')}>Siguiendo</button>
-        <button onClick={()=>setTab('forYou')} className={cn('font-bold text-base pb-0.5 border-b-2',tab==='forYou'?'text-white border-white':'text-gray-400 border-transparent')}>Para ti</button>
-        {tab==='forYou'&&challenge&&<span className="text-gray-400 text-sm truncate max-w-[120px] absolute right-3">⚡ {challenge.title}</span>}
+      <div className="fixed top-0 left-0 right-0 z-30 flex flex-col items-center pt-3 pb-2" style={{background:'linear-gradient(to bottom,rgba(0,0,0,0.6),transparent)'}}>
+        <div className="relative flex items-center justify-center gap-6 w-full">
+          <button onClick={()=>setTab('following')} className={cn('font-bold text-base pb-0.5 border-b-2',tab==='following'?'text-white border-white':'text-gray-400 border-transparent')}>Siguiendo</button>
+          <button onClick={()=>setTab('forYou')} className={cn('font-bold text-base pb-0.5 border-b-2',tab==='forYou'?'text-white border-white':'text-gray-400 border-transparent')}>Para ti</button>
+          <Link href="/search" className="absolute right-3 p-1.5 rounded-full" style={{background:'rgba(0,0,0,0.4)'}}><Search size={18} className="text-white"/></Link>
+        </div>
+        {tab==='forYou'&&challenge&&<span className="text-gray-400 text-xs mt-1">⚡ {challenge.title}</span>}
       </div>
 
       {loading&&!showLoginPrompt&&<div className="h-screen flex items-center justify-center"><Spinner/></div>}
@@ -74,6 +78,8 @@ export default function FeedPage() {
           {/* Info usuario abajo izquierda — link clicable al perfil público del usuario, igual que en TikTok */}
           <Link href={`/user/${v.userId?._id}`} className="absolute z-10 block" style={{bottom:'72px',left:'12px',right:'80px'}}>
             <div className="flex items-center gap-2 mb-2"><Av u={v.userId} s={40}/><div><p className="text-white text-sm font-bold">@{v.userId?.username}</p><p className="text-gray-300 text-xs">{v.userId?.flag} {v.userId?.city}</p></div></div>
+            {v.remixOf&&<div className="mb-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{background:'rgba(124,58,237,0.35)',border:'1px solid rgba(124,58,237,0.6)',color:'#c4b5fd'}}>{v.remixOf.type==='duet'?'🎭 Dueto':'✂️ Stitch'} con @{v.remixOf.authorUsername}</div>}
+            {v.caption&&<p className="text-white text-sm mb-1.5 max-w-[230px]">{v.caption.split(/(\s+)/).map((part,i)=>part.startsWith('#')?<span key={i} onClick={(e)=>{e.preventDefault();e.stopPropagation();setLocation(`/search?q=${encodeURIComponent(part)}`);}} style={{color:'#00F5FF'}}>{part}</span>:part)}</p>}
             <div className="flex items-center gap-2"><span className="text-xs rounded-full px-2 py-0.5 text-gray-300" style={{background:'rgba(0,0,0,0.4)',border:'1px solid rgba(255,255,255,0.1)'}}>⛓️ {v.chainDepth+1}</span><span className="text-xs text-gray-400">{ago(v.createdAt)}</span></div>
           </Link>
           {/* Botones acción derecha — orden TikTok: me gusta, comentar, guardar, compartir */}

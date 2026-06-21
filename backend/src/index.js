@@ -11,6 +11,7 @@ const notificationRoutes = require('./routes/notifications');
 const rankingRoutes = require('./routes/ranking');
 const livesRoutes = require('./routes/lives');
 const coinsRoutes = require('./routes/coins');
+const searchRoutes = require('./routes/search');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -35,6 +36,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/ranking', rankingRoutes);
 app.use('/api/lives', livesRoutes);
 app.use('/api/coins', coinsRoutes);
+app.use('/api/search', searchRoutes);
 
 app.get('/api/health', (req, res) => res.json({
   status: 'ok',

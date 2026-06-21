@@ -96,6 +96,29 @@ router.get('/feed/following', auth, async (req, res) => {
   }
 });
 
+// GET /api/videos/trending — videos más populares recientes, para la
+// pantalla de Descubrir cuando todavía no se ha escrito ninguna búsqueda.
+router.get('/trending', optionalAuth, async (req, res) => {
+  try {
+    const limit = Math.min(30, Number(req.query.limit) || 12);
+    const pool = await Video.find({ isPublished: true, isPublic: { $ne: false }, videoUrl: { $ne: '' } })
+      .populate('userId', 'username avatarUrl country city flag')
+      .sort({ createdAt: -1 })
+      .limit(150);
+
+    const now = Date.now();
+    const ranked = pool.map(v => {
+      const hours = Math.max(0.5, (now - new Date(v.createdAt).getTime()) / 3.6e6);
+      const score = ((v.likes?.length || 0) * 3 + (v.savesCount || 0) * 2 + 1) / Math.pow(hours + 2, 1.3);
+      return { v, score };
+    }).sort((a, b) => b.score - a.score).map(x => x.v).slice(0, limit);
+
+    res.json(await withIsSaved(ranked, req.user));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/videos/chain/:rootId
 router.get('/chain/:rootId', async (req, res) => {
   try {
@@ -174,7 +197,7 @@ router.get('/:id', async (req, res) => {
 // POST /api/videos — publicar video
 router.post('/', auth, async (req, res) => {
   try {
-    const { challengeId, videoUrl, thumbnailUrl, parentVideoId, geoCoordinates, nominatedUserIds } = req.body;
+    const { challengeId, videoUrl, thumbnailUrl, parentVideoId, geoCoordinates, nominatedUserIds, caption, remixOfVideoId, remixType } = req.body;
     if (!challengeId || !geoCoordinates || !nominatedUserIds || nominatedUserIds.length !== 3) {
       return res.status(400).json({ error: 'Faltan campos obligatorios o no has nominado 3 personas' });
     }
@@ -189,13 +212,29 @@ router.post('/', auth, async (req, res) => {
       rootVideoId = parent.rootVideoId || parent._id;
     }
 
+    // Hashtags reales extraídos del texto que escribió el usuario — nunca inventados.
+    const cleanCaption = (caption || '').trim().slice(0, 150);
+    const hashtags = Array.from(new Set((cleanCaption.match(/#[\p{L}0-9_]+/gu) || []).map(h => h.slice(1).toLowerCase())));
+
+    // Dueto/Stitch: si viene remixOfVideoId, validamos que el original existe
+    // y es público, y guardamos quién es su autor real (cuenta real, nunca inventada).
+    let remixOf = undefined;
+    if (remixOfVideoId && ['duet', 'stitch'].includes(remixType)) {
+      const original = await Video.findById(remixOfVideoId).populate('userId', 'username');
+      if (!original) return res.status(404).json({ error: 'El video original del dueto/stitch no existe' });
+      remixOf = { videoId: original._id, type: remixType, authorId: original.userId._id, authorUsername: original.userId.username };
+    }
+
     const video = await Video.create({
       challengeId,
       userId: req.user._id,
       videoUrl: videoUrl || '',
       thumbnailUrl: thumbnailUrl || '',
+      caption: cleanCaption,
+      hashtags,
       parentVideoId: parentVideoId || null,
       rootVideoId,
+      remixOf,
       geoCoordinates,
       nominatedUsers: nominatedUserIds,
       chainDepth,
