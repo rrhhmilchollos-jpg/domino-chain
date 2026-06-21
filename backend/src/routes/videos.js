@@ -45,6 +45,18 @@ router.get('/user/:userId', async (req, res) => {
   }
 });
 
+// GET /api/videos/liked/:userId — videos a los que el usuario ha dado 'me gusta' (pestaña Me Gusta)
+router.get('/liked/:userId', async (req, res) => {
+  try {
+    const videos = await Video.find({ likes: req.params.userId, isPublished: true })
+      .populate('userId', 'username avatarUrl country city flag')
+      .sort({ createdAt: -1 });
+    res.json(videos);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/videos/:id
 router.get('/:id', async (req, res) => {
   try {
