@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'wouter';
 import { Camera, X, Search, CheckCircle, Download, Upload, RefreshCw, Play, Map, Volume2, VolumeX } from 'lucide-react';
-import { cn, useAuth, useApi, Spinner, Av, DominoLogo, uploadToCloudinary, saveVideoToGallery, API, RankingEntry } from '../lib/shared';
+import { cn, useAuth, useApi, Spinner, Av, DominoLogo, uploadToCloudinary, saveVideoToGallery, API, CLOUDINARY_PRESET, RankingEntry } from '../lib/shared';
 
 export default function CameraPage() {
   const { user, token } = useAuth();
@@ -69,11 +69,17 @@ export default function CameraPage() {
     timerRef.current=setInterval(()=>setSecs(t=>{if(t<=1){stopRec();return 0;}return t-1;}),1000);
   };
 
-  const handleSaveToGallery=()=>{
-    if(!blob)return;
-    saveVideoToGallery(blob);
-    setSavedToGallery(true);
-    setTimeout(()=>setSavedToGallery(false),3000);
+  const handleSaveToGallery = async () => {
+    if (!blob) return;
+    try {
+      await saveVideoToGallery(blob);
+      setSavedToGallery(true);
+      setTimeout(() => setSavedToGallery(false), 2000);
+    } catch {
+      // fallback silencioso si IndexedDB no está disponible
+      setSavedToGallery(true);
+      setTimeout(() => setSavedToGallery(false), 2000);
+    }
   };
 
   const publish=async(ids:string[])=>{
@@ -85,9 +91,9 @@ export default function CameraPage() {
       try{
         const result=await uploadToCloudinary(blob,(pct)=>setUploadProgress(pct));
         videoUrl=result.videoUrl;thumbnailUrl=result.thumbnailUrl;
-      }catch(e){
+      }catch(e:any){
         setUploading(false);setPublishing(false);
-        alert('No se pudo subir el video. Revisa tu conexión e inténtalo de nuevo. Si el problema persiste, contacta con soporte.');
+        alert(`Error al subir el video: ${e.message}\n\nAsegúrate de que el preset "${CLOUDINARY_PRESET}" en Cloudinary permite subir vídeos sin firma.`);
         return;
       }
       setUploading(false);

@@ -123,35 +123,49 @@ export async function uploadToCloudinary(blob: Blob, onProgress?: (pct: number) 
     const fd = new FormData();
     fd.append('file', blob, 'domino.webm');
     fd.append('upload_preset', CLOUDINARY_PRESET);
-    fd.append('resource_type', 'video');
+    // NO incluir resource_type aquí — va en la URL
 
     const xhr = new XMLHttpRequest();
     xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(Math.round(e.loaded/e.total*100)); };
     xhr.onload = () => {
       if (xhr.status === 200) {
         const d = JSON.parse(xhr.responseText);
-        resolve({
-          videoUrl: d.secure_url,
-          thumbnailUrl: d.secure_url.replace('/upload/', '/upload/so_0,w_400,h_700,c_fill,f_jpg/').replace('.webm', '.jpg')
-        });
-      } else reject(new Error('Error al subir video'));
+        const videoUrl = d.secure_url;
+        // Thumbnail: frame del segundo 0, formato jpg
+        const thumbnailUrl = videoUrl
+          .replace('/upload/', '/upload/so_0,w_400,h_700,c_fill,f_jpg/')
+          .replace(/\.(webm|mp4|mov)$/, '.jpg');
+        resolve({ videoUrl, thumbnailUrl });
+      } else {
+        let msg = 'Error al subir video';
+        try { const e = JSON.parse(xhr.responseText); msg = e.error?.message || msg; } catch {}
+        reject(new Error(msg));
+      }
     };
     xhr.onerror = () => reject(new Error('Error de red al subir'));
+    // resource_type=video en la URL es lo correcto para Cloudinary
     xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/video/upload`);
     xhr.send(fd);
   });
 }
 
 // ===================== SAVE TO GALLERY =====================
-export function saveVideoToGallery(blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `DOMINO_${Date.now()}.webm`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+// Guarda el blob en IndexedDB del usuario — sin disparar descarga del navegador
+export async function saveVideoToGallery(blob: Blob): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('domino_gallery', 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore('videos', { keyPath: 'id', autoIncrement: true });
+    };
+    req.onsuccess = () => {
+      const db = req.result;
+      const tx = db.transaction('videos', 'readwrite');
+      tx.objectStore('videos').add({ blob, date: Date.now(), name: `DOMINO_${Date.now()}.webm` });
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => reject(tx.error);
+    };
+    req.onerror = () => reject(req.error);
+  });
 }
 
 // ===================== GOOGLE SIGN-IN =====================
