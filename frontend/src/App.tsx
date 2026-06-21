@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, Route, Switch, useLocation } from 'wouter';
 import {
   Home, Play, Map, BarChart2, Camera, Bell, Globe, Zap, X,
@@ -148,35 +148,46 @@ function AuthPage() {
     setError(''); setLoading(true);
     try {
       if(mode==='login') await login(form.email, form.password);
-      else { if(!form.username||!form.email||!form.password||!form.country||!form.city) throw new Error('Rellena todos los campos'); await register({...form,flag:flags[form.country]||'🌍'}); }
+      else await register(form);
       setLocation('/feed');
-    } catch(e:any){setError(e.message);}finally{setLoading(false);}
+    } catch(e:any) { setError(e.message); } finally { setLoading(false); }
   };
-  const set = (k:string)=>(e:React.ChangeEvent<HTMLInputElement|HTMLSelectElement>)=>setForm(f=>({...f,[k]:e.target.value}));
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{background:'#0b0b12'}}>
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8"><DominoLogo size={40}/><h1 className="text-4xl font-black mt-4" style={{fontFamily:'Syne,sans-serif',color:'#00F5FF',textShadow:'0 0 12px #00F5FF'}}>DOMINO</h1><p className="text-gray-400 text-sm mt-1">The Real-World Chain Reaction</p></div>
-        <div className="rounded-2xl p-6 space-y-4" style={{background:'#13131f',border:'1px solid #1e1e2a'}}>
-          <div className="flex gap-1 rounded-xl p-1" style={{background:'#0b0b12'}}>{(['login','register'] as const).map(m=><button key={m} onClick={()=>{setMode(m);setError('');}} className={cn('flex-1 py-2 rounded-lg text-sm font-semibold',mode===m?'text-[#0b0b12]':'text-gray-400')} style={mode===m?{background:'#00F5FF'}:{}}>{m==='login'?'Entrar':'Registrarse'}</button>)}</div>
-          {mode==='register'&&<input placeholder="@username" value={form.username} onChange={set('username')} className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/>}
-          <input placeholder="Email" type="email" value={form.email} onChange={set('email')} className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/>
-          <input placeholder="Contraseña" type="password" value={form.password} onChange={set('password')} className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/>
-          {mode==='register'&&<><select value={form.country} onChange={set('country')} className="w-full rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}><option value="">País</option>{Object.keys(flags).map(c=><option key={c} value={c}>{flags[c]} {c}</option>)}</select><input placeholder="Ciudad" value={form.city} onChange={set('city')} className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/></>}
-          {error&&<p className="text-red-400 text-xs text-center">{error}</p>}
-          <button onClick={handle} disabled={loading} className="w-full py-3 rounded-xl font-bold text-[#0b0b12] flex items-center justify-center gap-2 disabled:opacity-50" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}>{loading?<Spinner/>:mode==='login'?'Entrar':'Crear cuenta'}</button>
+    <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{background:'#0b0b12'}}>
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center"><DominoLogo size={60}/><h1 className="text-4xl font-black mt-4" style={{fontFamily:'Syne,sans-serif',color:'#00F5FF',textShadow:'0 0 20px #00F5FF'}}>DOMINO</h1><p className="text-gray-400 mt-2">La red social de cadenas infinitas</p></div>
+        <div className="p-8 rounded-3xl space-y-6" style={{background:'rgba(30,30,42,0.5)',border:'1px solid #2a2a3a',backdropFilter:'blur(20px)'}}>
+          <div className="flex p-1 rounded-xl bg-black/40"><button onClick={()=>setMode('login')} className={cn('flex-1 py-2 text-sm font-bold rounded-lg transition-all',mode==='login'?'bg-[#00F5FF] text-black':'text-gray-400')}>Entrar</button><button onClick={()=>setMode('register')} className={cn('flex-1 py-2 text-sm font-bold rounded-lg transition-all',mode==='register'?'bg-[#00F5FF] text-black':'text-gray-400')}>Crear Cuenta</button></div>
+          {error&&<div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 text-xs font-bold text-center">{error}</div>}
+          <div className="space-y-4">
+            {mode==='register' && (
+              <>
+                <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Usuario</label><input type="text" placeholder="Cómo te llamarán" className="w-full bg-black/40 border border-[#2a2a3a] rounded-xl px-4 py-3 text-white focus:border-[#00F5FF] outline-none" value={form.username} onChange={e=>setForm({...form,username:e.target.value})}/></div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">País</label><select className="w-full bg-black/40 border border-[#2a2a3a] rounded-xl px-4 py-3 text-white focus:border-[#00F5FF] outline-none appearance-none" value={form.country} onChange={e=>setForm({...form,country:e.target.value})}><option value="">País</option>{Object.keys(flags).map(c=><option key={c} value={c}>{flags[c]} {c}</option>)}</select></div>
+                  <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Ciudad</label><input type="text" placeholder="Ciudad" className="w-full bg-black/40 border border-[#2a2a3a] rounded-xl px-4 py-3 text-white focus:border-[#00F5FF] outline-none" value={form.city} onChange={e=>setForm({...form,city:e.target.value})}/></div>
+                </div>
+              </>
+            )}
+            <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Email</label><input type="email" placeholder="tu@email.com" className="w-full bg-black/40 border border-[#2a2a3a] rounded-xl px-4 py-3 text-white focus:border-[#00F5FF] outline-none" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></div>
+            <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Contraseña</label><input type="password" placeholder="••••••••" className="w-full bg-black/40 border border-[#2a2a3a] rounded-xl px-4 py-3 text-white focus:border-[#00F5FF] outline-none" value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/></div>
+          </div>
+          <button onClick={handle} disabled={loading} className="w-full py-4 rounded-xl font-black text-black flex items-center justify-center gap-2 disabled:opacity-50" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}>{loading?<Spinner/>:mode==='login'?'ENTRAR':'COMENZAR'}</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ===================== BOTTOM NAVBAR (TikTok style) =====================
+// ===================== BOTTOM NAV =====================
 function BottomNav() {
   const [loc, setLocation] = useLocation();
   const { user } = useAuth();
-  const { data: nd } = useApi('/api/notifications', [user?._id]);
-  const unread = Array.isArray(nd)?nd.filter((n:Notification)=>!n.read).length:0;
+  const { data: ntf } = useApi('/api/notifications', [user]);
+  const unread = (ntf||[]).filter((n:any)=>!n.read).length;
+
+  // No mostrar en algunas páginas
+  if (['/create', '/camera', '/auth'].some(p => loc.startsWith(p))) return null;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t" style={{background:'rgba(11,11,18,0.97)',backdropFilter:'blur(20px)',borderColor:'#1e1e2a'}}>
@@ -217,9 +228,9 @@ function TopNav() {
       <div className="flex items-center justify-between h-14 px-4 max-w-7xl mx-auto">
         <button onClick={()=>setLocation('/')} className="flex items-center gap-2"><DominoLogo size={18}/><span className="text-xl font-black hidden sm:block" style={{fontFamily:'Syne,sans-serif',color:'#00F5FF',textShadow:'0 0 12px #00F5FF'}}>DOMINO</span></button>
         {/* Tabs: Siguiendo / Para ti (como TikTok) */}
-        {(loc==='/'||loc==='/feed') && (
+        {(loc==='/'||loc==='/feed'||loc==='/following') && (
           <div className="flex items-center gap-4">
-            <button onClick={()=>setLocation('/')} className={cn('text-sm font-semibold pb-1',loc==='/'?'text-white border-b-2 border-white':'text-gray-500')}>Para ti</button>
+            <button onClick={()=>setLocation('/feed')} className={cn('text-sm font-semibold pb-1',loc==='/feed'||loc==='/'?'text-white border-b-2 border-white':'text-gray-500')}>Para ti</button>
             <button onClick={()=>setLocation('/following')} className={cn('text-sm font-semibold pb-1',loc==='/following'?'text-white border-b-2 border-white':'text-gray-500')}>Siguiendo</button>
           </div>
         )}
@@ -238,53 +249,20 @@ function TopNav() {
 
 // ===================== VIDEO PLAYER MODAL =====================
 function VideoModal({ video, onClose }: { video: DominoVideo; onClose: () => void }) {
-  const { token, user } = useAuth();
-  const [liked, setLiked] = useState(video.likes?.includes(user?._id||'') || false);
-  const [saved, setSaved] = useState(false);
-  const [commentId, setCommentId] = useState<string|null>(null);
-
-  const doLike = async () => {
-    if (!token) return;
-    setLiked(l => !l);
-    await fetch(`${API}/api/videos/${video._id}/like`, { method:'POST', headers:{Authorization:`Bearer ${token}`} });
-  };
-  const doSave = async () => {
-    if (!token) return;
-    setSaved(s => !s);
-    await fetch(`${API}/api/users/videos/${video._id}/save`, { method:'POST', headers:{Authorization:`Bearer ${token}`} });
-  };
-  const doShare = () => {
-    const url = `${window.location.origin}/video/${video._id}`;
-    if (navigator.share) navigator.share({ title:'DOMINO', url });
-    else navigator.clipboard?.writeText(url);
-  };
-
+  const { token } = useAuth();
+  const [liked, setLiked] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const doLike = async () => { if(!token)return; setLiked(!liked); await fetch(`${API}/api/videos/${video._id}/like`,{method:'POST',headers:{Authorization:`Bearer ${token}`}}); };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{background:'rgba(0,0,0,0.95)'}}>
-      <button onClick={onClose} className="absolute top-4 right-4 p-2 rounded-full" style={{background:'rgba(255,255,255,0.1)'}}><X size={20} className="text-white"/></button>
-      <div className="relative w-full max-w-sm mx-4" style={{aspectRatio:'9/16',maxHeight:'90vh'}}>
-        {video.videoUrl ? (
-          <video src={video.videoUrl} className="w-full h-full object-cover rounded-2xl" controls autoPlay loop playsInline/>
-        ) : video.thumbnailUrl ? (
-          <img src={video.thumbnailUrl} alt="" className="w-full h-full object-cover rounded-2xl"/>
-        ) : (
-          <div className="w-full h-full rounded-2xl flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={48} className="text-gray-600"/></div>
-        )}
-        <div className="absolute inset-0 rounded-2xl" style={{background:'linear-gradient(to top,rgba(0,0,0,0.8) 0%,transparent 60%)',pointerEvents:'none'}}/>
-        {/* Info */}
-        <div className="absolute bottom-16 left-4 right-16">
-          <div className="flex items-center gap-2 mb-2"><Av u={video.userId} s={36}/><div><p className="text-white text-sm font-bold">@{video.userId?.username}</p><p className="text-gray-300 text-xs">{video.userId?.flag} {video.userId?.city}</p></div></div>
-          <div className="flex items-center gap-2"><span className="text-xs rounded-full px-2 py-0.5 text-gray-300" style={{background:'rgba(0,0,0,0.5)'}}>⛓️ Profundidad {video.chainDepth+1}</span></div>
-        </div>
-        {/* Acciones */}
-        <div className="absolute right-3 bottom-20 flex flex-col gap-4 items-center">
-          <button onClick={doLike} className="flex flex-col items-center gap-1"><Heart size={24} className={liked?'fill-red-500 text-red-500':'text-white'}/><span className="text-xs text-white">{fmt(video.likes?.length||0)}</span></button>
-          <button onClick={()=>setCommentId(video._id)} className="flex flex-col items-center gap-1"><MessageCircle size={24} className="text-white"/><span className="text-xs text-white">Comentar</span></button>
-          <button onClick={doSave} className="flex flex-col items-center gap-1"><Bookmark size={24} className={saved?'fill-yellow-400 text-yellow-400':'text-white'}/><span className="text-xs text-white">Guardar</span></button>
-          <button onClick={doShare} className="flex flex-col items-center gap-1"><Share size={24} className="text-white"/><span className="text-xs text-white">Compartir</span></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-xl">
+      <button onClick={onClose} className="absolute top-4 right-4 z-10 p-2 bg-white/10 rounded-full text-white"><X size={24}/></button>
+      <div className="relative w-full max-w-lg aspect-[9/16] bg-black overflow-hidden shadow-2xl">
+        <video ref={videoRef} src={video.videoUrl} className="w-full h-full object-contain" autoPlay loop playsInline controls/>
+        <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
+          <div className="flex items-center gap-3"><Av u={video.userId} s={44}/><div><p className="text-white font-bold">@{video.userId?.username}</p><p className="text-gray-400 text-xs">{video.userId?.flag} {video.userId?.city}</p></div></div>
+          <button onClick={doLike} className={cn('p-3 rounded-full transition-all',liked?'bg-red-500 text-white':'bg-white/10 text-white')}><Heart size={24} className={liked?'fill-white':''}/></button>
         </div>
       </div>
-      {commentId && <CommentsPanel videoId={commentId} onClose={()=>setCommentId(null)}/>}
     </div>
   );
 }
@@ -292,27 +270,29 @@ function VideoModal({ video, onClose }: { video: DominoVideo; onClose: () => voi
 // ===================== COMMENTS PANEL =====================
 function CommentsPanel({ videoId, onClose }: { videoId: string; onClose: () => void }) {
   const { user, token } = useAuth();
-  const { data: comments, setData } = useApi(`/api/videos/${videoId}/comments`, [videoId]);
-  const [text, setText] = useState(''); const [sending, setSending] = useState(false);
+  const { data: comments, setData } = useApi(`/api/videos/${videoId}/comments`);
+  const [text, setText] = useState('');
   const send = async () => {
-    if (!text.trim()||!token) return; setSending(true);
-    try { const r=await fetch(`${API}/api/videos/${videoId}/comments`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({text})}); const c=await r.json(); if(r.ok){setData((p:Comment[])=>[c,...(Array.isArray(p)?p:[])]);setText('');} } finally{setSending(false);}
+    if(!text.trim()||!token)return;
+    const r=await fetch(`${API}/api/videos/${videoId}/comment`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({text})});
+    if(r.ok){const c=await r.json();setData([c,...(comments||[])]);setText('');}
   };
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl flex flex-col" style={{background:'#13131f',border:'1px solid #1e1e2a',maxHeight:'70vh'}}>
-      <div className="flex items-center justify-between p-4 border-b" style={{borderColor:'#1e1e2a'}}><h3 className="font-bold text-white">Comentarios</h3><button onClick={onClose}><X size={18} className="text-gray-400"/></button></div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {(Array.isArray(comments)?comments:[]).map((c:Comment)=><div key={c._id} className="flex gap-3"><Av u={c.userId} s={32}/><div className="flex-1"><span className="text-xs font-bold text-white">{c.userId?.username} </span><span className="text-xs text-gray-400">{c.text}</span><div className="text-xs text-gray-600 mt-0.5">{ago(c.createdAt)}</div></div></div>)}
-        {(!comments||comments.length===0)&&<p className="text-center text-gray-500 text-sm py-8">Sin comentarios</p>}
+    <div className="fixed inset-x-0 bottom-0 z-50 bg-[#0b0b12] rounded-t-3xl border-t border-[#1e1e2a] h-[70vh] flex flex-col">
+      <div className="flex items-center justify-between p-4 border-b border-[#1e1e2a]"><h3 className="text-white font-bold">Comentarios</h3><button onClick={onClose} className="p-1 rounded-full hover:bg-white/5"><X size={20} className="text-gray-400"/></button></div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {(comments||[]).map((c:Comment)=>(
+          <div key={c._id} className="flex gap-3"><Av u={c.userId} s={32}/><div><p className="text-white text-xs font-bold">@{c.userId.username} <span className="text-gray-500 font-normal ml-1">{ago(c.createdAt)}</span></p><p className="text-gray-300 text-sm mt-0.5">{c.text}</p></div></div>
+        ))}
       </div>
-      {user&&<div className="p-4 border-t flex gap-2" style={{borderColor:'#1e1e2a'}}><Av u={user} s={32}/><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Añade un comentario..." className="flex-1 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/><button onClick={send} disabled={sending||!text.trim()} className="p-2 rounded-xl disabled:opacity-50" style={{background:'#00F5FF'}}><Send size={16} className="text-black"/></button></div>}
+      <div className="p-4 border-t border-[#1e1e2a] flex gap-2"><input type="text" placeholder="Añadir comentario..." className="flex-1 bg-white/5 border border-[#2a2a3a] rounded-xl px-4 py-2 text-white text-sm outline-none focus:border-[#00F5FF]" value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()}/><button onClick={send} className="p-2 bg-[#00F5FF] rounded-xl text-black"><Send size={18}/></button></div>
     </div>
   );
 }
 
 // ===================== FEED PAGE =====================
-function FeedPage() {
-  const { data: videos, loading } = useApi('/api/videos/feed?limit=20');
+function FeedPage({ following=false }: { following?: boolean }) {
+  const { data: videos, loading } = useApi(following ? '/api/videos/feed/following?limit=20' : '/api/videos/feed?limit=20');
   const { data: challenge } = useApi('/api/challenges/active');
   const { token } = useAuth();
   const [liked, setLiked] = useState<Set<string>>(new Set());
@@ -359,573 +339,140 @@ function FeedPage() {
   );
 }
 
+// ===================== SEARCH PAGE =====================
+function SearchPage() {
+  const [q, setQ] = useState('');
+  const { data: results, loading } = useApi(`/api/search?q=${q}`, [q]);
+  return (
+    <div className="min-h-screen pt-16 px-4 pb-20" style={{background:'#0b0b12'}}>
+      <div className="max-w-md mx-auto space-y-6">
+        <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20}/><input type="text" placeholder="Buscar usuarios o retos..." className="w-full bg-white/5 border border-[#2a2a3a] rounded-2xl pl-12 pr-4 py-4 text-white outline-none focus:border-[#00F5FF]" value={q} onChange={e=>setQ(e.target.value)}/></div>
+        {loading&&<div className="flex justify-center py-10"><Spinner/></div>}
+        <div className="space-y-4">
+          {(results?.users||[]).map((u:AppUser)=>(
+            <Link key={u._id} href={`/user/${u._id}`} className="flex items-center gap-3 p-3 rounded-2xl hover:bg-white/5 transition-all"><Av u={u} s={48}/><div><p className="text-white font-bold">@{u.username}</p><p className="text-gray-400 text-xs">{u.flag} {u.city}</p></div></Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== NOTIFICATIONS =====================
+function NotificationsPage() {
+  const { token } = useAuth();
+  const { data: ntf, loading, setData } = useApi('/api/notifications');
+  useEffect(() => { if(token) fetch(`${API}/api/notifications/read`,{method:'POST',headers:{Authorization:`Bearer ${token}`}}); }, [token]);
+  if(loading)return<div className="min-h-screen flex items-center justify-center pt-14"><Spinner/></div>;
+  return (
+    <div className="min-h-screen pt-16 px-4 pb-20" style={{background:'#0b0b12'}}>
+      <div className="max-w-md mx-auto space-y-2">
+        <h2 className="text-2xl font-black text-white mb-6">Avisos</h2>
+        {(ntf||[]).map((n:Notification)=>(
+          <div key={n._id} className="flex gap-3 p-4 rounded-2xl bg-white/5 border border-white/5"><Av u={n.fromUserId} s={40}/><div><p className="text-white text-sm"><span className="font-bold">@{n.fromUserId.username}</span> {n.message}</p><p className="text-gray-500 text-[10px] mt-1">{ago(n.createdAt)}</p></div></div>
+        ))}
+        {(!ntf||ntf.length===0)&&<div className="text-center py-20 text-gray-500"><Bell size={40} className="mx-auto mb-4 opacity-20"/><p>No hay avisos nuevos</p></div>}
+      </div>
+    </div>
+  );
+}
+
 // ===================== PROFILE PAGE =====================
 function ProfilePage({ userId }: { userId?: string }) {
-  const { user: me, token, refreshUser } = useAuth();
+  const { user: me, token, logout } = useAuth();
+  const id = userId || me?._id;
+  const { data: u, loading } = useApi(`/api/users/${id}`, [id]);
+  const { data: videos } = useApi(`/api/users/${id}/videos`, [id]);
+  const [tab, setTab] = useState<'videos'|'liked'|'saved'>('videos');
   const [, setLocation] = useLocation();
-  const isOwn = !userId || userId === me?._id;
-  const targetId = isOwn ? me?._id : userId;
 
-  const { data: profile, loading } = useApi(isOwn ? '/api/users/me' : `/api/users/${targetId}`, [targetId]);
-  const { data: userVideos } = useApi(targetId ? `/api/users/${targetId}/videos` : '', [targetId]);
-  const [tab, setTab] = useState<'videos'|'likes'|'saved'>('videos');
-  const [following, setFollowing] = useState(false);
-  const [selectedVideo, setSelectedVideo] = useState<DominoVideo|null>(null);
+  if(loading)return<div className="min-h-screen flex items-center justify-center pt-14"><Spinner/></div>;
+  if(!u)return null;
 
-  useEffect(() => {
-    if (me && profile && !isOwn) {
-      setFollowing(profile.followers?.includes(me._id) || false);
-    }
-  }, [profile, me]);
-
-  const doFollow = async () => {
-    if (!token || !targetId) return;
-    setFollowing(f => !f);
-    await fetch(`${API}/api/users/${targetId}/follow`, { method:'POST', headers:{ Authorization:`Bearer ${token}` } });
-    if (isOwn) await refreshUser();
-  };
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center" style={{paddingTop:'56px',background:'#0b0b12'}}><Spinner/></div>;
-  if (!profile && !isOwn) return <div className="min-h-screen flex items-center justify-center" style={{paddingTop:'56px',background:'#0b0b12'}}><p className="text-gray-400">Usuario no encontrado</p></div>;
-
-  const displayUser = isOwn ? (me || profile) : profile;
-  if (!displayUser) return null;
-
-  const videos = Array.isArray(userVideos) ? userVideos : [];
-  const savedVids: DominoVideo[] = Array.isArray(displayUser.savedVideos) ? displayUser.savedVideos.filter((v:any) => v && v._id) : [];
-  const likedVids: DominoVideo[] = Array.isArray(displayUser.likedVideos) ? displayUser.likedVideos.filter((v:any) => v && v._id) : [];
-
-  const tabVideos = tab === 'videos' ? videos : tab === 'saved' ? savedVids : likedVids;
+  const isMe = me?._id === u._id;
 
   return (
-    <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
-      {selectedVideo && <VideoModal video={selectedVideo} onClose={()=>setSelectedVideo(null)}/>}
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        {/* Header perfil */}
-        <div className="flex items-start gap-4 mb-6">
-          <Av u={displayUser} s={80}/>
-          <div className="flex-1">
-            <h1 className="text-xl font-black text-white">@{displayUser.username}</h1>
-            <p className="text-gray-400 text-sm">{displayUser.flag} {displayUser.city}, {displayUser.country}</p>
-            {displayUser.bio && <p className="text-gray-300 text-sm mt-1">{displayUser.bio}</p>}
-          </div>
-          {isOwn ? (
-            <div className="flex gap-2">
-              <button onClick={()=>setLocation('/settings')} className="p-2 rounded-xl border border-gray-700 text-gray-400"><Settings size={18}/></button>
-              <button onClick={()=>setLocation('/create')} className="flex items-center gap-1 px-3 py-2 rounded-xl font-bold text-black text-sm" style={{background:'#00F5FF'}}><Camera size={16}/>Grabar</button>
-            </div>
+    <div className="min-h-screen pt-16 pb-20" style={{background:'#0b0b12'}}>
+      <div className="max-w-md mx-auto px-4">
+        <div className="flex flex-col items-center text-center space-y-4">
+          <div className="relative"><Av u={u} s={100}/>{isMe&&<button className="absolute bottom-0 right-0 p-2 bg-[#00F5FF] rounded-full text-black border-4 border-[#0b0b12]"><Settings size={16}/></button>}</div>
+          <div><h2 className="text-2xl font-black text-white">@{u.username} {u.flag}</h2><p className="text-gray-400 text-sm">{u.city}, {u.country}</p></div>
+          <div className="flex gap-6"><div className="text-center"><p className="text-white font-black">{u.followers?.length||0}</p><p className="text-gray-500 text-xs uppercase font-bold">Seguidores</p></div><div className="text-center"><p className="text-white font-black">{u.following?.length||0}</p><p className="text-gray-500 text-xs uppercase font-bold">Siguiendo</p></div><div className="text-center"><p className="text-white font-black">{u.impactPoints||0}</p><p className="text-gray-500 text-xs uppercase font-bold">Impacto</p></div></div>
+          <p className="text-gray-300 text-sm max-w-xs">{u.bio || 'Sin biografía todavía.'}</p>
+          {isMe ? (
+            <button onClick={logout} className="px-8 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white font-bold flex items-center gap-2"><LogOut size={16}/> Salir</button>
           ) : (
-            <div className="flex gap-2">
-              <button onClick={doFollow} className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm" style={{background:following?'transparent':'#FF007F',border:following?'1px solid #FF007F':'none',color:following?'#FF007F':'white'}}>
-                {following?<><UserCheck size={16}/>Siguiendo</>:<><UserPlus size={16}/>Seguir</>}
-              </button>
-              <button onClick={()=>setLocation(`/messages/${targetId}`)} className="p-2 rounded-xl border border-gray-700 text-gray-400"><MessageCircle size={18}/></button>
-            </div>
+            <button className="px-8 py-2.5 rounded-xl bg-[#00F5FF] text-black font-bold">Seguir</button>
           )}
         </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-5 gap-2 mb-6 text-center">
-          {[
-            { v: displayUser.followers?.length||0, l: 'Seguidores' },
-            { v: displayUser.following?.length||0, l: 'Siguiendo' },
-            { v: videos.length, l: 'Cadenas' },
-            { v: videos.reduce((a:number,v:DominoVideo)=>a+(v.likes?.length||0),0), l: 'Me gusta' },
-            { v: `${displayUser.currentStreak||0}d`, l: 'Racha' }
-          ].map((s,i)=>(
-            <div key={i}><div className="text-white font-black text-lg">{s.v}</div><div className="text-gray-500 text-xs">{s.l}</div></div>
+        <div className="mt-10 flex border-b border-[#1e1e2a]"><button onClick={()=>setTab('videos')} className={cn('flex-1 py-3 text-sm font-bold border-b-2 transition-all',tab==='videos'?'text-[#00F5FF] border-[#00F5FF]':'text-gray-500 border-transparent')}>Videos</button><button onClick={()=>setTab('liked')} className={cn('flex-1 py-3 text-sm font-bold border-b-2 transition-all',tab==='liked'?'text-[#00F5FF] border-[#00F5FF]':'text-gray-500 border-transparent')}>Me gusta</button></div>
+        <div className="grid grid-cols-3 gap-1 mt-1">
+          {(videos||[]).map((v:DominoVideo)=>(
+            <div key={v._id} className="aspect-[9/16] bg-white/5 relative group cursor-pointer overflow-hidden"><img src={v.thumbnailUrl} className="w-full h-full object-cover transition-transform group-hover:scale-110"/><div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white gap-1 font-bold text-xs"><Heart size={14} className="fill-white"/> {v.likes?.length||0}</div></div>
           ))}
         </div>
-
-        {/* Impacto */}
-        <div className="rounded-xl p-3 mb-6 flex items-center justify-center gap-2" style={{background:'rgba(0,245,255,0.05)',border:'1px solid rgba(0,245,255,0.2)'}}>
-          <Zap size={16} style={{color:'#00F5FF'}}/><span className="font-black text-white text-lg">{fmt(displayUser.impactPoints)}</span><span className="text-gray-400 text-sm">Impacto</span>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex border-b mb-4" style={{borderColor:'#1e1e2a'}}>
-          {[
-            { key:'videos', icon:<Grid size={18}/>, label:'Mis Videos' },
-            { key:'likes', icon:<ThumbsUp size={18}/>, label:'Me Gusta' },
-            { key:'saved', icon:<Bookmark size={18}/>, label:'Guardados' }
-          ].map(t=>(
-            <button key={t.key} onClick={()=>setTab(t.key as any)} className={cn('flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-medium border-b-2 transition-all',tab===t.key?'text-white border-white':'text-gray-500 border-transparent')}>
-              {t.icon}{t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Grid de videos */}
-        <div className="grid grid-cols-3 gap-0.5">
-          {tabVideos.map((v: DominoVideo) => (
-            <button key={v._id} onClick={()=>setSelectedVideo(v)} className="relative overflow-hidden" style={{aspectRatio:'9/16'}}>
-              {v.thumbnailUrl ? (
-                <img src={v.thumbnailUrl} alt="" className="w-full h-full object-cover"/>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={24} className="text-gray-600"/></div>
-              )}
-              <div className="absolute bottom-1 left-1 flex items-center gap-0.5"><Heart size={10} className="text-white"/><span className="text-white text-xs">{fmt(v.likes?.length||0)}</span></div>
-              {v.videoUrl && <div className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{background:'#FF007F'}}/>}
-            </button>
-          ))}
-          {tabVideos.length === 0 && (
-            <div className="col-span-3 text-center py-16">
-              <div className="text-4xl mb-3">{tab==='videos'?'🎲':tab==='saved'?'🔖':'❤️'}</div>
-              <p className="text-gray-500 text-sm">{tab==='videos'?'Sin videos publicados':tab==='saved'?'Sin videos guardados':'Sin videos que te gusten'}</p>
-              {tab==='videos'&&isOwn&&<button onClick={()=>setLocation('/create')} className="mt-4 px-5 py-2 rounded-xl font-bold text-black text-sm" style={{background:'#00F5FF'}}>Grabar ahora</button>}
-            </div>
-          )}
-        </div>
       </div>
-    </div>
-  );
-}
-
-// ===================== CREATE PAGE (TikTok style) =====================
-function CreatePage() {
-  const [, setLocation] = useLocation();
-  const [subTab, setSubTab] = useState<'publicar'|'crear'|'live'>('publicar');
-
-  return (
-    <div className="min-h-screen" style={{background:'#000'}}>
-      {/* Header */}
-      <div className="flex items-center justify-between p-4">
-        <button onClick={()=>setLocation(-1 as any)} className="p-2 rounded-full" style={{background:'rgba(255,255,255,0.1)'}}><X size={20} className="text-white"/></button>
-        <h1 className="text-white font-bold text-base">CREATE</h1>
-        <div className="w-10"/>
-      </div>
-
-      {/* Herramientas */}
-      <div className="flex items-center gap-4 px-4 mb-4 overflow-x-auto">
-        {[
-          {icon:'✂️',label:'AutoCut'},{icon:'💬',label:'Subtítulos'},{icon:'✂',label:'Recorte'},{icon:'📸',label:'Editor'}
-        ].map(t=>(
-          <button key={t.label} className="flex flex-col items-center gap-1 flex-shrink-0">
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl" style={{background:'#1e1e2a'}}>{t.icon}</div>
-            <span className="text-gray-400 text-xs">{t.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Botón principal */}
-      <div className="px-4 mb-6">
-        <button onClick={()=>setLocation('/camera')} className="w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-bold text-white text-base" style={{background:'#1e1e2a',border:'2px dashed #2a2a3a'}}>
-          <Plus size={24} className="text-gray-400"/><span className="text-gray-300">Vídeo nuevo</span>
-        </button>
-      </div>
-
-      {/* Tabs publicar/crear/live */}
-      <div className="flex border-b px-4 mb-4" style={{borderColor:'#1e1e2a'}}>
-        {(['publicar','crear','live'] as const).map(t=>(
-          <button key={t} onClick={()=>setSubTab(t)} className={cn('flex-1 py-3 text-sm font-bold uppercase border-b-2 transition-all',subTab===t?'text-white border-white':'text-gray-500 border-transparent')}>
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {subTab==='publicar' && (
-        <div className="px-4">
-          <h2 className="text-white font-bold mb-3">Plantillas</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              {title:'Reto Kindness',desc:'1,7 mill. vídeos',thumb:'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=200&h=350&fit=crop'},
-              {title:'Eco Warrior',desc:'890K vídeos',thumb:'https://images.unsplash.com/photo-1501854140801-50d01698950b?w=200&h=350&fit=crop'},
-              {title:'Arte 15s',desc:'2,3 mill. vídeos',thumb:'https://images.unsplash.com/photo-1511988617509-a57c8a288659?w=200&h=350&fit=crop'},
-              {title:'Cadena Musical',desc:'560K vídeos',thumb:'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=200&h=350&fit=crop'},
-            ].map(t=>(
-              <button key={t.title} onClick={()=>setLocation('/camera')} className="relative rounded-xl overflow-hidden" style={{aspectRatio:'9/16'}}>
-                <img src={t.thumb} alt={t.title} className="w-full h-full object-cover"/>
-                <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.7) 0%,transparent 60%)'}}/>
-                <div className="absolute bottom-2 left-2 right-2"><p className="text-white text-xs font-bold">{t.title}</p><p className="text-gray-300 text-xs">{t.desc}</p></div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {subTab==='crear' && (
-        <div className="px-4 text-center py-8">
-          <div className="text-5xl mb-4">🎨</div>
-          <p className="text-gray-400 mb-4">Editor de fotos y videos próximamente</p>
-          <button onClick={()=>setLocation('/camera')} className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Ir a grabar</button>
-        </div>
-      )}
-
-      {subTab==='live' && (
-        <div className="px-4 text-center py-8">
-          <div className="text-5xl mb-4">📡</div>
-          <p className="text-white font-bold mb-2">Iniciar un live</p>
-          <p className="text-gray-400 text-sm mb-4">Conecta con tu audiencia en tiempo real</p>
-          <button onClick={()=>setLocation('/live/create')} className="px-6 py-3 rounded-xl font-bold text-white" style={{background:'#FF007F'}}>Empezar Live</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ===================== PUBLISH PAGE =====================
-function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
-  const { token } = useAuth();
-  const [, setLocation] = useLocation();
-  const { data: challenge } = useApi('/api/challenges/active');
-  const { data: users } = useApi('/api/ranking?limit=30');
-  const [description, setDescription] = useState('');
-  const [selected, setSelected] = useState<string[]>([]);
-  const [search, setSearch] = useState('');
-  const [privacy, setPrivacy] = useState<'public'|'private'>('public');
-  const [publishing, setPublishing] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [showNomModal, setShowNomModal] = useState(false);
-  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
-  const [geo] = useState({ lat: 40.4168, lng: -3.7038 });
-  const { user } = useAuth();
-
-  const addHashtag = (tag: string) => setDescription(d => d + ` #${tag}`);
-  const addMention = () => setDescription(d => d + ' @');
-
-  const publish = async () => {
-    if (!token || !challenge) return;
-    if (selected.length < 3) { setShowNomModal(true); return; }
-    setShowPrivacyModal(true);
-  };
-
-  const doPublish = async () => {
-    if (!token || !challenge) return;
-    setShowPrivacyModal(false);
-    setPublishing(true);
-    try {
-      let videoUrl = ''; let thumbnailUrl = '';
-      try { const r = await uploadToCloudinary(blob, p => setUploadProgress(p)); videoUrl = r.videoUrl; thumbnailUrl = r.thumbnailUrl; } catch {}
-      const r = await fetch(`${API}/api/videos`, {
-        method: 'POST', headers: { Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
-        body: JSON.stringify({ challengeId: challenge._id, videoUrl, thumbnailUrl, geoCoordinates: geo, nominatedUserIds: selected, description, isPublic: privacy === 'public' })
-      });
-      if (r.ok) setLocation('/profile');
-      else { const d = await r.json(); alert(d.error || 'Error'); }
-    } finally { setPublishing(false); }
-  };
-
-  const filtered = (Array.isArray(users)?users:[]).filter((u:RankingEntry) => u._id!==user?._id && !selected.includes(u._id) && u.username.toLowerCase().includes(search.toLowerCase()));
-
-  return (
-    <div className="min-h-screen" style={{background:'#fff'}}>
-      {/* Header */}
-      <div className="flex items-center p-4 border-b border-gray-200">
-        <button onClick={()=>setLocation('/camera')} className="p-2 mr-2"><ChevronLeft size={24} className="text-gray-800"/></button>
-        <h1 className="text-black font-bold text-base flex-1">Publicar vídeo</h1>
-      </div>
-
-      <div className="p-4 space-y-4">
-        {/* Preview + descripción */}
-        <div className="flex gap-3">
-          <textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Añade una descripción..." className="flex-1 resize-none text-sm text-gray-800 placeholder-gray-400 focus:outline-none" rows={3}/>
-          <div className="w-20 h-28 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-            <video src={blobUrl} className="w-full h-full object-cover"/>
-          </div>
-        </div>
-
-        {/* Hashtags y menciones */}
-        <div className="flex gap-2">
-          <button onClick={()=>addHashtag('domino')} className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-gray-300 text-sm text-gray-700"><Hash size={14}/># Hashtags</button>
-          <button onClick={addMention} className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-gray-300 text-sm text-gray-700"><AtSign size={14}/>@ Mencionar</button>
-        </div>
-
-        <div className="border-t border-gray-100"/>
-
-        {/* Nominar */}
-        <button onClick={()=>setShowNomModal(true)} className="w-full flex items-center justify-between py-3">
-          <div className="flex items-center gap-3"><Users size={20} className="text-gray-600"/><div className="text-left"><p className="text-sm font-medium text-gray-800">Nominar 3 personas</p><p className="text-xs text-gray-500">{selected.length}/3 seleccionados</p></div></div>
-          <span className="text-gray-400">›</span>
-        </button>
-
-        {/* Privacidad */}
-        <button onClick={()=>setPrivacy(p=>p==='public'?'private':'public')} className="w-full flex items-center justify-between py-3 border-t border-gray-100">
-          <div className="flex items-center gap-3"><Globe size={20} className="text-gray-600"/><p className="text-sm font-medium text-gray-800">{privacy==='public'?'Todo el mundo puede ver':'Solo tú'}</p></div>
-          <span className="text-gray-400">›</span>
-        </button>
-
-        {/* Ubicación */}
-        <div className="flex items-center justify-between py-3 border-t border-gray-100">
-          <div className="flex items-center gap-3"><MapPin size={20} className="text-gray-600"/><p className="text-sm font-medium text-gray-800">Ubicación</p></div>
-          <span className="text-gray-400">›</span>
-        </div>
-
-        <div className="border-t border-gray-100"/>
-
-        {/* Upload progress */}
-        {publishing && <div className="py-2"><div className="flex justify-between mb-1"><span className="text-xs text-gray-500">Subiendo...</span><span className="text-xs font-bold text-blue-500">{uploadProgress}%</span></div><div className="h-1.5 rounded-full bg-gray-200"><div className="h-full rounded-full bg-red-500" style={{width:`${uploadProgress}%`}}/></div></div>}
-
-        {/* Botones */}
-        <div className="flex gap-3 pt-2">
-          <button onClick={()=>{ saveToGallery(blob); }} className="flex-1 py-3 rounded-full border border-gray-300 text-sm font-semibold text-gray-700 flex items-center justify-center gap-2"><Download size={16}/>Borradores</button>
-          <button onClick={publish} disabled={publishing} className="flex-1 py-3 rounded-full text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60" style={{background:'#FF007F'}}>
-            {publishing?<Spinner/>:<><Upload size={16}/>Publicar</>}
-          </button>
-        </div>
-      </div>
-
-      {/* Modal nominar */}
-      {showNomModal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{background:'rgba(0,0,0,0.5)'}}>
-          <div className="w-full max-w-md rounded-t-2xl p-5" style={{background:'#13131f',maxHeight:'80vh',overflow:'auto'}}>
-            <div className="flex items-center justify-between mb-4"><div><h2 className="font-bold text-white">Nominar 3 personas</h2><p className="text-xs text-gray-400">Obligatorio ({selected.length}/3)</p></div><button onClick={()=>setShowNomModal(false)}><X size={18} className="text-gray-400"/></button></div>
-            {selected.length>0&&<div className="flex gap-2 flex-wrap mb-3">{selected.map(id=>{const u=(Array.isArray(users)?users:[]).find((x:RankingEntry)=>x._id===id);return u?<button key={id} onClick={()=>setSelected(s=>s.filter(x=>x!==id))} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border" style={{borderColor:'#FF007F',color:'#FF007F',background:'rgba(255,0,127,0.1)'}}>{u.username}<X size={10}/></button>:null;})}</div>}
-            <div className="relative mb-3"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar usuarios..." className="w-full rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/></div>
-            <div className="space-y-2 max-h-48 overflow-y-auto mb-4">{filtered.map((u:RankingEntry)=><button key={u._id} onClick={()=>selected.length<3&&setSelected(s=>[...s,u._id])} disabled={selected.length>=3} className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/5 text-left disabled:opacity-40"><Av u={u} s={32}/><div className="flex-1 min-w-0"><div className="text-sm font-medium text-white">{u.username}</div><div className="text-xs text-gray-400">{u.flag} {u.country}</div></div>{selected.includes(u._id)&&<CheckCircle size={16} className="text-[#00F5FF]"/>}</button>)}</div>
-            <button onClick={()=>setShowNomModal(false)} disabled={selected.length<3} className="w-full py-3 rounded-xl font-bold text-white disabled:opacity-50" style={{background:selected.length===3?'#FF007F':'#1e1e2a'}}>Confirmar ({selected.length}/3)</button>
-          </div>
-        </div>
-      )}
-
-      {/* Modal privacidad */}
-      {showPrivacyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.5)'}}>
-          <div className="w-full max-w-sm rounded-2xl p-6 text-center" style={{background:'white'}}>
-            <h2 className="text-black font-bold text-lg mb-2">¿Hacer que el vídeo sea público?</h2>
-            <p className="text-gray-500 text-sm mb-6">Tu cuenta es pública. Puedes cambiar la privacidad en Ajustes.</p>
-            <div className="flex gap-3">
-              <button onClick={()=>setShowPrivacyModal(false)} className="flex-1 py-3 rounded-xl text-gray-700 font-semibold border border-gray-200">Cancelar</button>
-              <button onClick={doPublish} className="flex-1 py-3 rounded-xl text-white font-bold" style={{background:'#FF007F'}}>Publicar ahora</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
 // ===================== CAMERA PAGE =====================
 function CameraPage() {
-  const { user, token } = useAuth();
   const [, setLocation] = useLocation();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const mrRef = useRef<MediaRecorder|null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream|null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval>|null>(null);
-  const [camOn, setCamOn] = useState(false);
-  const [rec, setRec] = useState(false);
-  const [secs, setSecs] = useState(15);
-  const [duration, setDuration] = useState<15|60>(15);
-  const [blob, setBlob] = useState<Blob|null>(null);
-  const [blobUrl, setBlobUrl] = useState<string|null>(null);
-  const [geo] = useState({ lat: 40.4168, lng: -3.7038 });
+  const [recording, setRecording] = useState(false);
+  const [stream, setStream] = useState<MediaStream|null>(null);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder|null>(null);
+  const [chunks, setChunks] = useState<Blob[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    navigator.geolocation?.getCurrentPosition(p => {});
-    return () => { streamRef.current?.getTracks().forEach(t=>t.stop()); if(blobUrl)URL.revokeObjectURL(blobUrl); };
+    navigator.mediaDevices.getUserMedia({ video: { facingMode:'user', width:720, height:1280 }, audio:true })
+      .then(s => { setStream(s); if(videoRef.current) videoRef.current.srcObject=s; })
+      .catch(console.error);
+    return () => stream?.getTracks().forEach(t=>t.stop());
   }, []);
 
-  const startCam = async () => {
-    try {
-      let s: MediaStream;
-      try { s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}},audio:true}); }
-      catch { try{s=await navigator.mediaDevices.getUserMedia({video:true,audio:true});}catch{s=await navigator.mediaDevices.getUserMedia({video:true,audio:false});} }
-      streamRef.current=s; setCamOn(true);
-      await new Promise(r=>setTimeout(r,100));
-      if(videoRef.current){videoRef.current.srcObject=s;videoRef.current.muted=true;videoRef.current.playsInline=true;try{await videoRef.current.play();}catch{}}
-    } catch(err:any){setCamOn(false);alert(err.name==='NotAllowedError'?'❌ Permiso denegado.':'❌ Error: '+err.message);}
+  const start = () => {
+    if(!stream)return;
+    const mr = new MediaRecorder(stream, { mimeType:'video/webm;codecs=vp8,opus' });
+    const c: Blob[] = [];
+    mr.ondataavailable = e => c.push(e.data);
+    mr.onstop = async () => {
+      const blob = new Blob(c, { type:'video/webm' });
+      setUploading(true);
+      try {
+        const { videoUrl, thumbnailUrl } = await uploadToCloudinary(blob, setProgress);
+        const { token } = JSON.parse(localStorage.getItem('domino_token')||'{}');
+        await fetch(`${API}/api/videos`, { method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`}, body:JSON.stringify({videoUrl,thumbnailUrl}) });
+        setLocation('/feed');
+      } catch(e) { console.error(e); } finally { setUploading(false); }
+    };
+    mr.start(); setMediaRecorder(mr); setRecording(true);
   };
-
-  const stopRec = useCallback(()=>{if(timerRef.current)clearInterval(timerRef.current);if(mrRef.current&&mrRef.current.state!=='inactive')mrRef.current.stop();setRec(false);},[]);
-
-  const startRec = () => {
-    if(!streamRef.current)return; chunksRef.current=[];
-    const mime=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':MediaRecorder.isTypeSupported('video/webm')?'video/webm':'';
-    const mr=new MediaRecorder(streamRef.current,mime?{mimeType:mime}:{});
-    mr.ondataavailable=e=>{if(e.data.size>0)chunksRef.current.push(e.data);};
-    mr.onstop=()=>{const b=new Blob(chunksRef.current,{type:'video/webm'});setBlob(b);const url=URL.createObjectURL(b);setBlobUrl(url);streamRef.current?.getTracks().forEach(t=>t.stop());setCamOn(false);};
-    mrRef.current=mr;mr.start();setRec(true);setSecs(duration);
-    timerRef.current=setInterval(()=>setSecs(t=>{if(t<=1){stopRec();return 0;}return t-1;}),1000);
-  };
-
-  // Si ya grabó, ir a publicar
-  if (blob && blobUrl) {
-    return <PublishPage blob={blob} blobUrl={blobUrl}/>;
-  }
-
-  if (!user) return (
-    <div className="min-h-screen flex items-center justify-center" style={{background:'#0b0b12'}}>
-      <div className="text-center"><p className="text-gray-400 mb-4">Inicia sesión para grabar</p><Link href="/auth" className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Entrar</Link></div>
-    </div>
-  );
+  const stop = () => { if(mediaRecorder) mediaRecorder.stop(); setRecording(false); };
 
   return (
-    <div className="min-h-screen" style={{background:'#000'}}>
-      <div className="relative h-screen overflow-hidden">
-        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay muted playsInline style={{display:camOn?'block':'none'}}/>
-        {!camOn&&<div className="absolute inset-0 flex items-center justify-center bg-black"><div className="text-center"><Camera size={64} className="mx-auto text-gray-600 mb-3"/><p className="text-gray-400 text-sm">Activa la cámara</p></div></div>}
-
-        {/* Top controls */}
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 z-10">
-          <button onClick={()=>setLocation('/create')} className="p-2 rounded-full" style={{background:'rgba(0,0,0,0.5)'}}><X size={20} className="text-white"/></button>
-          {camOn&&<button className="px-3 py-1.5 rounded-full text-xs text-white font-semibold flex items-center gap-1.5" style={{background:'rgba(0,0,0,0.5)'}}><span>♪</span>Añadir sonido</button>}
-          <div className="w-10"/>
-        </div>
-
-        {/* Side tools */}
-        {camOn && (
-          <div className="absolute right-3 top-20 flex flex-col gap-5 items-center z-10">
-            {[{icon:'⏱️',label:''},{icon:'⬜',label:''},{icon:'✨',label:''},{icon:'😊',label:''}].map((t,i)=><button key={i} className="flex flex-col items-center gap-1"><span className="text-2xl">{t.icon}</span></button>)}
-          </div>
-        )}
-
-        {/* Encuadramiento */}
-        {camOn && !rec && <>
-          <div className="absolute top-32 left-4 w-8 h-8 border-t-2 border-l-2 rounded-tl-lg" style={{borderColor:'#00F5FF'}}/>
-          <div className="absolute top-32 right-4 w-8 h-8 border-t-2 border-r-2 rounded-tr-lg" style={{borderColor:'#00F5FF'}}/>
-          <div className="absolute bottom-40 left-4 w-8 h-8 border-b-2 border-l-2 rounded-bl-lg" style={{borderColor:'#00F5FF'}}/>
-          <div className="absolute bottom-40 right-4 w-8 h-8 border-b-2 border-r-2 rounded-br-lg" style={{borderColor:'#00F5FF'}}/>
-        </>}
-
-        {/* Bottom controls */}
-        <div className="absolute bottom-0 left-0 right-0 pb-8 z-10">
-          {/* Duración selector */}
-          {!rec && camOn && (
-            <div className="flex items-center justify-center gap-4 mb-4">
-              {([15,60] as const).map(d=>(
-                <button key={d} onClick={()=>setDuration(d)} className={cn('px-4 py-1.5 rounded-full text-sm font-bold transition-all',duration===d?'text-black':'text-white border border-gray-600')} style={duration===d?{background:'white'}:{}}>
-                  {d}s
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Contador durante grabación */}
-          {rec && <div className="flex justify-center mb-4"><div className="w-16 h-16 rounded-full flex items-center justify-center border-4" style={{borderColor:'#FF007F',boxShadow:'0 0 20px rgba(255,0,127,0.5)'}}><span className="text-2xl font-black text-white font-mono">{secs}</span></div></div>}
-
-          <div className="flex items-center justify-center gap-8">
-            {/* Galería */}
-            <button className="w-10 h-10 rounded-lg overflow-hidden border-2 border-white/30" style={{background:'#1e1e2a'}}>
-              <ImageIcon size={20} className="text-gray-400 mx-auto mt-1"/>
-            </button>
-
-            {/* Botón grabar */}
-            {!camOn ? (
-              <button onClick={startCam} className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center" style={{background:'rgba(255,255,255,0.1)'}}>
-                <Camera size={28} className="text-white"/>
-              </button>
-            ) : (
-              <button onClick={rec?stopRec:startRec} className={cn('transition-all active:scale-95',rec?'scale-110':'')}>
-                <div className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center" style={rec?{background:'#FF007F',borderColor:'#FF007F',boxShadow:'0 0 30px rgba(255,0,127,0.6)'}:{background:'rgba(255,0,0,0.8)'}}>
-                  {rec?<div className="w-8 h-8 bg-white rounded-sm"/>:<div className="w-16 h-16 rounded-full" style={{background:'#FF007F'}}/>}
-                </div>
-              </button>
-            )}
-
-            {/* Flip camera */}
-            <button className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.5)'}}>
-              <RefreshCw size={20} className="text-white"/>
-            </button>
-          </div>
-
-          {/* Texto debajo */}
-          {camOn && <p className="text-center text-xs text-gray-400 mt-3">{rec?'Pulsa para detener':'Pulsa para grabar'}</p>}
-
-          {/* Tabs PUBLICAR / CREAR / LIVE */}
-          <div className="flex items-center justify-center gap-8 mt-4">
-            {(['PUBLICAR','CREAR','LIVE'] as const).map((t,i)=>(
-              <button key={t} onClick={()=>i===2&&setLocation('/live/create')} className={cn('text-xs font-bold pb-1',i===0?'text-white border-b-2 border-white':'text-gray-500')}>
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ===================== MESSAGES PAGE =====================
-function MessagesPage() {
-  const { user } = useAuth();
-  const { data: convs, loading } = useApi('/api/users/messages/inbox', [user?._id]);
-  const [, setLocation] = useLocation();
-
-  if (!user) return <div className="min-h-screen flex items-center justify-center" style={{paddingTop:'56px',background:'#0b0b12'}}><div className="text-center"><p className="text-gray-400 mb-4">Inicia sesión</p><Link href="/auth" className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Entrar</Link></div></div>;
-
-  return (
-    <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center justify-between px-4 py-4">
-          <h1 className="text-xl font-black text-white">Mensajes</h1>
-          <button className="p-2 rounded-lg hover:bg-white/5"><Search size={20} className="text-gray-400"/></button>
-        </div>
-
-        {loading ? <div className="flex justify-center py-8"><Spinner/></div> : (
-          <div>
-            {(!convs || !Array.isArray(convs) || convs.length === 0) ? (
-              <div className="text-center py-16"><MessageCircle size={48} className="mx-auto text-gray-700 mb-3"/><p className="text-gray-400">Sin mensajes todavía</p></div>
-            ) : (
-              (Array.isArray(convs)?convs:[]).map((c:Conversation) => (
-                <button key={c.user._id} onClick={()=>setLocation(`/messages/${c.user._id}`)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors">
-                  <Av u={c.user} s={48}/>
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="flex items-center justify-between"><span className="text-white font-semibold text-sm">{c.user.username}</span><span className="text-gray-500 text-xs">{ago(c.lastMessage.createdAt)}</span></div>
-                    <p className="text-gray-400 text-xs truncate mt-0.5">{c.lastMessage.text}</p>
-                  </div>
-                  {c.unread>0&&<span className="w-5 h-5 rounded-full text-xs font-bold text-black flex items-center justify-center flex-shrink-0" style={{background:'#FF007F'}}>{c.unread}</span>}
-                </button>
-              ))
-            )}
-          </div>
+    <div className="fixed inset-0 bg-black z-50 flex flex-col">
+      <video ref={videoRef} className="flex-1 object-cover" autoPlay muted playsInline/>
+      <div className="absolute top-6 left-6 right-6 flex justify-between items-center"><button onClick={()=>setLocation('/')} className="p-2 bg-black/40 rounded-full text-white"><X size={24}/></button><div className="px-3 py-1 rounded-full bg-red-500 text-white text-xs font-bold animate-pulse">{recording?'GRABANDO':'LISTO'}</div></div>
+      <div className="absolute bottom-10 left-0 right-0 flex flex-col items-center gap-6">
+        {uploading ? (
+          <div className="w-64 space-y-2"><div className="h-1 bg-white/20 rounded-full overflow-hidden"><div className="h-full bg-[#00F5FF] transition-all" style={{width:`${progress}%`}}/></div><p className="text-white text-xs font-bold text-center">Subiendo... {progress}%</p></div>
+        ) : (
+          <button onClick={recording?stop:start} className={cn('w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all',recording?'border-red-500 bg-red-500/20':'border-white bg-white/20')}><div className={cn('rounded-full transition-all',recording?'w-8 h-8 bg-red-500':'w-14 h-14 bg-white')}/></button>
         )}
       </div>
     </div>
   );
 }
 
-// ===================== CHAT PAGE =====================
-function ChatPage({ userId }: { userId: string }) {
-  const { user, token } = useAuth();
-  const [, setLocation] = useLocation();
-  const { data: msgs, setData, loading } = useApi(`/api/users/messages/${userId}`, [userId]);
-  const { data: other } = useApi(`/api/users/${userId}`, [userId]);
-  const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [msgs]);
-
-  const send = async () => {
-    if (!text.trim()||!token) return; setSending(true);
-    try {
-      const r=await fetch(`${API}/api/users/messages/${userId}`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({text})});
-      const m=await r.json(); if(r.ok){setData((p:Message[])=>[...(Array.isArray(p)?p:[]),m]);setText('');}
-    } finally{setSending(false);}
-  };
-
+// ===================== WORLD MAP =====================
+function WorldMapPage() {
   return (
-    <div className="min-h-screen flex flex-col" style={{paddingTop:'56px',background:'#0b0b12'}}>
-      {/* Header chat */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b sticky top-14 z-10" style={{background:'#0b0b12',borderColor:'#1e1e2a'}}>
-        <button onClick={()=>setLocation('/messages')}><ChevronLeft size={24} className="text-gray-400"/></button>
-        {other&&<><Av u={other} s={36}/><div><p className="text-white font-bold text-sm">@{other.username}</p><p className="text-gray-400 text-xs">{other.flag} {other.city}</p></div></>}
-      </div>
-
-      {/* Mensajes */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-24">
-        {loading?<div className="flex justify-center py-8"><Spinner/></div>:(Array.isArray(msgs)?msgs:[]).map((m:Message)=>{
-          const isMe = m.fromUserId._id === user?._id;
-          return (
-            <div key={m._id} className={cn('flex gap-2',isMe?'justify-end':'justify-start')}>
-              {!isMe&&<Av u={m.fromUserId} s={28}/>}
-              <div className="max-w-[70%] px-3 py-2 rounded-2xl text-sm" style={isMe?{background:'#00F5FF',color:'#0b0b12',borderBottomRightRadius:'4px'}:{background:'#1e1e2a',color:'white',borderBottomLeftRadius:'4px'}}>
-                {m.text}
-              </div>
-            </div>
-          );
-        })}
-        <div ref={bottomRef}/>
-      </div>
-
-      {/* Input */}
-      <div className="fixed bottom-16 left-0 right-0 p-3 border-t" style={{background:'#0b0b12',borderColor:'#1e1e2a'}}>
-        <div className="flex gap-2 max-w-2xl mx-auto">
-          <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Escribe un mensaje..." className="flex-1 rounded-full px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#1e1e2a',border:'1px solid #2a2a3a'}}/>
-          <button onClick={send} disabled={sending||!text.trim()} className="w-10 h-10 rounded-full flex items-center justify-center disabled:opacity-50" style={{background:'#00F5FF'}}><Send size={16} className="text-black"/></button>
-        </div>
-      </div>
+    <div className="min-h-screen pt-16 flex items-center justify-center bg-[#0b0b12] text-gray-500 px-10 text-center">
+      <div><Globe size={60} className="mx-auto mb-4 opacity-20"/><h2 className="text-xl font-bold text-white mb-2">Mapa de Cadenas</h2><p>Próximamente: Mira cómo se expanden las piezas de dominó por todo el mundo en tiempo real.</p></div>
     </div>
   );
 }
@@ -933,28 +480,17 @@ function ChatPage({ userId }: { userId: string }) {
 // ===================== LIVE LIST =====================
 function LiveListPage() {
   const { data: lives, loading } = useApi('/api/lives');
-  const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const list = Array.isArray(lives)?lives:[];
   return (
-    <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="flex items-center justify-between mb-6"><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full animate-pulse" style={{background:'#FF007F'}}/><h1 className="text-2xl font-black text-white">En Directo</h1></div>{user&&<button onClick={()=>setLocation('/live/create')} className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-white text-sm" style={{background:'#FF007F'}}><Video size={16}/>Iniciar</button>}</div>
-        {loading?<div className="flex justify-center py-8"><Spinner/></div>:list.length===0?(
-          <div className="text-center py-20"><div className="text-5xl mb-4">📡</div><h3 className="text-xl font-bold text-white mb-2">Nadie en directo</h3>{user&&<button onClick={()=>setLocation('/live/create')} className="px-6 py-3 rounded-xl font-bold text-white mt-4" style={{background:'#FF007F'}}>Empezar</button>}</div>
-        ):(
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {list.map((l:LiveStream)=>(
-              <Link key={l._id} href={`/live/${l._id}`} className="relative rounded-xl overflow-hidden cursor-pointer" style={{aspectRatio:'9/16',background:'#13131f',border:'1px solid #1e1e2a'}}>
-                <div className="absolute inset-0 flex items-center justify-center"><Av u={l.userId} s={80}/></div>
-                <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.85) 0%,transparent 60%)'}}/>
-                <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE</div>
-                <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs text-white" style={{background:'rgba(0,0,0,0.6)'}}><Eye size={9}/>{l.viewerCount}</div>
-                <div className="absolute bottom-3 left-3 right-3"><p className="text-white text-xs font-bold truncate">@{l.userId?.username}</p><p className="text-gray-300 text-xs truncate">{l.title}</p></div>
-              </Link>
-            ))}
-          </div>
-        )}
+    <div className="min-h-screen pt-16 px-4 pb-20" style={{background:'#0b0b12'}}>
+      <div className="max-w-md mx-auto space-y-6">
+        <div className="flex items-center justify-between"><h2 className="text-2xl font-black text-white">En Vivo</h2><button onClick={()=>setLocation('/live/create')} className="px-4 py-2 rounded-xl bg-[#FF007F] text-white text-sm font-bold flex items-center gap-2"><Plus size={16}/> Emitir</button></div>
+        <div className="grid grid-cols-2 gap-3">
+          {(lives||[]).map((l:LiveStream)=>(
+            <button key={l._id} onClick={()=>setLocation(`/live/${l._id}`)} className="relative aspect-[3/4] rounded-2xl overflow-hidden group"><img src={l.userId.avatarUrl} className="w-full h-full object-cover"/><div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"/><div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-red-500 text-[10px] font-bold text-white flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/> VIVO</div><div className="absolute bottom-3 left-3 text-left"><p className="text-white text-xs font-bold truncate">@{l.userId.username}</p><p className="text-gray-300 text-[10px] flex items-center gap-1"><Eye size={10}/> {l.viewerCount}</p></div></button>
+          ))}
+        </div>
+        {(!lives||lives.length===0)&&<div className="text-center py-20 text-gray-500"><Video size={40} className="mx-auto mb-4 opacity-20"/><p>No hay emisiones ahora</p></div>}
       </div>
     </div>
   );
@@ -962,24 +498,15 @@ function LiveListPage() {
 
 // ===================== CREATE LIVE =====================
 function CreateLivePage() {
-  const { user, token } = useAuth();
   const [, setLocation] = useLocation();
-  const [form, setForm] = useState({title:'',description:'',category:'General',isBattle:false});
-  const [loading, setLoading] = useState(false); const [error, setError] = useState('');
-  if(!user)return<div className="min-h-screen flex items-center justify-center" style={{paddingTop:'80px',background:'#0b0b12'}}><Link href="/auth" className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Entrar</Link></div>;
-  const create=async()=>{if(!form.title.trim())return setError('Escribe un título');setError('');setLoading(true);try{const r=await fetch(`${API}/api/lives`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(form)});const d=await r.json();if(!r.ok)throw new Error(d.error||'Error');setLocation(`/live/${d.live._id}`);}catch(e:any){setError(e.message);}finally{setLoading(false);}};
-  return(
-    <div className="min-h-screen flex items-center justify-center px-4" style={{paddingTop:'80px',background:'#0b0b12'}}>
-      <div className="w-full max-w-md">
-        <h1 className="text-3xl font-black text-white mb-6">Iniciar Live</h1>
-        <div className="rounded-2xl p-6 space-y-4" style={{background:'#13131f',border:'1px solid #1e1e2a'}}>
-          <input placeholder="Título del live" value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/>
-          <input placeholder="Descripción (opcional)" value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/>
-          <select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))} className="w-full rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}>{['General','Creativity','Kindness','Eco','Battle'].map(c=><option key={c} value={c}>{c}</option>)}</select>
-          <label className="flex items-center gap-3 cursor-pointer"><div className="w-10 h-5 rounded-full relative transition-all" style={{background:form.isBattle?'#FF007F':'#374151'}} onClick={()=>setForm(f=>({...f,isBattle:!f.isBattle}))}><div className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all',form.isBattle?'left-5':'left-0.5')}/></div><span className="text-sm text-white">Modo batalla VS</span></label>
-          {error&&<p className="text-red-400 text-xs">{error}</p>}
-          <button onClick={create} disabled={loading} className="w-full py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50" style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)'}}>{loading?<Spinner/>:<><Video size={18}/>Empezar Live</>}</button>
-        </div>
+  const [title, setTitle] = useState('');
+  return (
+    <div className="min-h-screen pt-16 px-6 bg-[#0b0b12]">
+      <div className="max-w-md mx-auto space-y-8">
+        <button onClick={()=>setLocation('/live')} className="p-2 bg-white/5 rounded-full text-white"><ChevronLeft size={24}/></button>
+        <h2 className="text-3xl font-black text-white">Nueva Emisión</h2>
+        <div className="space-y-4"><div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Título del Live</label><input type="text" placeholder="¿De qué vas a hablar?" className="w-full bg-white/5 border border-[#2a2a3a] rounded-2xl px-4 py-4 text-white outline-none focus:border-[#00F5FF]" value={title} onChange={e=>setTitle(e.target.value)}/></div><div className="p-6 rounded-2xl bg-[#00F5FF]/5 border border-[#00F5FF]/20 flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-[#00F5FF] flex items-center justify-center text-black"><Zap size={24}/></div><div><p className="text-[#00F5FF] font-bold">Modo Batalla</p><p className="text-gray-400 text-xs">Recibe regalos y compite en tiempo real.</p></div></div></div>
+        <button className="w-full py-4 rounded-2xl bg-[#00F5FF] text-black font-black text-lg shadow-[0_0_30px_rgba(0,245,255,0.3)]">EMPEZAR AHORA</button>
       </div>
     </div>
   );
@@ -987,197 +514,146 @@ function CreateLivePage() {
 
 // ===================== LIVE VIEWER =====================
 function LiveViewerPage({ id }: { id: string }) {
-  const { user, token, refreshUser } = useAuth();
-  const { data: lives } = useApi('/api/lives', [id]);
-  const [msgs, setMsgs] = useState<{user:string;text:string;type?:string}[]>([{user:'Sistema',text:'¡Bienvenido! 🎲',type:'system'}]);
-  const [input, setInput] = useState(''); const [showGifts, setShowGifts] = useState(false);
-  const [giftAnim, setGiftAnim] = useState<string|null>(null); const [viewers, setViewers] = useState(0);
-  const chatRef = useRef<HTMLDivElement>(null);
-  const live = Array.isArray(lives)?lives.find((l:LiveStream)=>l._id===id):null;
-  useEffect(()=>{if(live)setViewers(live.viewerCount||0);},[live]);
-  useEffect(()=>{const t=setInterval(()=>setViewers(v=>Math.max(0,v+Math.floor(Math.random()*3-1))),5000);return()=>clearInterval(t);},[]);
-  useEffect(()=>{if(chatRef.current)chatRef.current.scrollTop=chatRef.current.scrollHeight;},[msgs]);
-  const sendMsg=()=>{if(!input.trim()||!user)return;setMsgs(m=>[...m,{user:user.username,text:input}]);setInput('');};
-  const sendGift=async(type:string)=>{
-    const g=GIFT_CATALOG[type];if((user?.coins||0)<g.coins){alert('Monedas insuficientes');return;}
-    const r=await fetch(`${API}/api/coins/gift`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({liveId:id,giftType:type,quantity:1})});
-    if(r.ok){setGiftAnim(`${g.emoji} ${g.name}`);setTimeout(()=>setGiftAnim(null),3000);setMsgs(m=>[...m,{user:user?.username||'Tú',text:`envió ${g.emoji} ${g.name}!`,type:'gift'}]);await refreshUser();}
-    else alert('Error al enviar regalo');setShowGifts(false);
-  };
-  if(!live)return<div className="min-h-screen flex items-center justify-center" style={{paddingTop:'80px',background:'#0b0b12'}}><div className="text-center"><div className="text-5xl mb-4">📡</div><p className="text-white font-bold mb-2">Live no encontrado</p><Link href="/live" className="text-sm font-semibold" style={{color:'#00F5FF'}}>Ver otros</Link></div></div>;
-  return(
-    <div className="fixed inset-0 flex" style={{paddingTop:'0',background:'#000'}}>
-      <div className="relative flex-1">
-        <div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><div className="text-center"><Av u={live.userId} s={120}/><p className="text-white font-bold mt-4 text-xl">@{live.userId?.username}</p><p className="text-gray-400 text-sm mt-1">{live.title}</p><div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full" style={{background:'rgba(255,0,127,0.2)',border:'1px solid #FF007F'}}><div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#FF007F'}}/><span className="text-white text-sm font-bold">EN DIRECTO</span></div></div></div>
-        <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-10"><div className="flex items-center gap-2"><div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE</div><div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs text-white" style={{background:'rgba(0,0,0,0.6)'}}><Eye size={10}/>{Math.max(0,viewers)}</div></div><Link href="/live" className="p-1.5 rounded-full" style={{background:'rgba(0,0,0,0.6)'}}><X size={16} className="text-white"/></Link></div>
-        {giftAnim&&<div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center animate-bounce z-20"><div className="text-5xl mb-2">{giftAnim.split(' ')[0]}</div><p className="text-white font-bold">{giftAnim}</p></div>}
-        <div className="absolute bottom-4 left-2 flex items-center gap-2 z-10">
-          <button onClick={()=>setShowGifts(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold text-white" style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)'}}><Gift size={16}/>Regalar</button>
-          {user&&<div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold" style={{background:'rgba(0,0,0,0.6)',color:'#FFD700'}}>🪙 {(user.coins||0)}</div>}
-        </div>
-        {showGifts&&<div className="absolute bottom-16 left-2 z-20 rounded-2xl p-4 w-72" style={{background:'#13131f',border:'1px solid #1e1e2a'}}><div className="flex items-center justify-between mb-3"><h3 className="font-bold text-white text-sm">Enviar Regalo</h3><button onClick={()=>setShowGifts(false)}><X size={16} className="text-gray-400"/></button></div><div className="grid grid-cols-3 gap-2">{Object.entries(GIFT_CATALOG).map(([k,g])=><button key={k} onClick={()=>sendGift(k)} disabled={(user?.coins||0)<g.coins} className="flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-white/10 disabled:opacity-40 border border-transparent hover:border-[#FF007F]"><span className="text-2xl">{g.emoji}</span><span className="text-white text-xs font-bold">{g.name}</span><span className="text-yellow-400 text-xs">{g.coins}🪙</span></button>)}</div></div>}
-      </div>
-      <div className="w-72 flex flex-col" style={{background:'#13131f',borderLeft:'1px solid #1e1e2a'}}>
-        <div className="p-3 border-b flex items-center gap-2" style={{borderColor:'#1e1e2a'}}><Av u={live.userId} s={28}/><div><p className="text-white text-xs font-bold">@{live.userId?.username}</p><p className="text-gray-400 text-xs truncate">{live.title}</p></div></div>
-        <div ref={chatRef} className="flex-1 overflow-y-auto p-3 space-y-2">{msgs.map((m,i)=><div key={i} className={cn('text-xs',m.type==='system'?'text-center text-gray-500':m.type==='gift'?'text-center':'')}>{m.type==='gift'?<span className="px-2 py-1 rounded-full font-bold" style={{background:'rgba(255,0,127,0.2)',color:'#FF007F'}}>🎁 {m.user} {m.text}</span>:m.type==='system'?<span>{m.text}</span>:<span><span className="font-bold" style={{color:'#00F5FF'}}>{m.user}: </span><span className="text-gray-300">{m.text}</span></span>}</div>)}</div>
-        {user&&<div className="p-3 border-t flex gap-2" style={{borderColor:'#1e1e2a'}}><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendMsg()} placeholder="Escribe algo..." className="flex-1 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/><button onClick={sendMsg} className="p-2 rounded-xl" style={{background:'#00F5FF'}}><Send size={14} className="text-black"/></button></div>}
-      </div>
-    </div>
-  );
-}
-
-// ===================== MAP PAGE =====================
-function WorldMapPage() {
-  const { data: videos } = useApi('/api/videos/feed?limit=50');
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const proj=(lat:number,lng:number,w:number,h:number)=>({x:((lng+180)/360)*w,y:((90-lat)/180)*h});
-  const SAMPLE=[{lat:40.4168,lng:-3.7038,flag:'🇪🇸',city:'Madrid'},{lat:35.6762,lng:139.6503,flag:'🇯🇵',city:'Tokio'},{lat:40.7128,lng:-74.006,flag:'🇺🇸',city:'NY'},{lat:-34.6037,lng:-58.3816,flag:'🇦🇷',city:'Buenos Aires'},{lat:48.8566,lng:2.3522,flag:'🇫🇷',city:'París'},{lat:51.5074,lng:-0.1278,flag:'🇬🇧',city:'Londres'}];
-  const pts=Array.isArray(videos)&&videos.length>0?videos.map((v:DominoVideo)=>({lat:v.geoCoordinates.lat,lng:v.geoCoordinates.lng,flag:v.userId?.flag||'🌍',city:v.userId?.city||''})):SAMPLE;
-  useEffect(()=>{const c=canvasRef.current;if(!c)return;const ctx=c.getContext('2d');if(!ctx)return;c.width=c.parentElement?.clientWidth||800;c.height=Math.min((c.parentElement?.clientWidth||800)*0.5,400);const w=c.width,h=c.height;ctx.fillStyle='#0b0b12';ctx.fillRect(0,0,w,h);ctx.strokeStyle='rgba(42,42,58,0.6)';ctx.lineWidth=0.5;for(let l=-180;l<=180;l+=30){const{x}=proj(0,l,w,h);ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}for(let l=-90;l<=90;l+=30){const{y}=proj(l,0,w,h);ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}for(let i=0;i<pts.length-1;i++){const p1=proj(pts[i].lat,pts[i].lng,w,h),p2=proj(pts[i+1].lat,pts[i+1].lng,w,h);const g=ctx.createLinearGradient(p1.x,p1.y,p2.x,p2.y);g.addColorStop(0,'#00F5FF');g.addColorStop(1,'#FF007F');ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.strokeStyle=g;ctx.lineWidth=1.5;ctx.globalAlpha=0.6;ctx.stroke();ctx.globalAlpha=1;}pts.forEach((p:{lat:number;lng:number;flag:string;city:string},i:number)=>{const{x,y}=proj(p.lat,p.lng,w,h);ctx.beginPath();ctx.arc(x,y,i===0?8:5,0,Math.PI*2);ctx.fillStyle=i===0?'#FF007F':'#00F5FF';ctx.shadowBlur=12;ctx.shadowColor=ctx.fillStyle;ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='rgba(248,250,252,0.85)';ctx.font=`${Math.max(8,Math.floor(w/90))}px Inter`;ctx.fillText(`${p.flag} ${p.city}`,x+8,y-4);});},[pts.length]);
-  return(<div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}><div className="max-w-7xl mx-auto px-4 py-6"><h1 className="text-3xl font-black text-white mb-2">Mapa Global</h1><p className="text-gray-400 mb-6">{pts.length} nodos</p><div className="rounded-xl overflow-hidden border" style={{minHeight:'300px',borderColor:'#1e1e2a',background:'#0b0b12'}}><canvas ref={canvasRef} className="w-full block"/></div><div className="mt-6 grid grid-cols-3 gap-4">{[{v:Array.isArray(videos)?videos.length:pts.length,l:'Videos',c:'#00F5FF'},{v:new Set(pts.map((p:any)=>p.city)).size,l:'Ciudades',c:'#FF007F'},{v:pts.length,l:'Nodos',c:'#7c3aed'}].map((s,i)=><div key={i} className="rounded-xl p-4 border" style={{background:'#13131f',borderColor:'#1e1e2a'}}><div className="text-2xl font-bold" style={{color:s.c}}>{s.v}</div><div className="text-xs text-gray-400 mt-1">{s.l}</div></div>)}</div></div></div>);
-}
-
-// ===================== NOTIFICATIONS PAGE =====================
-function NotificationsPage() {
-  const { user, token } = useAuth();
-  const { data: notifs, setData: setNotifs } = useApi('/api/notifications', [user?._id]);
-  const markAll=async()=>{if(!token)return;await fetch(`${API}/api/notifications/read-all`,{method:'PUT',headers:{Authorization:`Bearer ${token}`}});setNotifs((p:Notification[])=>Array.isArray(p)?p.map(n=>({...n,read:true})):p);};
-  return(
-    <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        <div className="flex items-center justify-between mb-6"><h1 className="text-2xl font-black text-white">Avisos</h1>{Array.isArray(notifs)&&notifs.some((n:Notification)=>!n.read)&&<button onClick={markAll} className="text-xs font-semibold" style={{color:'#00F5FF'}}>Marcar como leídas</button>}</div>
-        <div className="space-y-2">
-          {(Array.isArray(notifs)?notifs:[]).map((n:Notification)=>(
-            <div key={n._id} className={cn('flex gap-3 p-4 rounded-xl border',!n.read?'border-[#00F5FF]/20 bg-[#00F5FF]/5':'border-[#1e1e2a] bg-[#13131f]')}>
-              <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0" style={{background:'rgba(255,0,127,0.1)'}}>{n.type==='nomination'?'🎯':n.type==='chain_continued'?'⛓️':n.type==='liked'?'❤️':'🏆'}</div>
-              <div className="flex-1"><p className="text-sm text-white">{n.message}</p><p className="text-xs text-gray-500 mt-1">{ago(n.createdAt)}</p></div>
-              {!n.read&&<div className="w-2 h-2 rounded-full flex-shrink-0 mt-2" style={{background:'#FF007F'}}/>}
-            </div>
-          ))}
-          {(!notifs||!Array.isArray(notifs)||notifs.length===0)&&<div className="text-center py-16"><Bell size={48} className="mx-auto text-gray-700 mb-3"/><p className="text-gray-400">Sin avisos</p></div>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ===================== SEARCH PAGE =====================
-function SearchPage() {
-  const [q, setQ] = useState('');
-  const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const { token } = useAuth();
+  const { data: live } = useApi(`/api/lives/${id}`);
   const [, setLocation] = useLocation();
-
-  useEffect(() => {
-    if (q.length < 2) { setResults([]); return; }
-    setLoading(true);
-    fetch(`${API}/api/users/search?q=${encodeURIComponent(q)}`, { headers: token ? { Authorization:`Bearer ${token}` } : {} })
-      .then(r => r.json()).then(setResults).catch(()=>{}).finally(()=>setLoading(false));
-  }, [q]);
-
+  if(!live)return null;
   return (
-    <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
-      <div className="max-w-2xl mx-auto px-4 py-4">
-        <div className="relative mb-6"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar usuarios, ciudades..." autoFocus className="w-full rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#1e1e2a',border:'1px solid #2a2a3a'}}/></div>
-        {loading&&<div className="flex justify-center py-8"><Spinner/></div>}
-        <div className="space-y-2">
-          {results.map((u:RankingEntry)=>(
-            <button key={u._id} onClick={()=>setLocation(`/user/${u._id}`)} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors">
-              <Av u={u} s={44}/><div className="flex-1 text-left"><p className="text-white font-semibold">@{u.username}</p><p className="text-gray-400 text-xs">{u.flag} {u.country} · {fmt(u.impactPoints)} pts</p></div><div className="flex items-center gap-1 text-xs text-gray-500"><Users size={12}/>{u.followers?.length||0}</div>
-            </button>
+    <div className="fixed inset-0 bg-black z-50 flex flex-col">
+      <div className="absolute top-6 left-4 right-4 z-10 flex items-center justify-between"><div className="flex items-center gap-2 bg-black/40 p-1 pr-3 rounded-full border border-white/10"><Av u={live.userId} s={32}/><div><p className="text-white text-[10px] font-bold">@{live.userId.username}</p><p className="text-[#00F5FF] text-[8px] flex items-center gap-0.5 font-bold"><Eye size={8}/> {live.viewerCount}</p></div><button className="ml-2 px-3 py-1 bg-[#00F5FF] rounded-full text-black text-[10px] font-bold">Seguir</button></div><button onClick={()=>setLocation('/live')} className="p-2 bg-black/40 rounded-full text-white"><X size={24}/></button></div>
+      <div className="flex-1 flex items-center justify-center bg-[#1a1a2e]"><div className="text-center space-y-4"><Av u={live.userId} s={120}/><p className="text-white font-bold text-xl">Conectando con el directo...</p></div></div>
+      <div className="absolute bottom-0 inset-x-0 p-4 space-y-4 bg-gradient-to-t from-black to-transparent">
+        <div className="h-40 overflow-y-auto space-y-2 text-sm"><div className="flex items-center gap-2"><span className="text-yellow-400 font-bold">Sistema:</span><span className="text-gray-300">¡Bienvenido al directo! Sé respetuoso.</span></div></div>
+        <div className="flex gap-2"><input type="text" placeholder="Di algo..." className="flex-1 bg-black/40 border border-white/10 rounded-full px-4 py-2 text-white text-sm outline-none focus:border-[#00F5FF]"/><button className="w-10 h-10 rounded-full bg-[#FF007F] flex items-center justify-center text-white"><Gift size={20}/></button></div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== MESSAGES =====================
+function MessagesPage() {
+  const { data: convs, loading } = useApi('/api/messages/conversations');
+  return (
+    <div className="min-h-screen pt-16 px-4 pb-20" style={{background:'#0b0b12'}}>
+      <div className="max-w-md mx-auto space-y-6">
+        <h2 className="text-2xl font-black text-white">Mensajes</h2>
+        <div className="space-y-1">
+          {(convs||[]).map((c:Conversation)=>(
+            <Link key={c.user._id} href={`/messages/${c.user._id}`} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-white/5 transition-all"><Av u={c.user} s={56}/><div className="flex-1 min-w-0"><div className="flex justify-between items-center"><p className="text-white font-bold truncate">@{c.user.username}</p><p className="text-gray-500 text-[10px]">{ago(c.lastMessage.createdAt)}</p></div><p className="text-gray-400 text-sm truncate">{c.lastMessage.text}</p></div>{c.unread>0&&<div className="w-5 h-5 rounded-full bg-[#00F5FF] text-black text-[10px] font-bold flex items-center justify-center">{c.unread}</div>}</Link>
           ))}
-          {q.length>=2&&!loading&&results.length===0&&<p className="text-center text-gray-500 py-8">Sin resultados para "{q}"</p>}
+          {(!convs||convs.length===0)&&<div className="text-center py-20 text-gray-500"><MessageCircle size={40} className="mx-auto mb-4 opacity-20"/><p>No hay conversaciones</p></div>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ===================== CHAT PAGE =====================
+function ChatPage({ userId }: { userId: string }) {
+  const { user: me, token } = useAuth();
+  const { data: u } = useApi(`/api/users/${userId}`, [userId]);
+  const { data: msgs, setData } = useApi(`/api/messages/${userId}`, [userId]);
+  const [text, setText] = useState('');
+  const [, setLocation] = useLocation();
+  const send = async () => {
+    if(!text.trim()||!token)return;
+    const r=await fetch(`${API}/api/messages`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({toUserId:userId,text})});
+    if(r.ok){const m=await r.json();setData([...(msgs||[]),m]);setText('');}
+  };
+  if(!u)return null;
+  return (
+    <div className="fixed inset-0 z-50 bg-[#0b0b12] flex flex-col">
+      <div className="flex items-center gap-3 p-4 border-b border-[#1e1e2a]"><button onClick={()=>setLocation('/messages')} className="p-1 rounded-full hover:bg-white/5 text-white"><ChevronLeft size={24}/></button><Av u={u} s={40}/><div><p className="text-white font-bold">@{u.username}</p><p className="text-[#00F5FF] text-[10px] font-bold uppercase">En línea</p></div></div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {(msgs||[]).map((m:Message)=>(
+          <div key={m._id} className={cn('flex',m.fromUserId._id===me?._id?'justify-end':'justify-start')}><div className={cn('max-w-[80%] px-4 py-2 rounded-2xl text-sm',m.fromUserId._id===me?._id?'bg-[#00F5FF] text-black rounded-tr-none':'bg-white/5 text-white border border-white/10 rounded-tl-none')}>{m.text}</div></div>
+        ))}
+      </div>
+      <div className="p-4 border-t border-[#1e1e2a] flex gap-2"><input type="text" placeholder="Escribe un mensaje..." className="flex-1 bg-white/5 border border-[#2a2a3a] rounded-full px-4 py-3 text-white text-sm outline-none focus:border-[#00F5FF]" value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()}/><button onClick={send} className="w-12 h-12 rounded-full bg-[#00F5FF] flex items-center justify-center text-black"><Send size={20}/></button></div>
     </div>
   );
 }
 
 // ===================== HOME PAGE =====================
 function HomePage() {
-  const { data: challenge } = useApi('/api/challenges/active');
-  const { data: ranking } = useApi('/api/ranking?limit=5');
+  const [, setLocation] = useLocation();
   const { data: lives } = useApi('/api/lives');
-  const [counter, setCounter] = useState(14782);
-  useEffect(()=>{if(challenge?.globalCounter)setCounter(challenge.globalCounter);},[challenge]);
-  useEffect(()=>{const t=setInterval(()=>setCounter(c=>c+Math.floor(Math.random()*3)),2500);return()=>clearInterval(t);},[]);
-  return(
-    <div className="pb-20">
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0"><img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1600&h=900&fit=crop" alt="" className="w-full h-full object-cover opacity-20"/><div className="absolute inset-0" style={{background:'radial-gradient(ellipse at center,rgba(0,245,255,0.05) 0%,rgba(11,11,18,0.9) 70%)'}}/></div>
-        <div className="relative z-10 max-w-4xl mx-auto px-4 text-center">
-          <div className="flex justify-center mb-6"><DominoLogo size={48}/></div>
-          <h1 className="text-5xl sm:text-7xl font-black mb-4" style={{fontFamily:'Syne,sans-serif'}}><span style={{background:'linear-gradient(135deg,#00F5FF,#FF007F)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>DOMINO</span></h1>
-          <p className="text-xl text-gray-300 mb-2">The Real-World Chain Reaction</p>
-          <p className="text-base text-gray-400 mb-8 max-w-xl mx-auto">Graba retos de 15s. Nomina 3 personas. Haz lives. El efecto dominó global.</p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center flex-wrap">
-            <Link href="/feed" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-black" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}><Play size={18}/>Ver Feed</Link>
-            <Link href="/live" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white border" style={{borderColor:'#FF007F'}}><Video size={18}/>En Vivo</Link>
-            <Link href="/create" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white border border-gray-700"><Camera size={18}/>Crear</Link>
+  const { data: challenge } = useApi('/api/challenges/active');
+  const { data: ranking } = useApi('/api/ranking');
+
+  return (
+    <div className="min-h-screen pt-14 pb-20" style={{background:'#0b0b12'}}>
+      {/* Hero Section */}
+      <div className="relative h-[400px] overflow-hidden flex items-center justify-center text-center px-6">
+        <div className="absolute inset-0 bg-[#00F5FF]/10 mix-blend-overlay"/>
+        <div className="absolute inset-0" style={{background:'radial-gradient(circle at 50% 50%,rgba(0,245,255,0.15) 0%,transparent 70%)'}}/>
+        <div className="relative z-10 space-y-6">
+          <h1 className="text-5xl font-black text-white leading-tight" style={{fontFamily:'Syne,sans-serif'}}>CREA LA PRÓXIMA<br/><span style={{color:'#00F5FF',textShadow:'0 0 20px rgba(0,245,255,0.5)'}}>CADENA GLOBAL</span></h1>
+          <p className="text-gray-400 max-w-xs mx-auto text-sm font-medium">Únete a retos, nomina a tus amigos y domina el mundo con tu talento.</p>
+          <div className="flex flex-col gap-3">
+            <button onClick={()=>setLocation('/feed')} className="px-8 py-4 rounded-2xl bg-[#00F5FF] text-black font-black text-lg shadow-[0_0_30px_rgba(0,245,255,0.3)]">VER EL FEED</button>
+            <button onClick={()=>setLocation('/camera')} className="px-8 py-4 rounded-2xl bg-white/5 border border-white/10 text-white font-black text-lg hover:bg-white/10 transition-all">GRABAR AHORA</button>
           </div>
-          <div className="mt-12 flex items-center justify-center gap-2"><div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#00F5FF'}}/><span className="text-lg font-bold" style={{color:'#00F5FF'}}>{counter.toLocaleString('es-ES')}</span><span className="text-gray-400 text-sm">cadenas activas</span></div>
         </div>
-      </section>
+      </div>
 
-      {Array.isArray(lives)&&lives.length>0&&(
-        <section className="py-10 px-4">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-between mb-4"><div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#FF007F'}}/><h2 className="text-xl font-black text-white">En Directo</h2></div><Link href="/live" className="text-sm font-semibold" style={{color:'#00F5FF'}}>Ver todos →</Link></div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {lives.slice(0,4).map((l:LiveStream)=>(
-                <Link key={l._id} href={`/live/${l._id}`} className="relative rounded-xl overflow-hidden" style={{aspectRatio:'9/16',background:'#13131f',border:'1px solid #1e1e2a'}}>
-                  <div className="absolute inset-0 flex items-center justify-center"><Av u={l.userId} s={64}/></div>
-                  <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.8) 0%,transparent 60%)'}}/>
-                  <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE</div>
-                  <div className="absolute bottom-2 left-2 right-2"><p className="text-white text-xs font-bold truncate">@{l.userId?.username}</p><p className="text-gray-300 text-xs truncate">{l.title}</p></div>
-                </Link>
-              ))}
+      <div className="max-w-md mx-auto px-4 space-y-10 mt-6">
+        {/* Reto del Día */}
+        {challenge && (
+          <div className="p-6 rounded-3xl bg-gradient-to-br from-[#1e1e2a] to-[#0b0b12] border border-[#2a2a3a] relative overflow-hidden group">
+            <div className="absolute -right-4 -top-4 w-24 h-24 bg-[#FF007F]/10 rounded-full blur-2xl group-hover:bg-[#FF007F]/20 transition-all"/>
+            <div className="relative z-10">
+              <div className="flex items-center gap-2 mb-4"><Zap size={18} className="text-yellow-400"/><span className="text-xs font-black text-yellow-400 uppercase tracking-widest">Reto Activo</span></div>
+              <h3 className="text-2xl font-black text-white mb-2">{challenge.title}</h3>
+              <p className="text-gray-400 text-sm mb-6 leading-relaxed">{challenge.description}</p>
+              <div className="flex items-center justify-between">
+                <div className="flex -space-x-2"><div className="w-8 h-8 rounded-full bg-gray-800 border-2 border-[#1e1e2a]"/><div className="w-8 h-8 rounded-full bg-gray-700 border-2 border-[#1e1e2a]"/><div className="w-8 h-8 rounded-full bg-gray-600 border-2 border-[#1e1e2a]"/><div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#00F5FF] border-2 border-[#1e1e2a] text-[10px] font-black text-black">+{challenge.globalCounter}</div></div>
+                <button onClick={()=>setLocation('/camera')} className="px-6 py-2 rounded-xl bg-white text-black font-bold text-sm">Participar</button>
+              </div>
             </div>
           </div>
-        </section>
-      )}
+        )}
 
-      {challenge&&(
-        <section className="py-8 px-4">
-          <div className="max-w-7xl mx-auto">
-            <h2 className="text-xl font-black text-white mb-3">Reto del Día</h2>
-            <div className="rounded-xl p-4 border" style={{background:'#13131f',borderColor:'#1e1e2a'}}>
-              <h3 className="font-bold text-white">{challenge.title}</h3>
-              <p className="text-sm text-gray-400 mt-1 line-clamp-2">{challenge.description}</p>
-              <div className="flex items-center justify-between mt-3 mb-3"><span className="text-xs text-gray-400"><Users size={10} className="inline mr-1"/>{fmt(challenge.globalCounter)} part.</span><span className="text-xs text-gray-400"><Clock size={10} className="inline mr-1"/>{left(challenge.expiresAt)}</span></div>
-              <Link href="/create" className="w-full py-2.5 rounded-lg text-sm font-bold text-black flex items-center justify-center gap-2" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}><Camera size={16}/>Aceptar reto</Link>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {Array.isArray(ranking)&&ranking.length>0&&(
-        <section className="py-8 px-4">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-between mb-3"><h2 className="text-xl font-black text-white">Ranking Global</h2><Link href="/search" className="text-sm font-semibold" style={{color:'#00F5FF'}}>Ver todo</Link></div>
-            <div className="rounded-2xl overflow-hidden border" style={{background:'#13131f',borderColor:'#1e1e2a'}}>
-              {ranking.map((e:RankingEntry,i:number)=>(
-                <Link key={e._id} href={`/user/${e._id}`} className="flex items-center gap-3 p-3 border-b last:border-0 hover:bg-white/5 transition-colors" style={{borderColor:'#1e1e2a'}}>
-                  <span className="w-7 text-center text-sm font-bold">{i<3?['🥇','🥈','🥉'][i]:<span className="text-gray-500">#{i+1}</span>}</span>
-                  <Av u={e} s={36}/><div className="flex-1 min-w-0"><div className="text-sm font-semibold text-white truncate">{e.username} {e.flag}</div><div className="text-xs text-gray-500">{e.country}</div></div>
-                  <div className="text-right"><div className="text-sm font-bold" style={{color:'#00F5FF'}}>{fmt(e.impactPoints)}</div><div className="text-xs text-gray-500">{e.currentStreak}d</div></div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      <footer className="border-t mt-8 py-6 px-4" style={{borderColor:'#1e1e2a',background:'#13131f'}}>
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p className="text-xs text-gray-600">© 2026 DOMINO. The Real-World Chain Reaction.</p>
-          <div className="flex items-center gap-1.5 text-xs text-gray-500"><Globe size={12} style={{color:'#00F5FF'}}/>{fmt(challenge?.globalCounter||14782)} cadenas activas</div>
+        {/* Secciones rápidas */}
+        <div className="grid grid-cols-2 gap-4">
+          <button onClick={()=>setLocation('/live')} className="p-6 rounded-3xl bg-[#FF007F]/5 border border-[#FF007F]/20 text-left space-y-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#FF007F] flex items-center justify-center text-white"><Video size={20}/></div>
+            <div><p className="text-white font-bold">En Vivo</p><p className="text-gray-500 text-[10px]">Mira directos ahora</p></div>
+          </button>
+          <button onClick={()=>setLocation('/map')} className="p-6 rounded-3xl bg-[#7c3aed]/5 border border-[#7c3aed]/20 text-left space-y-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#7c3aed] flex items-center justify-center text-white"><Map size={20}/></div>
+            <div><p className="text-white font-bold">Mapa</p><p className="text-gray-500 text-[10px]">Explora el mundo</p></div>
+          </button>
         </div>
-      </footer>
+
+        {/* Ranking */}
+        <div className="space-y-6 pb-10">
+          <div className="flex items-center justify-between"><h2 className="text-xl font-black text-white">Top Creadores</h2><button className="text-[#00F5FF] text-xs font-bold uppercase tracking-widest">Ver todos</button></div>
+          <div className="space-y-3">
+            {(ranking||[]).slice(0,5).map((r:RankingEntry, idx:number)=>(
+              <div key={r._id} className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/5">
+                <span className="text-lg font-black text-gray-600 w-4">{idx+1}</span>
+                <Av u={r} s={44}/>
+                <div className="flex-1">
+                  <p className="text-white font-bold text-sm">@{r.username}</p>
+                  <p className="text-gray-500 text-[10px]">{r.flag} {r.country}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[#00F5FF] font-black text-sm">{r.impactPoints}</p>
+                  <p className="text-[8px] text-gray-500 uppercase font-bold">Impacto</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
+
+const CreatePage = CameraPage;
+const MessagesPage_ = MessagesPage;
+const NotificationsPage_ = NotificationsPage;
+const ProfilePage_ = ProfilePage;
 
 // ===================== APP =====================
 export default function App() { return <AuthProvider><AppInner/></AuthProvider>; }
@@ -1190,7 +666,8 @@ function AppInner() {
       <TopNav/>
       <Switch>
         <Route path="/" component={HomePage}/>
-        <Route path="/feed" component={FeedPage}/>
+        <Route path="/feed">{(p:any)=><FeedPage/>}</Route>
+        <Route path="/following">{(p:any)=><FeedPage following={true}/>}</Route>
         <Route path="/auth" component={AuthPage}/>
         <Route path="/create" component={CreatePage}/>
         <Route path="/camera" component={CameraPage}/>
