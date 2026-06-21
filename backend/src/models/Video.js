@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const videoSchema = new mongoose.Schema({
-  challengeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Challenge', required: true },
+  challengeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Challenge' }, // opcional: los videos publicados desde un live grabado no tienen reto asociado
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   videoUrl: { type: String, default: '' },
   thumbnailUrl: { type: String, default: '' },
