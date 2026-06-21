@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
 import { Zap, Bell, ChevronRight, Camera, Heart, Bookmark, Grid3x3, Settings, Share2 } from 'lucide-react';
-import { cn, useAuth, useApi, Av, Spinner, fmt, ago, API, RankingEntry, Notification, DominoVideo, VisibilityToggle } from '../lib/shared';
+import { cn, useAuth, useApi, Av, Spinner, fmt, ago, API, RankingEntry, Notification, DominoVideo, VisibilityToggle, shareLink, Toast } from '../lib/shared';
 
 type Tab = 'videos' | 'liked' | 'saved';
 
@@ -37,6 +37,7 @@ export default function DashboardPage() {
   const { data: likedVideos } = useApi(user?._id ? `/api/videos/liked/${user._id}` : '/api/videos/liked/_', [user?._id]);
   const { data: savedVideos } = useApi(user?._id ? `/api/videos/saved/${user._id}` : '/api/videos/saved/_', [user?._id]);
   const { data: meFull } = useApi(user?._id ? '/api/users/me' : '/api/users/_', [user?._id]);
+  const [toast, setToast] = useState<string|null>(null);
   const markRead=async(id:string)=>{if(!token)return;await fetch(`${API}/api/notifications/${id}/read`,{method:'PUT',headers:{Authorization:`Bearer ${token}`}});setNotifs((p:Notification[])=>Array.isArray(p)?p.map(n=>n._id===id?{...n,read:true}:n):p);};
   const unread=Array.isArray(notifs)?notifs.filter((n:Notification)=>!n.read).length:0;
   const totalLikesReceived = Array.isArray(myVideos)?myVideos.reduce((s:number,v:DominoVideo)=>s+(v.likes?.length||0),0):0;
@@ -48,6 +49,7 @@ export default function DashboardPage() {
 
   return(
     <div className="min-h-screen" style={{paddingTop:'80px',background:'#0b0b12'}}>
+      <Toast message={toast}/>
       <div className="max-w-3xl mx-auto px-4 py-6">
 
         {/* ===== Cabecera de perfil (estilo TikTok) ===== */}
@@ -69,7 +71,7 @@ export default function DashboardPage() {
 
           <div className="flex items-center gap-2 mt-4">
             <Link href="/camera" className="px-5 py-2 rounded-lg font-bold text-black text-sm flex items-center gap-1.5" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}><Camera size={14}/>Grabar</Link>
-            <button onClick={()=>{if(navigator.share)navigator.share({title:'DOMINO',url:`${window.location.origin}/dashboard`});else navigator.clipboard?.writeText(window.location.href);}} className="p-2.5 rounded-lg border" style={{borderColor:'#2a2a3a'}}><Share2 size={16} className="text-gray-300"/></button>
+            <button onClick={async()=>{const result=await shareLink('DOMINO',`${window.location.origin}/dashboard`);if(result==='copied'){setToast('Enlace copiado');setTimeout(()=>setToast(null),2000);}}} className="p-2.5 rounded-lg border" style={{borderColor:'#2a2a3a'}}><Share2 size={16} className="text-gray-300"/></button>
             <button className="p-2.5 rounded-lg border" style={{borderColor:'#2a2a3a'}}><Settings size={16} className="text-gray-300"/></button>
           </div>
         </div>

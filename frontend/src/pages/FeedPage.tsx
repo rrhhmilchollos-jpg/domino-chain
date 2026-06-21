@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
 import { Camera, Heart, MessageCircle, Bookmark, Share, Volume2, VolumeX } from 'lucide-react';
-import { useApi, useAuth, CommentsPanel, Spinner, Av, cn, fmt, ago, API, DominoVideo } from '../lib/shared';
+import { useApi, useAuth, CommentsPanel, Spinner, Av, cn, fmt, ago, API, DominoVideo, shareLink, Toast } from '../lib/shared';
 
 type Tab = 'forYou' | 'following';
 
@@ -23,7 +23,12 @@ export default function FeedPage() {
   // Guardar/quitar de guardados — el backend ya nos dice qué está guardado
   // de verdad (isSaved), así que partimos de ese estado real, no de vacío.
   const doSave = async (id:string) => { if(!token)return; setSaved(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;}); await fetch(`${API}/api/videos/${id}/save`,{method:'POST',headers:{Authorization:`Bearer ${token}`}}); };
-  const doShare = (id:string) => { const url=`${window.location.origin}/video/${id}`; if(navigator.share)navigator.share({title:'DOMINO',url});else navigator.clipboard?.writeText(url); };
+  const [toast, setToast] = useState<string|null>(null);
+  const doShare = async (id:string) => {
+    const url=`${window.location.origin}/video/${id}`;
+    const result = await shareLink('DOMINO', url);
+    if (result==='copied') { setToast('Enlace copiado'); setTimeout(()=>setToast(null),2000); }
+  };
   useEffect(()=>{
     const obs=new IntersectionObserver(entries=>{entries.forEach(e=>{const v=e.target as HTMLVideoElement;if(e.isIntersecting)v.play().catch(()=>{});else{v.pause();v.currentTime=0;}});},{threshold:0.8});
     videoRefs.current.forEach(v=>{if(v)obs.observe(v);});
@@ -42,6 +47,7 @@ export default function FeedPage() {
   return (
     <div className="fixed inset-0 overflow-y-scroll snap-y snap-mandatory" style={{background:'#000'}}>
       {commentId&&<CommentsPanel videoId={commentId} onClose={()=>setCommentId(null)}/>}
+      <Toast message={toast}/>
       {/* Header TikTok style — tabs Para Ti / Siguiendo, ahora funcionales de verdad */}
       <div className="fixed top-0 left-0 right-0 z-30 flex items-center justify-center gap-6 pt-3 pb-2" style={{background:'linear-gradient(to bottom,rgba(0,0,0,0.6),transparent)'}}>
         <button onClick={()=>setTab('following')} className={cn('font-bold text-base pb-0.5 border-b-2',tab==='following'?'text-white border-white':'text-gray-400 border-transparent')}>Siguiendo</button>

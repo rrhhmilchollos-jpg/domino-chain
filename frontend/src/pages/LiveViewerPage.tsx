@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
 import { Eye, X, Gift, Send, Volume2, VolumeX, Share2, UserX } from 'lucide-react';
 import { Room, RoomEvent, Track } from 'livekit-client';
-import { cn, useAuth, useApi, Av, FollowButton, GIFT_CATALOG, API, uploadToCloudinary, LiveStream } from '../lib/shared';
+import { cn, useAuth, useApi, Av, FollowButton, GIFT_CATALOG, API, uploadToCloudinary, shareLink, Toast, useKeyboardOffset, LiveStream } from '../lib/shared';
 
 // 'blocked': el streamer te ha expulsado de este directo — no se reintenta conexión
 type ConnState = 'idle' | 'connecting' | 'connected' | 'error' | 'unavailable' | 'blocked';
@@ -12,7 +12,7 @@ type ChatMsg = { user: string; userId?: string; text: string; type?: string };
 
 export default function LiveViewerPage({ id }: { id: string }) {
   const { user, token, refreshUser } = useAuth();
-  const { data: lives } = useApi('/api/lives', [id]);
+  const { data: lives, setData: setLives } = useApi('/api/lives', [id]);
   const [msgs, setMsgs] = useState<ChatMsg[]>([{user:'Sistema',text:'¡Bienvenido! 🎲',type:'system'}]);
   const [input, setInput] = useState('');
   const [showGifts, setShowGifts] = useState(false);
@@ -28,6 +28,9 @@ export default function LiveViewerPage({ id }: { id: string }) {
   const [published, setPublished] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [blockingUserId, setBlockingUserId] = useState<string|null>(null); // evita doble-click mientras se procesa el bloqueo
+  const [toast, setToast] = useState<string|null>(null);
+  const [camError, setCamError] = useState(false);
+  const kbOffset = useKeyboardOffset(); // empuja el chat por encima del teclado en WebView/APK
   const chatRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const opponentVideoRef = useRef<HTMLVideoElement>(null);
@@ -47,6 +50,20 @@ export default function LiveViewerPage({ id }: { id: string }) {
   const { data: hostProfile } = useApi(live?.userId?._id ? `/api/users/${live.userId._id}` : '/api/users/_', [live?.userId?._id]);
   useEffect(()=>{if(live)setViewers(live.viewerCount||0);},[live]);
   useEffect(()=>{if(chatRef.current)chatRef.current.scrollTop=chatRef.current.scrollHeight;},[msgs]);
+  // BUG ARREGLADO: este live se cargaba UNA sola vez al entrar y nunca se
+  // refrescaba. Si el host ya estaba dentro de su propio directo cuando el
+  // rival aceptaba la batalla, su pantalla nunca se enteraba — battleOpponentId
+  // se quedaba en null para siempre en su estado local, así que "Esperando
+  // rival..." se quedaba fijo (tapando el panel) aunque el rival ya hubiera
+  // aceptado y su cámara estuviera técnicamente conectada por detrás. Esto
+  // también mantiene fresco el marcador de la batalla para ambos lados.
+  useEffect(()=>{
+    if(!id) return;
+    const interval = setInterval(()=>{
+      fetch(`${API}/api/lives`).then(r=>r.ok?r.json():null).then(d=>{ if(Array.isArray(d)) setLives(d); }).catch(()=>{});
+    }, 4000);
+    return ()=>clearInterval(interval);
+  },[id]);
 
   const startLocalRecording = (stream: MediaStream) => {
     if (!isOwner) return;
@@ -81,6 +98,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
     if (!live?._id) return;
     let cancelled = false;
     setConnState('connecting');
+    setCamError(false);
 
     (async () => {
       if (!token) { setConnState('unavailable'); return; }
@@ -141,9 +159,17 @@ export default function LiveViewerPage({ id }: { id: string }) {
         if (cancelled) { room.disconnect(); return; }
         if (isOwner || isOpponent) {
           const myRef = isOwner ? videoRef : opponentVideoRef;
-          const camPub = await room.localParticipant.setCameraEnabled(true);
-          if (camPub?.track && myRef.current) camPub.track.attach(myRef.current);
-          await room.localParticipant.setMicrophoneEnabled(true);
+          try {
+            const camPub = await room.localParticipant.setCameraEnabled(true);
+            if (camPub?.track && myRef.current) camPub.track.attach(myRef.current);
+            await room.localParticipant.setMicrophoneEnabled(true);
+          } catch (camErr) {
+            // BUG ARREGLADO: si el navegador deniega o falla cámara/micro
+            // (permisos, dispositivo ocupado...), antes fallaba en silencio
+            // y la otra persona simplemente nunca veía tu vídeo sin saber
+            // por qué. Ahora se avisa claramente con un mensaje visible.
+            if (!cancelled) setCamError(true);
+          }
 
           if (isOwner) {
             try {
@@ -175,10 +201,10 @@ export default function LiveViewerPage({ id }: { id: string }) {
   const broadcast = (msg: ChatMsg) => {
     try { roomRef.current?.localParticipant.publishData(encoder.encode(JSON.stringify(msg)), { reliable: true }); } catch { }
   };
-  const doShare = () => {
+  const doShare = async () => {
     const url = `${window.location.origin}/live/${id}`;
-    if (navigator.share) navigator.share({ title: `DOMINO — Live de @${live?.userId?.username}`, text: live?.title, url }).catch(()=>{});
-    else navigator.clipboard?.writeText(url);
+    const result = await shareLink(`DOMINO — Live de @${live?.userId?.username}`, url, live?.title);
+    if (result==='copied') { setToast('Enlace copiado'); setTimeout(()=>setToast(null),2000); }
   };
 
   // El host bloquea a un espectador desde el chat: lo expulsa en tiempo real
@@ -366,6 +392,8 @@ export default function LiveViewerPage({ id }: { id: string }) {
           );
         })()}
         {giftAnim&&<div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center animate-bounce z-20"><div className="text-5xl mb-2">{giftAnim.split(' ')[0]}</div><p className="text-white font-bold">{giftAnim}</p></div>}
+        {camError&&(isOwner||isOpponent)&&<div className="absolute top-20 left-2 right-2 z-20 px-4 py-3 rounded-xl text-center" style={{background:'rgba(255,0,127,0.92)'}}><p className="text-white text-sm font-bold">No se pudo activar tu cámara o micrófono</p><p className="text-white text-xs mt-0.5">Revisa los permisos de cámara/micrófono de la app y vuelve a entrar</p></div>}
+        <Toast message={toast}/>
         {insufficientCoins&&<div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 px-6 py-4 rounded-2xl text-center" style={{background:'rgba(255,0,127,0.9)'}}><p className="text-white font-bold">¡Monedas insuficientes!</p><Link href="/coins" className="text-xs text-white underline mt-1 block">Comprar monedas →</Link></div>}
 
         {showGifts&&(
@@ -382,7 +410,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
           </div>
         )}
 
-        <div className="absolute inset-x-0 bottom-0 z-10 pb-3">
+        <div className="absolute inset-x-0 bottom-0 z-10 pb-3" style={{transform:kbOffset?`translateY(-${kbOffset}px)`:undefined,transition:'transform 0.15s ease-out'}}>
           <div ref={chatRef} className="overflow-y-auto px-3 space-y-1.5 mb-2" style={{maxHeight:'32vh',WebkitMaskImage:'linear-gradient(to top, black 70%, transparent 100%)',maskImage:'linear-gradient(to top, black 70%, transparent 100%)'}}>
             {msgs.map((m,i)=>(
               <div key={i} className={cn('text-xs',m.type==='system'?'text-gray-300':m.type==='gift'?'':'')}>
