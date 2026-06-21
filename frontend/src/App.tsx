@@ -200,6 +200,24 @@ async function uploadToCloudinary(blob: Blob, onProgress?: (p:number)=>void): Pr
 }
 function saveToGallery(blob: Blob) { const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`DOMINO_${Date.now()}.webm`; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(url),1000); }
 
+async function uploadImageToCloudinary(file: File, onProgress?: (p:number)=>void): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData(); fd.append('file', file); fd.append('upload_preset', CLOUDINARY_PRESET); fd.append('resource_type', 'image');
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = e => { if(e.lengthComputable&&onProgress) onProgress(Math.round(e.loaded/e.total*100)); };
+    xhr.onload = () => { if(xhr.status===200){const d=JSON.parse(xhr.responseText);resolve(d.secure_url);}else reject(new Error('Error Cloudinary')); };
+    xhr.onerror = () => reject(new Error('Error de red'));
+    xhr.open('POST',`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`); xhr.send(fd);
+  });
+}
+
+function shareProfile(userId?: string, username?: string) {
+  if (!userId) return;
+  const shareUrl = `${window.location.origin}/user/${userId}`;
+  if (navigator.share) navigator.share({ title: 'DOMINO', text: username?`Mira el perfil de @${username} en DOMINO`:'Mira este perfil en DOMINO', url: shareUrl });
+  else { navigator.clipboard?.writeText(shareUrl); alert('Enlace del perfil copiado ✅'); }
+}
+
 // ===================== AUTH PAGE =====================
 function AuthPage() {
   const { login, register } = useAuth();
@@ -555,7 +573,7 @@ function ProfilePage({ userId }: { userId?: string }) {
           )}
           <div className="flex items-center gap-3">
             {isOwn && <div className="relative"><Av u={displayUser} s={28}/><span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{background:'#FF007F',fontSize:'9px'}}>2</span></div>}
-            {isOwn && <button><Share size={20} className="text-white"/></button>}
+            {isOwn && <button onClick={()=>shareProfile(targetId, displayUser.username)}><Share size={20} className="text-white"/></button>}
             <button onClick={()=>setShowMenu(true)}><span className="text-white text-xl">☰</span></button>
           </div>
         </div>
@@ -579,11 +597,11 @@ function ProfilePage({ userId }: { userId?: string }) {
           {/* Nombre + botones editar */}
           {isOwn ? (
             <div className="flex items-center gap-2 mb-1">
-              <button className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold text-white border border-gray-600">
-                <Plus size={14}/>Añadir nombre
+              <button onClick={()=>setLocation('/profile/edit')} className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold text-white border border-gray-600">
+                <Plus size={14}/>Editar nombre y bio
                 <ChevronRight size={14}/>
               </button>
-              <button className="w-8 h-8 rounded-full border border-gray-600 flex items-center justify-center">
+              <button onClick={()=>setLocation('/profile/edit')} className="w-8 h-8 rounded-full border border-gray-600 flex items-center justify-center">
                 <span className="text-white text-sm">✏️</span>
               </button>
             </div>
@@ -629,7 +647,7 @@ function ProfilePage({ userId }: { userId?: string }) {
               <button onClick={()=>setLocation('/profile/edit')} className="flex-1 py-2 rounded-lg font-semibold text-white text-sm border border-gray-600">
                 Editar perfil
               </button>
-              <button className="w-9 h-9 rounded-lg border border-gray-600 flex items-center justify-center flex-shrink-0">
+              <button onClick={()=>shareProfile(targetId, displayUser.username)} className="w-9 h-9 rounded-lg border border-gray-600 flex items-center justify-center flex-shrink-0">
                 <Share size={16} className="text-white"/>
               </button>
             </div>
@@ -708,6 +726,125 @@ function ProfilePage({ userId }: { userId?: string }) {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ===================== EDIT PROFILE PAGE =====================
+function EditProfilePage() {
+  const { user, token, refreshUser } = useAuth();
+  const [, setLocation] = useLocation();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const FLAGS: Record<string,string> = {'España':'🇪🇸','México':'🇲🇽','Argentina':'🇦🇷','Colombia':'🇨🇴','Estados Unidos':'🇺🇸','Japón':'🇯🇵','Brasil':'🇧🇷','Francia':'🇫🇷','Alemania':'🇩🇪','Italia':'🇮🇹','Reino Unido':'🇬🇧','Portugal':'🇵🇹'};
+
+  const [username, setUsername] = useState(user?.username||'');
+  const [bio, setBio] = useState(user?.bio||'');
+  const [city, setCity] = useState(user?.city||'');
+  const [country, setCountry] = useState(user?.country||'');
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl||'');
+  const [avatarFile, setAvatarFile] = useState<File|null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string|null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useSEO({ title:'Editar perfil — DOMINO', description:'Edita tu perfil de DOMINO.', path:'/profile/edit', noindex:true });
+
+  // Si no hay sesión (refresco directo de página, etc.) vuelve a auth
+  useEffect(() => { if (!token) setLocation('/auth'); }, [token]);
+
+  const onPickAvatar = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setAvatarFile(f);
+    setAvatarPreview(URL.createObjectURL(f));
+  };
+
+  const save = async () => {
+    if (!token) return;
+    if (!username.trim()) { setError('El nombre de usuario no puede estar vacío'); return; }
+    setError(''); setSaving(true);
+    try {
+      let finalAvatarUrl = avatarUrl;
+      if (avatarFile) {
+        finalAvatarUrl = await uploadImageToCloudinary(avatarFile, setUploadProgress);
+      }
+      // NOTA: este endpoint es una suposición razonable (PUT /api/users/me).
+      // Si tu backend usa otra ruta/método, ajústalo aquí.
+      const r = await fetch(`${API}/api/users/me`, {
+        method: 'PUT',
+        headers: { Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
+        body: JSON.stringify({ username, bio, city, country, flag: FLAGS[country]||user?.flag||'🌍', avatarUrl: finalAvatarUrl })
+      });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) throw new Error(d.error || 'No se pudo guardar el perfil');
+      await refreshUser();
+      setLocation('/profile');
+    } catch (e:any) {
+      setError(e.message || 'Error al guardar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!user) return <div className="min-h-screen flex items-center justify-center" style={{paddingTop:'56px',background:'#0b0b12'}}><Spinner/></div>;
+
+  return (
+    <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
+      <div className="max-w-lg mx-auto">
+        <div className="flex items-center gap-3 px-4 pt-4 pb-2">
+          <button onClick={()=>setLocation('/profile')} className="p-1"><ChevronLeft size={24} className="text-white"/></button>
+          <h1 className="text-white font-bold text-lg flex-1">Editar perfil</h1>
+          <button onClick={save} disabled={saving} className="text-sm font-bold px-4 py-1.5 rounded-full disabled:opacity-50" style={{background:'#00F5FF',color:'#0b0b12'}}>
+            {saving?<Spinner/>:'Guardar'}
+          </button>
+        </div>
+
+        <div className="flex flex-col items-center py-6">
+          <div className="relative mb-2">
+            <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center" style={{background:'#7c3aed',border:'3px solid #2a2a3a'}}>
+              {avatarPreview || avatarUrl
+                ? <img src={avatarPreview||avatarUrl} alt="Avatar" className="w-full h-full object-cover"/>
+                : <span className="text-white font-black text-4xl">{username?.[0]?.toUpperCase()}</span>}
+            </div>
+            <button onClick={()=>fileRef.current?.click()} className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center" style={{background:'#00F5FF'}}>
+              <Plus size={16} className="text-black"/>
+            </button>
+            <input ref={fileRef} type="file" accept="image/*" onChange={onPickAvatar} className="hidden"/>
+          </div>
+          {avatarFile && uploadProgress>0 && uploadProgress<100 && <p className="text-xs text-gray-400">Subiendo {uploadProgress}%</p>}
+          <button onClick={()=>fileRef.current?.click()} className="text-xs font-semibold" style={{color:'#00F5FF'}}>Cambiar foto</button>
+        </div>
+
+        <div className="px-4 space-y-4">
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Nombre de usuario</label>
+            <input value={username} onChange={e=>setUsername(e.target.value)} placeholder="@username" className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#13131f',border:'1px solid #2a2a3a'}}/>
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Bio</label>
+            <textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Cuéntanos algo sobre ti..." rows={3} maxLength={150} className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none resize-none" style={{background:'#13131f',border:'1px solid #2a2a3a'}}/>
+            <p className="text-right text-xs text-gray-600 mt-0.5">{bio.length}/150</p>
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">País</label>
+            <select value={country} onChange={e=>setCountry(e.target.value)} className="w-full rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none" style={{background:'#13131f',border:'1px solid #2a2a3a'}}>
+              <option value="">Selecciona un país</option>
+              {Object.keys(FLAGS).map(c=><option key={c} value={c}>{FLAGS[c]} {c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Ciudad</label>
+            <input value={city} onChange={e=>setCity(e.target.value)} placeholder="Tu ciudad" className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#13131f',border:'1px solid #2a2a3a'}}/>
+          </div>
+
+          {error && <p className="text-red-400 text-xs">{error}</p>}
+
+          <button onClick={save} disabled={saving} className="w-full py-3 rounded-xl font-bold text-[#0b0b12] flex items-center justify-center gap-2 disabled:opacity-50" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}>
+            {saving?<Spinner/>:'Guardar cambios'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1493,6 +1630,7 @@ function AppInner() {
           <Route path="/live/:id">{(p:any)=><LiveViewerPage id={p.id}/>}</Route>
           <Route path="/map" component={WorldMapPage}/>
           <Route path="/profile" component={()=><ProfilePage/>}/>
+          <Route path="/profile/edit" component={EditProfilePage}/>
           <Route path="/user/:id">{(p:any)=><ProfilePage userId={p.id}/>}</Route>
           <Route path="/messages" component={MessagesPage}/>
           <Route path="/messages/:id">{(p:any)=><ChatPage userId={p.id}/>}</Route>
