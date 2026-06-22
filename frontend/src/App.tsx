@@ -310,7 +310,7 @@ function TopNav() {
       <div className="flex items-center justify-between h-14 px-4 max-w-7xl mx-auto">
         <button onClick={()=>setLocation('/')} className="flex items-center gap-2"><DominoLogo size={18}/><span className="text-xl font-black hidden sm:block" style={{fontFamily:'Syne,sans-serif',color:'#00F5FF',textShadow:'0 0 12px #00F5FF'}}>DOMINO</span></button>
         {/* Tabs: Siguiendo / Para ti (como TikTok) */}
-        {(loc==='/'||loc==='/feed') && (
+        {(loc==='/'||loc==='/feed'||loc==='/following') && (
           <div className="flex items-center gap-4">
             <button onClick={()=>setLocation('/')} className={cn('text-sm font-semibold pb-1',loc==='/'?'text-white border-b-2 border-white':'text-gray-500')}>Para ti</button>
             <button onClick={()=>setLocation('/following')} className={cn('text-sm font-semibold pb-1',(loc as string)==='/following'?'text-white border-b-2 border-white':'text-gray-500')}>Siguiendo</button>
@@ -1674,7 +1674,8 @@ function AppInner() {
       <TopNav/>
       <main id="main-content">
         <Switch>
-          <Route path="/" component={HomePage}/>
+          <Route path="/" component={FeedPage}/>
+          <Route path="/home" component={HomePage}/>
           <Route path="/feed" component={FeedPage}/>
           <Route path="/auth" component={AuthPage}/>
           <Route path="/create" component={CreatePage}/>
