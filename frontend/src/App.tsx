@@ -171,7 +171,7 @@ function AuthPage() {
   );
 }
 
-// ===================== BOTTOM NAVBAR — Clon exacto TikTok =====================
+// ===================== BOTTOM NAVBAR =====================
 function BottomNav() {
   const [loc, setLocation] = useLocation();
   const { user } = useAuth();
@@ -224,14 +224,12 @@ function TopNav() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
 
-  // No mostrar en algunas páginas
   if (['/create', '/camera', '/auth'].some(p => loc.startsWith(p))) return null;
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 border-b" style={{background:'rgba(11,11,18,0.95)',backdropFilter:'blur(20px)',borderColor:'#1e1e2a'}}>
       <div className="flex items-center justify-between h-14 px-4 max-w-7xl mx-auto">
         <button onClick={()=>setLocation('/')} className="flex items-center gap-2"><DominoLogo size={18}/><span className="text-xl font-black hidden sm:block" style={{fontFamily:'Syne,sans-serif',color:'#00F5FF',textShadow:'0 0 12px #00F5FF'}}>DOMINO</span></button>
-        {/* Tabs: Siguiendo / Para ti (como TikTok) */}
         {(loc==='/'||loc==='/feed'||loc==='/following') && (
           <div className="flex items-center gap-4">
             <button onClick={()=>setLocation('/')} className={cn('text-sm font-semibold pb-1',loc==='/'?'text-white border-b-2 border-white':'text-gray-500')}>Para ti</button>
@@ -286,12 +284,10 @@ function VideoModal({ video, onClose }: { video: DominoVideo; onClose: () => voi
           <div className="w-full h-full rounded-2xl flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={48} className="text-gray-600"/></div>
         )}
         <div className="absolute inset-0 rounded-2xl" style={{background:'linear-gradient(to top,rgba(0,0,0,0.8) 0%,transparent 60%)',pointerEvents:'none'}}/>
-        {/* Info */}
         <div className="absolute bottom-16 left-4 right-16">
           <div className="flex items-center gap-2 mb-2"><Av u={video.userId} s={36}/><div><p className="text-white text-sm font-bold">@{video.userId?.username}</p><p className="text-gray-300 text-xs">{video.userId?.flag} {video.userId?.city}</p></div></div>
           <div className="flex items-center gap-2"><span className="text-xs rounded-full px-2 py-0.5 text-gray-300" style={{background:'rgba(0,0,0,0.5)'}}>⛓️ Profundidad {video.chainDepth+1}</span></div>
         </div>
-        {/* Acciones */}
         <div className="absolute right-3 bottom-20 flex flex-col gap-4 items-center">
           <button onClick={doLike} className="flex flex-col items-center gap-1"><Heart size={24} className={liked?'fill-red-500 text-red-500':'text-white'}/><span className="text-xs text-white">{fmt(video.likes?.length||0)}</span></button>
           <button onClick={()=>setCommentId(video._id)} className="flex flex-col items-center gap-1"><MessageCircle size={24} className="text-white"/><span className="text-xs text-white">Comentar</span></button>
@@ -374,7 +370,7 @@ function FeedPage() {
   );
 }
 
-// ===================== PROFILE PAGE — Clon exacto TikTok =====================
+// ===================== PROFILE PAGE =====================
 function ProfilePage({ userId }: { userId?: string }) {
   const { user: me, token, refreshUser, logout } = useAuth();
   const [, setLocation] = useLocation();
@@ -409,7 +405,6 @@ function ProfilePage({ userId }: { userId?: string }) {
   const savedVids: DominoVideo[] = Array.isArray(displayUser.savedVideos) ? displayUser.savedVideos.filter((v:any)=>v&&v._id) : [];
   const likedVids: DominoVideo[] = Array.isArray(displayUser.likedVideos) ? displayUser.likedVideos.filter((v:any)=>v&&v._id) : [];
   const totalLikes = videos.reduce((a:number,v:DominoVideo)=>a+(v.likes?.length||0),0);
-
   const tabVideos = tab==='videos'?videos:tab==='saved'?savedVids:tab==='likes'?likedVids:[];
 
   const TABS = [
@@ -423,8 +418,6 @@ function ProfilePage({ userId }: { userId?: string }) {
   return (
     <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
       {selectedVideo && <VideoModal video={selectedVideo} onClose={()=>setSelectedVideo(null)}/>}
-
-      {/* Menú opciones */}
       {showMenu && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" style={{background:'rgba(0,0,0,0.6)'}} onClick={()=>setShowMenu(false)}>
           <div className="w-full max-w-lg rounded-t-2xl overflow-hidden" style={{background:'#1e1e2a'}} onClick={e=>e.stopPropagation()}>
@@ -444,9 +437,7 @@ function ProfilePage({ userId }: { userId?: string }) {
           </div>
         </div>
       )}
-
       <div className="max-w-lg mx-auto">
-        {/* Top bar — igual que TikTok */}
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           {isOwn ? (
             <div className="flex items-center gap-3">
@@ -462,148 +453,68 @@ function ProfilePage({ userId }: { userId?: string }) {
             <button onClick={()=>setShowMenu(true)}><span className="text-white text-xl">☰</span></button>
           </div>
         </div>
-
-        {/* Avatar + botones */}
         <div className="flex flex-col items-center px-4 pb-4">
           <div className="relative mb-3">
             <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center" style={{background:'#7c3aed',border:'3px solid #2a2a3a'}}>
-              {displayUser.avatarUrl
-                ? <img src={displayUser.avatarUrl} alt={displayUser.username} className="w-full h-full object-cover"/>
-                : <span className="text-white font-black text-4xl">{displayUser.username?.[0]?.toUpperCase()}</span>
-              }
+              {displayUser.avatarUrl ? <img src={displayUser.avatarUrl} alt={displayUser.username} className="w-full h-full object-cover"/> : <span className="text-white font-black text-4xl">{displayUser.username?.[0]?.toUpperCase()}</span>}
             </div>
-            {isOwn && (
-              <button className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center text-white font-bold" style={{background:'#00F5FF'}}>
-                <Plus size={16} className="text-black"/>
-              </button>
-            )}
+            {isOwn && (<button className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center text-white font-bold" style={{background:'#00F5FF'}}><Plus size={16} className="text-black"/></button>)}
           </div>
-
-          {/* Nombre + botones editar */}
           {isOwn ? (
             <div className="flex items-center gap-2 mb-1">
-              <button className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold text-white border border-gray-600">
-                <Plus size={14}/>Añadir nombre
-                <ChevronRight size={14}/>
-              </button>
-              <button className="w-8 h-8 rounded-full border border-gray-600 flex items-center justify-center">
-                <span className="text-white text-sm">✏️</span>
-              </button>
+              <button className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold text-white border border-gray-600"><Plus size={14}/>Añadir nombre<ChevronRight size={14}/></button>
+              <button className="w-8 h-8 rounded-full border border-gray-600 flex items-center justify-center"><span className="text-white text-sm">✏️</span></button>
             </div>
           ) : null}
-
-          {/* Username */}
           <p className="text-gray-400 text-sm mb-3">@{displayUser.username}</p>
-
-          {/* Stats — igual que TikTok: Siguiendo | Seguidores | Me gusta */}
           <div className="flex items-center gap-0 mb-3">
-            <button className="flex flex-col items-center px-5">
-              <span className="text-white font-black text-lg leading-tight">{fmt(displayUser.following?.length||0)}</span>
-              <span className="text-gray-400 text-xs">Siguiendo</span>
-            </button>
+            <button className="flex flex-col items-center px-5"><span className="text-white font-black text-lg leading-tight">{fmt(displayUser.following?.length||0)}</span><span className="text-gray-400 text-xs">Siguiendo</span></button>
             <div className="w-px h-8" style={{background:'#2a2a3a'}}/>
-            <button className="flex flex-col items-center px-5">
-              <span className="text-white font-black text-lg leading-tight">{fmt(displayUser.followers?.length||0)}</span>
-              <span className="text-gray-400 text-xs">Seguidores</span>
-            </button>
+            <button className="flex flex-col items-center px-5"><span className="text-white font-black text-lg leading-tight">{fmt(displayUser.followers?.length||0)}</span><span className="text-gray-400 text-xs">Seguidores</span></button>
             <div className="w-px h-8" style={{background:'#2a2a3a'}}/>
-            <button className="flex flex-col items-center px-5">
-              <span className="text-white font-black text-lg leading-tight">{fmt(totalLikes)}</span>
-              <span className="text-gray-400 text-xs">Me gusta</span>
-            </button>
+            <button className="flex flex-col items-center px-5"><span className="text-white font-black text-lg leading-tight">{fmt(totalLikes)}</span><span className="text-gray-400 text-xs">Me gusta</span></button>
           </div>
-
-          {/* Bio */}
           {displayUser.bio && <p className="text-white text-sm text-center mb-2 max-w-xs">{displayUser.bio}</p>}
-
-          {/* Impacto DOMINO */}
-          <div className="flex items-center gap-1.5 mb-3">
-            <Zap size={14} style={{color:'#00F5FF'}}/>
-            <span className="text-sm font-bold" style={{color:'#00F5FF'}}>{fmt(displayUser.impactPoints)} Impacto</span>
-            <span className="text-gray-500 text-xs">· {displayUser.currentStreak||0}d racha</span>
-          </div>
-
-          {/* Botones acción */}
+          <div className="flex items-center gap-1.5 mb-3"><Zap size={14} style={{color:'#00F5FF'}}/><span className="text-sm font-bold" style={{color:'#00F5FF'}}>{fmt(displayUser.impactPoints)} Impacto</span><span className="text-gray-500 text-xs">· {displayUser.currentStreak||0}d racha</span></div>
           {isOwn ? (
             <div className="flex items-center gap-2 w-full max-w-xs">
-              <button onClick={()=>setLocation('/create')} className="flex-1 py-2 rounded-lg font-bold text-black text-sm flex items-center justify-center gap-1.5" style={{background:'#00F5FF'}}>
-                <Camera size={16}/>Grabar
-              </button>
-              <button onClick={()=>setLocation('/profile/edit')} className="flex-1 py-2 rounded-lg font-semibold text-white text-sm border border-gray-600">
-                Editar perfil
-              </button>
-              <button className="w-9 h-9 rounded-lg border border-gray-600 flex items-center justify-center flex-shrink-0">
-                <Share size={16} className="text-white"/>
-              </button>
+              <button onClick={()=>setLocation('/create')} className="flex-1 py-2 rounded-lg font-bold text-black text-sm flex items-center justify-center gap-1.5" style={{background:'#00F5FF'}}><Camera size={16}/>Grabar</button>
+              <button onClick={()=>setLocation('/profile/edit')} className="flex-1 py-2 rounded-lg font-semibold text-white text-sm border border-gray-600">Editar perfil</button>
+              <button className="w-9 h-9 rounded-lg border border-gray-600 flex items-center justify-center flex-shrink-0"><Share size={16} className="text-white"/></button>
             </div>
           ) : (
             <div className="flex items-center gap-2 w-full max-w-xs">
-              <button onClick={doFollow} className="flex-1 py-2 rounded-lg font-bold text-sm" style={{background:following?'transparent':'#FF007F',border:following?'1px solid #666':'none',color:following?'white':'white'}}>
-                {following?'Siguiendo':'Seguir'}
-              </button>
-              <button onClick={()=>setLocation(`/messages/${targetId}`)} className="flex-1 py-2 rounded-lg font-semibold text-white text-sm border border-gray-600">
-                Mensaje
-              </button>
-              <button className="w-9 h-9 rounded-lg border border-gray-600 flex items-center justify-center flex-shrink-0">
-                <ChevronRight size={16} className="text-white"/>
-              </button>
+              <button onClick={doFollow} className="flex-1 py-2 rounded-lg font-bold text-sm" style={{background:following?'transparent':'#FF007F',border:following?'1px solid #666':'none',color:'white'}}>{following?'Siguiendo':'Seguir'}</button>
+              <button onClick={()=>setLocation(`/messages/${targetId}`)} className="flex-1 py-2 rounded-lg font-semibold text-white text-sm border border-gray-600">Mensaje</button>
+              <button className="w-9 h-9 rounded-lg border border-gray-600 flex items-center justify-center flex-shrink-0"><ChevronRight size={16} className="text-white"/></button>
             </div>
           )}
         </div>
-
-        {/* Tabs — iconos igual que TikTok */}
         <div className="flex border-b" style={{borderColor:'#1e1e2a'}}>
-          {TABS.map(t=>(
-            <button key={t.key} onClick={()=>setTab(t.key as any)} className={cn('flex-1 flex items-center justify-center py-3 transition-all border-b-2',tab===t.key?'text-white border-white':'text-gray-600 border-transparent')}>
-              {t.icon}
-            </button>
-          ))}
+          {TABS.map(t=>(<button key={t.key} onClick={()=>setTab(t.key as any)} className={cn('flex-1 flex items-center justify-center py-3 transition-all border-b-2',tab===t.key?'text-white border-white':'text-gray-600 border-transparent')}>{t.icon}</button>))}
         </div>
-
-        {/* Grid de videos 3 columnas — exacto TikTok */}
         <div className="grid grid-cols-3 gap-px" style={{background:'#1e1e2a'}}>
           {tabVideos.map((v:DominoVideo)=>(
             <button key={v._id} onClick={()=>setSelectedVideo(v)} className="relative overflow-hidden" style={{aspectRatio:'9/16',background:'#0b0b12'}}>
-              {v.thumbnailUrl
-                ? <img src={v.thumbnailUrl} alt="" className="w-full h-full object-cover"/>
-                : <div className="w-full h-full flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={20} className="text-gray-700"/></div>
-              }
-              {/* Overlay gradient */}
+              {v.thumbnailUrl ? <img src={v.thumbnailUrl} alt="" className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={20} className="text-gray-700"/></div>}
               <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.6) 0%,transparent 40%)'}}/>
-              {/* Views counter — estilo TikTok */}
-              <div className="absolute bottom-1 left-1.5 flex items-center gap-0.5">
-                <Play size={10} className="text-white fill-white"/>
-                <span className="text-white text-xs font-semibold">{fmt(v.likes?.length||0)}</span>
-              </div>
-              {/* Indicador video real */}
+              <div className="absolute bottom-1 left-1.5 flex items-center gap-0.5"><Play size={10} className="text-white fill-white"/><span className="text-white text-xs font-semibold">{fmt(v.likes?.length||0)}</span></div>
               {v.videoUrl && <div className="absolute top-1.5 right-1.5"><div className="w-1.5 h-1.5 rounded-full" style={{background:'#FF007F'}}/></div>}
             </button>
           ))}
         </div>
-
-        {/* Vacío */}
         {tabVideos.length===0&&(
           <div className="text-center py-16 px-4">
             <div className="text-5xl mb-4">{tab==='videos'?'🎲':tab==='saved'?'🔖':tab==='likes'?'❤️':tab==='private'?'🔒':'🔁'}</div>
-            <p className="text-gray-500 text-sm mb-1">
-              {tab==='videos'?'Sin videos publicados':tab==='saved'?'Sin videos guardados':tab==='likes'?'Sin videos que te gusten':tab==='private'?'Sin videos privados':'Sin reposts'}
-            </p>
+            <p className="text-gray-500 text-sm mb-1">{tab==='videos'?'Sin videos publicados':tab==='saved'?'Sin videos guardados':tab==='likes'?'Sin videos que te gusten':tab==='private'?'Sin videos privados':'Sin reposts'}</p>
             {tab==='videos'&&<p className="text-gray-600 text-xs">Has previsualizado todas las publicaciones</p>}
             {tab==='videos'&&isOwn&&<button onClick={()=>setLocation('/create')} className="mt-5 px-6 py-2.5 rounded-full font-bold text-black text-sm" style={{background:'#00F5FF'}}>Grabar ahora</button>}
           </div>
         )}
-
-        {/* "Has previsualizado todas las publicaciones" — igual que TikTok */}
-        {tabVideos.length>0&&(
-          <p className="text-center text-gray-600 text-xs py-6 px-4">Has previsualizado todas las publicaciones</p>
-        )}
-
-        {/* Ranking section */}
+        {tabVideos.length>0&&(<p className="text-center text-gray-600 text-xs py-6 px-4">Has previsualizado todas las publicaciones</p>)}
         {isOwn&&(
           <div className="mx-4 mb-6 rounded-2xl overflow-hidden border" style={{background:'#13131f',borderColor:'#1e1e2a'}}>
-            <div className="flex items-center gap-2 px-4 py-3 border-b" style={{borderColor:'#1e1e2a'}}>
-              <Zap size={16} className="text-yellow-400"/><span className="text-white font-bold text-sm">Ranking Global</span>
-            </div>
+            <div className="flex items-center gap-2 px-4 py-3 border-b" style={{borderColor:'#1e1e2a'}}><Zap size={16} className="text-yellow-400"/><span className="text-white font-bold text-sm">Ranking Global</span></div>
             <div className="px-4 py-3 flex items-center gap-3">
               <div className="w-10 h-10 rounded-full flex items-center justify-center text-2xl" style={{background:'rgba(0,245,255,0.1)'}}>🏆</div>
               <div><p className="text-white text-sm font-semibold">{fmt(displayUser.impactPoints)} puntos</p><p className="text-gray-400 text-xs">{displayUser.currentStreak||0} días de racha</p></div>
@@ -616,48 +527,35 @@ function ProfilePage({ userId }: { userId?: string }) {
   );
 }
 
-// ===================== CREATE PAGE (TikTok style) =====================
+// ===================== CREATE PAGE =====================
 function CreatePage() {
   const [, setLocation] = useLocation();
   const [subTab, setSubTab] = useState<'publicar'|'crear'|'live'>('publicar');
-
   return (
     <div className="min-h-screen" style={{background:'#000'}}>
-      {/* Header */}
       <div className="flex items-center justify-between p-4">
         <button onClick={()=>setLocation(-1 as any)} className="p-2 rounded-full" style={{background:'rgba(255,255,255,0.1)'}}><X size={20} className="text-white"/></button>
         <h1 className="text-white font-bold text-base">CREATE</h1>
         <div className="w-10"/>
       </div>
-
-      {/* Herramientas */}
       <div className="flex items-center gap-4 px-4 mb-4 overflow-x-auto">
-        {[
-          {icon:'✂️',label:'AutoCut'},{icon:'💬',label:'Subtítulos'},{icon:'✂',label:'Recorte'},{icon:'📸',label:'Editor'}
-        ].map(t=>(
+        {[{icon:'✂️',label:'AutoCut'},{icon:'💬',label:'Subtítulos'},{icon:'✂',label:'Recorte'},{icon:'📸',label:'Editor'}].map(t=>(
           <button key={t.label} className="flex flex-col items-center gap-1 flex-shrink-0">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl" style={{background:'#1e1e2a'}}>{t.icon}</div>
             <span className="text-gray-400 text-xs">{t.label}</span>
           </button>
         ))}
       </div>
-
-      {/* Botón principal */}
       <div className="px-4 mb-6">
         <button onClick={()=>setLocation('/camera')} className="w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-bold text-white text-base" style={{background:'#1e1e2a',border:'2px dashed #2a2a3a'}}>
           <Plus size={24} className="text-gray-400"/><span className="text-gray-300">Vídeo nuevo</span>
         </button>
       </div>
-
-      {/* Tabs publicar/crear/live */}
       <div className="flex border-b px-4 mb-4" style={{borderColor:'#1e1e2a'}}>
         {(['publicar','crear','live'] as const).map(t=>(
-          <button key={t} onClick={()=>setSubTab(t)} className={cn('flex-1 py-3 text-sm font-bold uppercase border-b-2 transition-all',subTab===t?'text-white border-white':'text-gray-500 border-transparent')}>
-            {t}
-          </button>
+          <button key={t} onClick={()=>setSubTab(t)} className={cn('flex-1 py-3 text-sm font-bold uppercase border-b-2 transition-all',subTab===t?'text-white border-white':'text-gray-500 border-transparent')}>{t}</button>
         ))}
       </div>
-
       {subTab==='publicar' && (
         <div className="px-4">
           <h2 className="text-white font-bold mb-3">Plantillas</h2>
@@ -677,23 +575,8 @@ function CreatePage() {
           </div>
         </div>
       )}
-
-      {subTab==='crear' && (
-        <div className="px-4 text-center py-8">
-          <div className="text-5xl mb-4">🎨</div>
-          <p className="text-gray-400 mb-4">Editor de fotos y videos próximamente</p>
-          <button onClick={()=>setLocation('/camera')} className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Ir a grabar</button>
-        </div>
-      )}
-
-      {subTab==='live' && (
-        <div className="px-4 text-center py-8">
-          <div className="text-5xl mb-4">📡</div>
-          <p className="text-white font-bold mb-2">Iniciar un live</p>
-          <p className="text-gray-400 text-sm mb-4">Conecta con tu audiencia en tiempo real</p>
-          <button onClick={()=>setLocation('/live/create')} className="px-6 py-3 rounded-xl font-bold text-white" style={{background:'#FF007F'}}>Empezar Live</button>
-        </div>
-      )}
+      {subTab==='crear' && (<div className="px-4 text-center py-8"><div className="text-5xl mb-4">🎨</div><p className="text-gray-400 mb-4">Editor de fotos y videos próximamente</p><button onClick={()=>setLocation('/camera')} className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Ir a grabar</button></div>)}
+      {subTab==='live' && (<div className="px-4 text-center py-8"><div className="text-5xl mb-4">📡</div><p className="text-white font-bold mb-2">Iniciar un live</p><p className="text-gray-400 text-sm mb-4">Conecta con tu audiencia en tiempo real</p><button onClick={()=>setLocation('/live/create')} className="px-6 py-3 rounded-xl font-bold text-white" style={{background:'#FF007F'}}>Empezar Live</button></div>)}
     </div>
   );
 }
@@ -744,53 +627,34 @@ function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
 
   return (
     <div className="min-h-screen" style={{background:'#fff'}}>
-      {/* Header */}
       <div className="flex items-center p-4 border-b border-gray-200">
         <button onClick={()=>setLocation('/camera')} className="p-2 mr-2"><ChevronLeft size={24} className="text-gray-800"/></button>
         <h1 className="text-black font-bold text-base flex-1">Publicar vídeo</h1>
       </div>
-
       <div className="p-4 space-y-4">
-        {/* Preview + descripción */}
         <div className="flex gap-3">
           <textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Añade una descripción..." className="flex-1 resize-none text-sm text-gray-800 placeholder-gray-400 focus:outline-none" rows={3}/>
-          <div className="w-20 h-28 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-            <video src={blobUrl} className="w-full h-full object-cover"/>
-          </div>
+          <div className="w-20 h-28 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0"><video src={blobUrl} className="w-full h-full object-cover"/></div>
         </div>
-
-        {/* Hashtags y menciones */}
         <div className="flex gap-2">
           <button onClick={()=>addHashtag('domino')} className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-gray-300 text-sm text-gray-700"><Hash size={14}/># Hashtags</button>
           <button onClick={addMention} className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-gray-300 text-sm text-gray-700"><AtSign size={14}/>@ Mencionar</button>
         </div>
-
         <div className="border-t border-gray-100"/>
-
-        {/* Nominar */}
         <button onClick={()=>setShowNomModal(true)} className="w-full flex items-center justify-between py-3">
           <div className="flex items-center gap-3"><Users size={20} className="text-gray-600"/><div className="text-left"><p className="text-sm font-medium text-gray-800">Nominar 3 personas</p><p className="text-xs text-gray-500">{selected.length}/3 seleccionados</p></div></div>
           <span className="text-gray-400">›</span>
         </button>
-
-        {/* Privacidad */}
         <button onClick={()=>setPrivacy(p=>p==='public'?'private':'public')} className="w-full flex items-center justify-between py-3 border-t border-gray-100">
           <div className="flex items-center gap-3"><Globe size={20} className="text-gray-600"/><p className="text-sm font-medium text-gray-800">{privacy==='public'?'Todo el mundo puede ver':'Solo tú'}</p></div>
           <span className="text-gray-400">›</span>
         </button>
-
-        {/* Ubicación */}
         <div className="flex items-center justify-between py-3 border-t border-gray-100">
           <div className="flex items-center gap-3"><MapPin size={20} className="text-gray-600"/><p className="text-sm font-medium text-gray-800">Ubicación</p></div>
           <span className="text-gray-400">›</span>
         </div>
-
         <div className="border-t border-gray-100"/>
-
-        {/* Upload progress */}
         {publishing && <div className="py-2"><div className="flex justify-between mb-1"><span className="text-xs text-gray-500">Subiendo...</span><span className="text-xs font-bold text-blue-500">{uploadProgress}%</span></div><div className="h-1.5 rounded-full bg-gray-200"><div className="h-full rounded-full bg-red-500" style={{width:`${uploadProgress}%`}}/></div></div>}
-
-        {/* Botones */}
         <div className="flex gap-3 pt-2">
           <button onClick={()=>{ saveToGallery(blob); }} className="flex-1 py-3 rounded-full border border-gray-300 text-sm font-semibold text-gray-700 flex items-center justify-center gap-2"><Download size={16}/>Borradores</button>
           <button onClick={publish} disabled={publishing} className="flex-1 py-3 rounded-full text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60" style={{background:'#FF007F'}}>
@@ -798,8 +662,6 @@ function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
           </button>
         </div>
       </div>
-
-      {/* Modal nominar */}
       {showNomModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" style={{background:'rgba(0,0,0,0.5)'}}>
           <div className="w-full max-w-md rounded-t-2xl p-5" style={{background:'#13131f',maxHeight:'80vh',overflow:'auto'}}>
@@ -811,8 +673,6 @@ function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
           </div>
         </div>
       )}
-
-      {/* Modal privacidad */}
       {showPrivacyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.5)'}}>
           <div className="w-full max-w-sm rounded-2xl p-6 text-center" style={{background:'white'}}>
@@ -874,10 +734,7 @@ function CameraPage() {
     timerRef.current=setInterval(()=>setSecs(t=>{if(t<=1){stopRec();return 0;}return t-1;}),1000);
   };
 
-  // Si ya grabó, ir a publicar
-  if (blob && blobUrl) {
-    return <PublishPage blob={blob} blobUrl={blobUrl}/>;
-  }
+  if (blob && blobUrl) { return <PublishPage blob={blob} blobUrl={blobUrl}/>; }
 
   if (!user) return (
     <div className="min-h-screen flex items-center justify-center" style={{background:'#0b0b12'}}>
@@ -890,56 +747,29 @@ function CameraPage() {
       <div className="relative h-screen overflow-hidden">
         <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay muted playsInline style={{display:camOn?'block':'none'}}/>
         {!camOn&&<div className="absolute inset-0 flex items-center justify-center bg-black"><div className="text-center"><Camera size={64} className="mx-auto text-gray-600 mb-3"/><p className="text-gray-400 text-sm">Activa la cámara</p></div></div>}
-
-        {/* Top controls */}
         <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 z-10">
           <button onClick={()=>setLocation('/create')} className="p-2 rounded-full" style={{background:'rgba(0,0,0,0.5)'}}><X size={20} className="text-white"/></button>
           {camOn&&<button className="px-3 py-1.5 rounded-full text-xs text-white font-semibold flex items-center gap-1.5" style={{background:'rgba(0,0,0,0.5)'}}><span>♪</span>Añadir sonido</button>}
           <div className="w-10"/>
         </div>
-
-        {/* Side tools */}
-        {camOn && (
-          <div className="absolute right-3 top-20 flex flex-col gap-5 items-center z-10">
-            {[{icon:'⏱️',label:''},{icon:'⬜',label:''},{icon:'✨',label:''},{icon:'😊',label:''}].map((t,i)=><button key={i} className="flex flex-col items-center gap-1"><span className="text-2xl">{t.icon}</span></button>)}
-          </div>
-        )}
-
-        {/* Encuadramiento */}
+        {camOn && (<div className="absolute right-3 top-20 flex flex-col gap-5 items-center z-10">{[{icon:'⏱️'},{icon:'⬜'},{icon:'✨'},{icon:'😊'}].map((t,i)=><button key={i} className="flex flex-col items-center gap-1"><span className="text-2xl">{t.icon}</span></button>)}</div>)}
         {camOn && !rec && <>
           <div className="absolute top-32 left-4 w-8 h-8 border-t-2 border-l-2 rounded-tl-lg" style={{borderColor:'#00F5FF'}}/>
           <div className="absolute top-32 right-4 w-8 h-8 border-t-2 border-r-2 rounded-tr-lg" style={{borderColor:'#00F5FF'}}/>
           <div className="absolute bottom-40 left-4 w-8 h-8 border-b-2 border-l-2 rounded-bl-lg" style={{borderColor:'#00F5FF'}}/>
           <div className="absolute bottom-40 right-4 w-8 h-8 border-b-2 border-r-2 rounded-br-lg" style={{borderColor:'#00F5FF'}}/>
         </>}
-
-        {/* Bottom controls */}
         <div className="absolute bottom-0 left-0 right-0 pb-8 z-10">
-          {/* Duración selector */}
           {!rec && camOn && (
             <div className="flex items-center justify-center gap-4 mb-4">
-              {([15,60] as const).map(d=>(
-                <button key={d} onClick={()=>setDuration(d)} className={cn('px-4 py-1.5 rounded-full text-sm font-bold transition-all',duration===d?'text-black':'text-white border border-gray-600')} style={duration===d?{background:'white'}:{}}>
-                  {d}s
-                </button>
-              ))}
+              {([15,60] as const).map(d=>(<button key={d} onClick={()=>setDuration(d)} className={cn('px-4 py-1.5 rounded-full text-sm font-bold transition-all',duration===d?'text-black':'text-white border border-gray-600')} style={duration===d?{background:'white'}:{}}>{d}s</button>))}
             </div>
           )}
-
-          {/* Contador durante grabación */}
           {rec && <div className="flex justify-center mb-4"><div className="w-16 h-16 rounded-full flex items-center justify-center border-4" style={{borderColor:'#FF007F',boxShadow:'0 0 20px rgba(255,0,127,0.5)'}}><span className="text-2xl font-black text-white font-mono">{secs}</span></div></div>}
-
           <div className="flex items-center justify-center gap-8">
-            {/* Galería */}
-            <button className="w-10 h-10 rounded-lg overflow-hidden border-2 border-white/30" style={{background:'#1e1e2a'}}>
-              <ImageIcon size={20} className="text-gray-400 mx-auto mt-1"/>
-            </button>
-
-            {/* Botón grabar */}
+            <button className="w-10 h-10 rounded-lg overflow-hidden border-2 border-white/30" style={{background:'#1e1e2a'}}><ImageIcon size={20} className="text-gray-400 mx-auto mt-1"/></button>
             {!camOn ? (
-              <button onClick={startCam} className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center" style={{background:'rgba(255,255,255,0.1)'}}>
-                <Camera size={28} className="text-white"/>
-              </button>
+              <button onClick={startCam} className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center" style={{background:'rgba(255,255,255,0.1)'}}><Camera size={28} className="text-white"/></button>
             ) : (
               <button onClick={rec?stopRec:startRec} className={cn('transition-all active:scale-95',rec?'scale-110':'')}>
                 <div className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center" style={rec?{background:'#FF007F',borderColor:'#FF007F',boxShadow:'0 0 30px rgba(255,0,127,0.6)'}:{background:'rgba(255,0,0,0.8)'}}>
@@ -947,23 +777,11 @@ function CameraPage() {
                 </div>
               </button>
             )}
-
-            {/* Flip camera */}
-            <button className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.5)'}}>
-              <RefreshCw size={20} className="text-white"/>
-            </button>
+            <button className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.5)'}}><RefreshCw size={20} className="text-white"/></button>
           </div>
-
-          {/* Texto debajo */}
           {camOn && <p className="text-center text-xs text-gray-400 mt-3">{rec?'Pulsa para detener':'Pulsa para grabar'}</p>}
-
-          {/* Tabs PUBLICAR / CREAR / LIVE */}
           <div className="flex items-center justify-center gap-8 mt-4">
-            {(['PUBLICAR','CREAR','LIVE'] as const).map((t,i)=>(
-              <button key={t} onClick={()=>i===2&&setLocation('/live/create')} className={cn('text-xs font-bold pb-1',i===0?'text-white border-b-2 border-white':'text-gray-500')}>
-                {t}
-              </button>
-            ))}
+            {(['PUBLICAR','CREAR','LIVE'] as const).map((t,i)=>(<button key={t} onClick={()=>i===2&&setLocation('/live/create')} className={cn('text-xs font-bold pb-1',i===0?'text-white border-b-2 border-white':'text-gray-500')}>{t}</button>))}
           </div>
         </div>
       </div>
@@ -986,7 +804,6 @@ function MessagesPage() {
           <h1 className="text-xl font-black text-white">Mensajes</h1>
           <button className="p-2 rounded-lg hover:bg-white/5"><Search size={20} className="text-gray-400"/></button>
         </div>
-
         {loading ? <div className="flex justify-center py-8"><Spinner/></div> : (
           <div>
             {(!convs || !Array.isArray(convs) || convs.length === 0) ? (
@@ -1032,29 +849,22 @@ function ChatPage({ userId }: { userId: string }) {
 
   return (
     <div className="min-h-screen flex flex-col" style={{paddingTop:'56px',background:'#0b0b12'}}>
-      {/* Header chat */}
       <div className="flex items-center gap-3 px-4 py-3 border-b sticky top-14 z-10" style={{background:'#0b0b12',borderColor:'#1e1e2a'}}>
         <button onClick={()=>setLocation('/messages')}><ChevronLeft size={24} className="text-gray-400"/></button>
         {other&&<><Av u={other} s={36}/><div><p className="text-white font-bold text-sm">@{other.username}</p><p className="text-gray-400 text-xs">{other.flag} {other.city}</p></div></>}
       </div>
-
-      {/* Mensajes */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-24">
         {loading?<div className="flex justify-center py-8"><Spinner/></div>:(Array.isArray(msgs)?msgs:[]).map((m:Message)=>{
           const isMe = m.fromUserId._id === user?._id;
           return (
             <div key={m._id} className={cn('flex gap-2',isMe?'justify-end':'justify-start')}>
               {!isMe&&<Av u={m.fromUserId} s={28}/>}
-              <div className="max-w-[70%] px-3 py-2 rounded-2xl text-sm" style={isMe?{background:'#00F5FF',color:'#0b0b12',borderBottomRightRadius:'4px'}:{background:'#1e1e2a',color:'white',borderBottomLeftRadius:'4px'}}>
-                {m.text}
-              </div>
+              <div className="max-w-[70%] px-3 py-2 rounded-2xl text-sm" style={isMe?{background:'#00F5FF',color:'#0b0b12',borderBottomRightRadius:'4px'}:{background:'#1e1e2a',color:'white',borderBottomLeftRadius:'4px'}}>{m.text}</div>
             </div>
           );
         })}
         <div ref={bottomRef}/>
       </div>
-
-      {/* Input */}
       <div className="fixed bottom-16 left-0 right-0 p-3 border-t" style={{background:'#0b0b12',borderColor:'#1e1e2a'}}>
         <div className="flex gap-2 max-w-2xl mx-auto">
           <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Escribe un mensaje..." className="flex-1 rounded-full px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#1e1e2a',border:'1px solid #2a2a3a'}}/>
@@ -1065,85 +875,82 @@ function ChatPage({ userId }: { userId: string }) {
   );
 }
 
-// ===================== LIVE LIST =====================
+// ===================== LIVE LIST — FIX: polling + filtro status==='active' =====================
 function LiveListPage() {
-  const { data: lives, loading } = useApi('/api/lives');
+  const { token } = useAuth();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const list = Array.isArray(lives)?lives:[];
 
-  // Pantalla previa al live — estilo TikTok (fondo oscuro, avatar con halo rosa, botón UNIRSE)
+  // FIX: en vez de useApi (que no refresca), usamos polling manual cada 30s
+  // y filtramos solo los lives con status 'active' por si el backend devuelve alguno 'ended'
+  const [lives, setLives] = useState<LiveStream[]>([]);
+  const [livesLoading, setLivesLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLives = async () => {
+      try {
+        const r = await fetch(`${API}/api/lives`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (r.ok) {
+          const data = await r.json();
+          setLives(
+            (Array.isArray(data) ? data : []).filter(
+              (l: LiveStream) => l.status === 'active' || l.status === 'live'
+            )
+          );
+        }
+      } catch {}
+      setLivesLoading(false);
+    };
+
+    fetchLives();
+    const interval = setInterval(fetchLives, 30000); // refresca cada 30 segundos
+    return () => clearInterval(interval);
+  }, [token]);
+
   const [previewLive, setPreviewLive] = useState<LiveStream|null>(null);
+
+  // Si el live que estamos previsualizando ya no está activo, cerramos la preview
+  useEffect(() => {
+    if (previewLive && !lives.find(l => l._id === previewLive._id)) {
+      setPreviewLive(null);
+    }
+  }, [lives, previewLive]);
 
   if (previewLive) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center" style={{background:'linear-gradient(180deg,#0d0020 0%,#1a0030 100%)'}}>
-        {/* Header */}
         <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pt-12 pb-4">
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 rounded-full text-xs font-bold text-white flex items-center gap-1.5" style={{background:'#FF007F'}}>
               <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block"/>EN DIRECTO
             </span>
           </div>
-          <div className="flex items-center gap-1 text-white text-sm">
-            <Eye size={14}/>{previewLive.viewerCount||0}
-          </div>
+          <div className="flex items-center gap-1 text-white text-sm"><Eye size={14}/>{previewLive.viewerCount||0}</div>
         </div>
-
-        {/* Avatar con halo rosa animado */}
         <div className="relative mb-6">
           <div className="absolute inset-0 rounded-full animate-pulse" style={{background:'radial-gradient(circle,rgba(255,0,127,0.4) 0%,transparent 70%)',transform:'scale(1.3)'}}/>
           <div className="w-36 h-36 rounded-full overflow-hidden flex items-center justify-center relative" style={{border:'4px solid #FF007F',boxShadow:'0 0 40px rgba(255,0,127,0.6)'}}>
-            {previewLive.userId?.avatarUrl
-              ? <img src={previewLive.userId.avatarUrl} alt="" className="w-full h-full object-cover"/>
-              : <div className="w-full h-full flex items-center justify-center text-white font-black text-5xl" style={{background:'#7c3aed'}}>{previewLive.userId?.username?.[0]?.toUpperCase()}</div>
-            }
+            {previewLive.userId?.avatarUrl ? <img src={previewLive.userId.avatarUrl} alt="" className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-white font-black text-5xl" style={{background:'#7c3aed'}}>{previewLive.userId?.username?.[0]?.toUpperCase()}</div>}
           </div>
         </div>
-
-        {/* Info */}
         <h2 className="text-white font-black text-2xl mb-1">@{previewLive.userId?.username}</h2>
         <p className="text-gray-400 text-sm mb-8">{previewLive.title}</p>
-
-        {/* Botón UNIRSE AL DIRECTO */}
         <button onClick={()=>setLocation(`/live/${previewLive._id}`)} className="flex items-center gap-3 px-10 py-4 rounded-full font-black text-white text-base" style={{background:'linear-gradient(135deg,#FF007F,#c0006a)',boxShadow:'0 0 30px rgba(255,0,127,0.5)'}}>
-          <span className="w-2 h-2 rounded-full bg-white animate-pulse"/>
-          UNIRSE AL DIRECTO
+          <span className="w-2 h-2 rounded-full bg-white animate-pulse"/>UNIRSE AL DIRECTO
         </button>
-
-        {/* Botón cerrar */}
-        <button onClick={()=>setPreviewLive(null)} className="absolute top-12 right-4 p-2 rounded-full" style={{background:'rgba(255,255,255,0.1)'}}>
-          <X size={20} className="text-white"/>
-        </button>
-
-        {/* Side panel info — como TikTok */}
+        <button onClick={()=>setPreviewLive(null)} className="absolute top-12 right-4 p-2 rounded-full" style={{background:'rgba(255,255,255,0.1)'}}><X size={20} className="text-white"/></button>
         <div className="absolute right-4 bottom-32 flex flex-col items-center gap-6">
           <div className="flex flex-col items-center gap-1">
             <div className="w-12 h-12 rounded-full overflow-hidden" style={{border:'2px solid white'}}>
-              {previewLive.userId?.avatarUrl
-                ? <img src={previewLive.userId.avatarUrl} alt="" className="w-full h-full object-cover"/>
-                : <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg" style={{background:'#7c3aed'}}>{previewLive.userId?.username?.[0]?.toUpperCase()}</div>
-              }
+              {previewLive.userId?.avatarUrl ? <img src={previewLive.userId.avatarUrl} alt="" className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg" style={{background:'#7c3aed'}}>{previewLive.userId?.username?.[0]?.toUpperCase()}</div>}
             </div>
           </div>
-          <div className="flex flex-col items-center gap-1">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.15)'}}>
-              <span className="text-white text-lg">📡</span>
-            </div>
-            <span className="text-white text-xs">Live</span>
-          </div>
-          <div className="flex flex-col items-center gap-1">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.15)'}}>
-              <Eye size={18} className="text-white"/>
-            </div>
-            <span className="text-white text-xs">{previewLive.viewerCount||0}</span>
-          </div>
+          <div className="flex flex-col items-center gap-1"><div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.15)'}}><span className="text-white text-lg">📡</span></div><span className="text-white text-xs">Live</span></div>
+          <div className="flex flex-col items-center gap-1"><div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.15)'}}><Eye size={18} className="text-white"/></div><span className="text-white text-xs">{previewLive.viewerCount||0}</span></div>
         </div>
-
-        {/* Ciudad */}
-        <div className="absolute bottom-20 left-4">
-          <span className="text-white text-sm">{previewLive.userId?.flag} {previewLive.userId?.city}</span>
-        </div>
+        <div className="absolute bottom-20 left-4"><span className="text-white text-sm">{previewLive.userId?.flag} {previewLive.userId?.city}</span></div>
       </div>
     );
   }
@@ -1155,42 +962,28 @@ function LiveListPage() {
           <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full animate-pulse" style={{background:'#FF007F'}}/><h1 className="text-2xl font-black text-white">En Directo</h1></div>
           {user&&<button onClick={()=>setLocation('/live/create')} className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-white text-sm" style={{background:'#FF007F'}}><Video size={16}/>Iniciar</button>}
         </div>
-        {loading?<div className="flex justify-center py-8"><Spinner/></div>:list.length===0?(
+        {livesLoading ? <div className="flex justify-center py-8"><Spinner/></div> : lives.length===0 ? (
           <div className="text-center py-20">
             <div className="text-5xl mb-4">📡</div>
             <h3 className="text-xl font-bold text-white mb-2">Nadie en directo</h3>
             <p className="text-gray-400 text-sm mb-6">¡Sé el primero en hacer un live!</p>
             {user&&<button onClick={()=>setLocation('/live/create')} className="px-6 py-3 rounded-xl font-bold text-white" style={{background:'#FF007F'}}>Empezar</button>}
           </div>
-        ):(
+        ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {list.map((l:LiveStream)=>(
+            {lives.map((l:LiveStream)=>(
               <button key={l._id} onClick={()=>setPreviewLive(l)} className="relative rounded-xl overflow-hidden cursor-pointer text-left" style={{aspectRatio:'9/16',background:'linear-gradient(180deg,#0d0020,#1a0030)',border:'1px solid #2a2a3a'}}>
-                {/* Fondo oscuro con avatar centrado — como primera captura */}
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="relative">
                     <div className="absolute inset-0 rounded-full" style={{background:'radial-gradient(circle,rgba(255,0,127,0.3) 0%,transparent 70%)',transform:'scale(1.5)'}}/>
                     <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center" style={{border:'3px solid #FF007F',boxShadow:'0 0 20px rgba(255,0,127,0.5)'}}>
-                      {l.userId?.avatarUrl
-                        ? <img src={l.userId.avatarUrl} alt="" className="w-full h-full object-cover"/>
-                        : <div className="w-full h-full flex items-center justify-center text-white font-black text-3xl" style={{background:'#7c3aed'}}>{l.userId?.username?.[0]?.toUpperCase()}</div>
-                      }
+                      {l.userId?.avatarUrl ? <img src={l.userId.avatarUrl} alt="" className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-white font-black text-3xl" style={{background:'#7c3aed'}}>{l.userId?.username?.[0]?.toUpperCase()}</div>}
                     </div>
                   </div>
                 </div>
-                {/* Badge EN DIRECTO */}
-                <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}>
-                  <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE
-                </div>
-                {/* Viewers */}
-                <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs text-white" style={{background:'rgba(0,0,0,0.6)'}}>
-                  <Eye size={9}/>{l.viewerCount}
-                </div>
-                {/* Info bottom */}
-                <div className="absolute bottom-3 left-3 right-3">
-                  <p className="text-white text-xs font-bold truncate">@{l.userId?.username}</p>
-                  <p className="text-gray-300 text-xs truncate">{l.title}</p>
-                </div>
+                <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE</div>
+                <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs text-white" style={{background:'rgba(0,0,0,0.6)'}}><Eye size={9}/>{l.viewerCount}</div>
+                <div className="absolute bottom-3 left-3 right-3"><p className="text-white text-xs font-bold truncate">@{l.userId?.username}</p><p className="text-gray-300 text-xs truncate">{l.title}</p></div>
               </button>
             ))}
           </div>
@@ -1225,11 +1018,40 @@ function CreateLivePage() {
   );
 }
 
-// ===================== LIVE VIEWER — Clon exacto TikTok =====================
+// ===================== LIVE VIEWER =====================
 function LiveViewerPage({ id }: { id: string }) {
   const { user, token, refreshUser } = useAuth();
-  const { data: lives } = useApi('/api/lives', [id]);
   const [, setLocation] = useLocation();
+
+  // FIX: polling cada 20s para detectar cuando el live termina
+  const [live, setLive] = useState<LiveStream|null>(null);
+  const [liveEnded, setLiveEnded] = useState(false);
+
+  useEffect(() => {
+    const fetchLive = async () => {
+      try {
+        const r = await fetch(`${API}/api/lives`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (r.ok) {
+          const data = await r.json();
+          const found = (Array.isArray(data) ? data : []).find((l: LiveStream) => l._id === id);
+          if (found && (found.status === 'active' || found.status === 'live')) {
+            setLive(found);
+            setLiveEnded(false);
+          } else {
+            // Live no encontrado o terminado
+            if (live) setLiveEnded(true); // solo si ya teníamos live (evitar flash inicial)
+          }
+        }
+      } catch {}
+    };
+
+    fetchLive();
+    const interval = setInterval(fetchLive, 20000);
+    return () => clearInterval(interval);
+  }, [id, token]);
+
   const [msgs, setMsgs] = useState<{id:number;user:string;avatar?:string;text:string;type?:string}[]>([
     {id:0,user:'Sistema',text:'¡Bienvenido al directo! 🎲',type:'system'}
   ]);
@@ -1238,15 +1060,12 @@ function LiveViewerPage({ id }: { id: string }) {
   const [giftAnim, setGiftAnim] = useState<{emoji:string;name:string;user:string}|null>(null);
   const [viewers, setViewers] = useState(0);
   const [following, setFollowing] = useState(false);
-  const [msgId, setMsgId] = useState(1);
   const chatRef = useRef<HTMLDivElement>(null);
-  const live = Array.isArray(lives)?lives.find((l:LiveStream)=>l._id===id):null;
 
   useEffect(()=>{ if(live) setViewers(live.viewerCount||0); },[live]);
   useEffect(()=>{ const t=setInterval(()=>setViewers(v=>Math.max(0,v+Math.floor(Math.random()*5-2))),4000); return()=>clearInterval(t); },[]);
   useEffect(()=>{ if(chatRef.current) chatRef.current.scrollTop=chatRef.current.scrollHeight; },[msgs]);
 
-  // Simular mensajes de otros usuarios en tiempo real
   useEffect(()=>{
     const FAKE_MSGS = ['🔥🔥🔥','hola!!','que guay','sigue así','😍😍','me encanta','💪💪','increíble'];
     const FAKE_USERS = ['carlos_m','lucia_b','yuki_t','pablo_c','nina_b'];
@@ -1283,6 +1102,20 @@ function LiveViewerPage({ id }: { id: string }) {
     await fetch(`${API}/api/users/${live.userId._id}/follow`,{method:'POST',headers:{Authorization:`Bearer ${token}`}});
   };
 
+  // FIX: pantalla de "live terminado" cuando el streamer se desconecta
+  if (liveEnded) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center px-4" style={{background:'#0b0b12'}}>
+        <div className="text-6xl mb-4">📡</div>
+        <h2 className="text-white font-black text-2xl mb-2 text-center">El directo ha terminado</h2>
+        <p className="text-gray-400 text-sm mb-8 text-center">El streamer ha finalizado la transmisión</p>
+        <button onClick={()=>setLocation('/live')} className="px-6 py-3 rounded-xl font-bold text-white" style={{background:'#FF007F'}}>
+          Ver otros lives
+        </button>
+      </div>
+    );
+  }
+
   if (!live) return (
     <div className="fixed inset-0 flex items-center justify-center" style={{background:'#0b0b12'}}>
       <div className="text-center">
@@ -1295,129 +1128,56 @@ function LiveViewerPage({ id }: { id: string }) {
 
   return (
     <div className="fixed inset-0" style={{background:'#000'}}>
-
-      {/* VIDEO / FONDO — pantalla completa */}
       <div className="absolute inset-0" style={{background:'linear-gradient(180deg,#1a0030 0%,#0d001a 100%)'}}>
         <div className="w-full h-full flex items-center justify-center opacity-30">
           <div className="w-48 h-48 rounded-full" style={{background:'radial-gradient(circle,#FF007F,transparent)',filter:'blur(60px)'}}/>
         </div>
       </div>
-
-      {/* HEADER — nombre + seguir + viewers + X */}
       <div className="absolute top-0 left-0 right-0 z-20 px-3 pt-12 pb-3 flex items-center gap-2" style={{background:'linear-gradient(to bottom,rgba(0,0,0,0.6),transparent)'}}>
         <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0" style={{border:'2px solid #FF007F'}}>
-          {live.userId?.avatarUrl
-            ? <img src={live.userId.avatarUrl} alt="" className="w-full h-full object-cover"/>
-            : <div className="w-full h-full flex items-center justify-center text-white font-bold" style={{background:'#7c3aed'}}>{live.userId?.username?.[0]?.toUpperCase()}</div>
-          }
+          {live.userId?.avatarUrl ? <img src={live.userId.avatarUrl} alt="" className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-white font-bold" style={{background:'#7c3aed'}}>{live.userId?.username?.[0]?.toUpperCase()}</div>}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="text-white font-bold text-sm truncate">{live.userId?.username}</span>
-            <span className="text-gray-300 text-xs">❤️ {fmt(live.userId?.impactPoints||0)}</span>
-          </div>
+          <div className="flex items-center gap-1.5"><span className="text-white font-bold text-sm truncate">{live.userId?.username}</span><span className="text-gray-300 text-xs">❤️ {fmt(live.userId?.impactPoints||0)}</span></div>
         </div>
-        {/* Botón Seguir — exacto TikTok */}
-        <button onClick={doFollow} className="flex items-center gap-1 px-4 py-1.5 rounded-full text-sm font-bold" style={{background:following?'transparent':'#FF007F',border:following?'1px solid #aaa':'none',color:'white'}}>
-          {following?'Siguiendo':'+ Seguir'}
-        </button>
-        {/* Avatares espectadores */}
+        <button onClick={doFollow} className="flex items-center gap-1 px-4 py-1.5 rounded-full text-sm font-bold" style={{background:following?'transparent':'#FF007F',border:following?'1px solid #aaa':'none',color:'white'}}>{following?'Siguiendo':'+ Seguir'}</button>
         <div className="flex items-center gap-1">
-          <div className="flex -space-x-1.5">
-            {['#FF007F','#7c3aed','#00F5FF'].map((c,i)=><div key={i} className="w-6 h-6 rounded-full border border-black flex items-center justify-center text-xs font-bold text-white" style={{background:c}}>U</div>)}
-          </div>
+          <div className="flex -space-x-1.5">{['#FF007F','#7c3aed','#00F5FF'].map((c,i)=><div key={i} className="w-6 h-6 rounded-full border border-black flex items-center justify-center text-xs font-bold text-white" style={{background:c}}>U</div>)}</div>
           <span className="text-white text-sm font-bold">{fmt(viewers)}</span>
         </div>
-        <button onClick={()=>setLocation('/live')} className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,255,255,0.15)'}}>
-          <X size={16} className="text-white"/>
-        </button>
+        <button onClick={()=>setLocation('/live')} className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,255,255,0.15)'}}><X size={16} className="text-white"/></button>
       </div>
-
-      {/* BADGE live + batalla */}
       <div className="absolute top-24 left-3 z-20 flex items-center gap-2">
-        <span className="px-3 py-1 rounded-full text-xs font-bold text-white flex items-center gap-1.5" style={{background:'rgba(0,0,0,0.5)',border:'1px solid rgba(255,255,255,0.2)'}}>
-          💎 DOMINO Chain
-        </span>
-        {live.isBattle && (
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full" style={{background:'rgba(0,0,0,0.5)',border:'1px solid #FF007F'}}>
-            <span className="text-white text-xs font-bold">{live.battleScore?.host||0}</span>
-            <span className="text-gray-400 text-xs">VS</span>
-            <span className="text-white text-xs font-bold">{live.battleScore?.opponent||0}</span>
-          </div>
-        )}
+        <span className="px-3 py-1 rounded-full text-xs font-bold text-white flex items-center gap-1.5" style={{background:'rgba(0,0,0,0.5)',border:'1px solid rgba(255,255,255,0.2)'}}>💎 DOMINO Chain</span>
+        {live.isBattle && (<div className="flex items-center gap-2 px-3 py-1 rounded-full" style={{background:'rgba(0,0,0,0.5)',border:'1px solid #FF007F'}}><span className="text-white text-xs font-bold">{live.battleScore?.host||0}</span><span className="text-gray-400 text-xs">VS</span><span className="text-white text-xs font-bold">{live.battleScore?.opponent||0}</span></div>)}
       </div>
-
-      {/* GIFT ANIMATION — aparece en el centro */}
-      {giftAnim && (
-        <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30 text-center animate-bounce">
-          <div className="text-7xl mb-2">{giftAnim.emoji}</div>
-          <div className="px-4 py-2 rounded-full" style={{background:'rgba(255,0,127,0.3)',border:'1px solid #FF007F'}}>
-            <span className="text-white font-bold text-sm">@{giftAnim.user} → {giftAnim.name}</span>
-          </div>
-        </div>
-      )}
-
-      {/* CHAT — flotante sobre el video, alineado abajo-izquierda */}
+      {giftAnim && (<div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30 text-center animate-bounce"><div className="text-7xl mb-2">{giftAnim.emoji}</div><div className="px-4 py-2 rounded-full" style={{background:'rgba(255,0,127,0.3)',border:'1px solid #FF007F'}}><span className="text-white font-bold text-sm">@{giftAnim.user} → {giftAnim.name}</span></div></div>)}
       <div className="absolute bottom-20 left-0 right-0 z-20 px-3" style={{maxHeight:'40vh',overflow:'hidden'}}>
         <div ref={chatRef} className="flex flex-col gap-1 overflow-y-auto" style={{maxHeight:'35vh'}}>
           {msgs.map((m)=>(
             <div key={m.id} className="flex items-start gap-2">
-              {m.type==='system' ? (
-                <span className="text-gray-400 text-xs w-full text-center py-1">{m.text}</span>
-              ) : m.type==='gift' ? (
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{background:'linear-gradient(135deg,rgba(255,0,127,0.4),rgba(124,58,237,0.4))',border:'1px solid rgba(255,0,127,0.5)'}}>
-                  <span className="text-white text-xs font-bold">🎁 @{m.user} {m.text}</span>
-                </div>
-              ) : (
-                <div className="flex items-baseline gap-1.5 max-w-[85%]">
-                  <span className="text-white text-xs font-bold flex-shrink-0" style={{textShadow:'1px 1px 2px rgba(0,0,0,0.8)'}}>@{m.user}</span>
-                  <span className="text-white text-xs" style={{textShadow:'1px 1px 2px rgba(0,0,0,0.8)'}}>{m.text}</span>
-                </div>
-              )}
+              {m.type==='system' ? (<span className="text-gray-400 text-xs w-full text-center py-1">{m.text}</span>)
+              : m.type==='gift' ? (<div className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{background:'linear-gradient(135deg,rgba(255,0,127,0.4),rgba(124,58,237,0.4))',border:'1px solid rgba(255,0,127,0.5)'}}><span className="text-white text-xs font-bold">🎁 @{m.user} {m.text}</span></div>)
+              : (<div className="flex items-baseline gap-1.5 max-w-[85%]"><span className="text-white text-xs font-bold flex-shrink-0" style={{textShadow:'1px 1px 2px rgba(0,0,0,0.8)'}}>@{m.user}</span><span className="text-white text-xs" style={{textShadow:'1px 1px 2px rgba(0,0,0,0.8)'}}>{m.text}</span></div>)}
             </div>
           ))}
         </div>
       </div>
-
-      {/* BOTTOM BAR — exacto TikTok: input + emojis + usuarios + regalo + share */}
       <div className="absolute bottom-0 left-0 right-0 z-20 px-3 pb-8 pt-2" style={{background:'linear-gradient(to top,rgba(0,0,0,0.8),transparent)'}}>
         <div className="flex items-center gap-3">
-          {/* Input escribir */}
           <button onClick={()=>{ const inp=document.getElementById('live-input'); inp?.focus(); }} className="flex-1 flex items-center gap-2 px-4 py-2.5 rounded-full text-sm text-gray-400" style={{background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.15)'}}>
             <input id="live-input" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendMsg()} placeholder="Escribe algo..." className="bg-transparent text-white placeholder-gray-400 text-sm flex-1 focus:outline-none w-full"/>
           </button>
-          {/* Emojis */}
           <button className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-xl" style={{background:'rgba(255,255,255,0.1)'}}>😊</button>
-          {/* Usuarios */}
-          <button className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,255,255,0.1)'}}>
-            <Users size={18} className="text-white"/>
-          </button>
-          {/* Regalo — color rosa */}
-          <button onClick={()=>setShowGifts(true)} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,0,127,0.3)',border:'1px solid rgba(255,0,127,0.5)'}}>
-            <Gift size={18} className="text-white"/>
-          </button>
-          {/* Share + contador */}
-          <button className="flex flex-col items-center gap-0.5">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.1)'}}>
-              <Share size={18} className="text-white"/>
-            </div>
-            <span className="text-white text-xs">{fmt(viewers)}</span>
-          </button>
+          <button className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,255,255,0.1)'}}><Users size={18} className="text-white"/></button>
+          <button onClick={()=>setShowGifts(true)} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,0,127,0.3)',border:'1px solid rgba(255,0,127,0.5)'}}><Gift size={18} className="text-white"/></button>
+          <button className="flex flex-col items-center gap-0.5"><div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.1)'}}><Share size={18} className="text-white"/></div><span className="text-white text-xs">{fmt(viewers)}</span></button>
         </div>
       </div>
-
-      {/* PANEL REGALOS — aparece desde abajo */}
       {showGifts && (
         <div className="absolute inset-x-0 bottom-0 z-30 rounded-t-3xl pb-8" style={{background:'#13131f',border:'1px solid #1e1e2a'}}>
           <div className="w-12 h-1 rounded-full mx-auto mt-3 mb-4" style={{background:'#2a2a3a'}}/>
-          <div className="flex items-center justify-between px-5 mb-4">
-            <h3 className="font-black text-white text-lg">Enviar Regalo</h3>
-            <div className="flex items-center gap-2">
-              <span className="text-yellow-400 font-bold">🪙 {(user?.coins||0).toLocaleString()}</span>
-              <button onClick={()=>setShowGifts(false)}><X size={20} className="text-gray-400"/></button>
-            </div>
-          </div>
-          {/* Grid de regalos — 3 columnas como TikTok */}
+          <div className="flex items-center justify-between px-5 mb-4"><h3 className="font-black text-white text-lg">Enviar Regalo</h3><div className="flex items-center gap-2"><span className="text-yellow-400 font-bold">🪙 {(user?.coins||0).toLocaleString()}</span><button onClick={()=>setShowGifts(false)}><X size={20} className="text-gray-400"/></button></div></div>
           <div className="grid grid-cols-4 gap-3 px-5 mb-4">
             {Object.entries(GIFT_CATALOG).map(([k,g])=>(
               <button key={k} onClick={()=>sendGift(k)} disabled={(user?.coins||0)<g.coins} className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all disabled:opacity-40" style={{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)'}}>
@@ -1427,11 +1187,7 @@ function LiveViewerPage({ id }: { id: string }) {
               </button>
             ))}
           </div>
-          <div className="px-5">
-            <Link href="/coins" onClick={()=>setShowGifts(false)} className="block w-full py-3 rounded-2xl text-center font-bold text-sm" style={{background:'rgba(0,245,255,0.1)',color:'#00F5FF',border:'1px solid rgba(0,245,255,0.2)'}}>
-              + Comprar más monedas
-            </Link>
-          </div>
+          <div className="px-5"><Link href="/coins" onClick={()=>setShowGifts(false)} className="block w-full py-3 rounded-2xl text-center font-bold text-sm" style={{background:'rgba(0,245,255,0.1)',color:'#00F5FF',border:'1px solid rgba(0,245,255,0.2)'}}>+ Comprar más monedas</Link></div>
         </div>
       )}
     </div>
@@ -1494,11 +1250,7 @@ function SearchPage() {
         <div className="relative mb-6"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar usuarios, ciudades..." autoFocus className="w-full rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#1e1e2a',border:'1px solid #2a2a3a'}}/></div>
         {loading&&<div className="flex justify-center py-8"><Spinner/></div>}
         <div className="space-y-2">
-          {results.map((u:RankingEntry)=>(
-            <button key={u._id} onClick={()=>setLocation(`/user/${u._id}`)} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors">
-              <Av u={u} s={44}/><div className="flex-1 text-left"><p className="text-white font-semibold">@{u.username}</p><p className="text-gray-400 text-xs">{u.flag} {u.country} · {fmt(u.impactPoints)} pts</p></div><div className="flex items-center gap-1 text-xs text-gray-500"><Users size={12}/>{u.followers?.length||0}</div>
-            </button>
-          ))}
+          {results.map((u:RankingEntry)=>(<button key={u._id} onClick={()=>setLocation(`/user/${u._id}`)} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors"><Av u={u} s={44}/><div className="flex-1 text-left"><p className="text-white font-semibold">@{u.username}</p><p className="text-gray-400 text-xs">{u.flag} {u.country} · {fmt(u.impactPoints)} pts</p></div><div className="flex items-center gap-1 text-xs text-gray-500"><Users size={12}/>{u.followers?.length||0}</div></button>))}
           {q.length>=2&&!loading&&results.length===0&&<p className="text-center text-gray-500 py-8">Sin resultados para "{q}"</p>}
         </div>
       </div>
@@ -1506,14 +1258,18 @@ function SearchPage() {
   );
 }
 
-// ===================== HOME PAGE =====================
+// ===================== HOME PAGE (landing para no logueados) =====================
 function HomePage() {
   const { data: challenge } = useApi('/api/challenges/active');
   const { data: ranking } = useApi('/api/ranking?limit=5');
-  const { data: lives } = useApi('/api/lives');
+  const { data: livesData } = useApi('/api/lives');
   const [counter, setCounter] = useState(14782);
   useEffect(()=>{if(challenge?.globalCounter)setCounter(challenge.globalCounter);},[challenge]);
   useEffect(()=>{const t=setInterval(()=>setCounter(c=>c+Math.floor(Math.random()*3)),2500);return()=>clearInterval(t);},[]);
+
+  // Solo mostrar lives activos en la landing
+  const lives = (Array.isArray(livesData) ? livesData : []).filter((l: LiveStream) => l.status === 'active' || l.status === 'live');
+
   return(
     <div className="pb-20">
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
@@ -1532,7 +1288,7 @@ function HomePage() {
         </div>
       </section>
 
-      {Array.isArray(lives)&&lives.length>0&&(
+      {lives.length>0&&(
         <section className="py-10 px-4">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-4"><div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#FF007F'}}/><h2 className="text-xl font-black text-white">En Directo</h2></div><Link href="/live" className="text-sm font-semibold" style={{color:'#00F5FF'}}>Ver todos →</Link></div>
@@ -1591,6 +1347,30 @@ function HomePage() {
   );
 }
 
+// ===================== FIX 1: HomeRoute — si el usuario ya está logueado, va directo al feed =====================
+function HomeRoute() {
+  const { user, loading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!loading && user) {
+      setLocation('/feed');
+    }
+  }, [user, loading]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{background:'#0b0b12'}}>
+        <div className="flex flex-col items-center gap-4"><DominoLogo size={40}/><Spinner/></div>
+      </div>
+    );
+  }
+
+  if (user) return null; // redirect en curso
+
+  return <HomePage/>;
+}
+
 // ===================== APP =====================
 export default function App() { return <AuthProvider><AppInner/></AuthProvider>; }
 
@@ -1601,7 +1381,8 @@ function AppInner() {
     <div className="min-h-screen" style={{background:'#0b0b12'}}>
       <TopNav/>
       <Switch>
-        <Route path="/" component={HomePage}/>
+        {/* FIX 1: ruta "/" usa HomeRoute en vez de HomePage directamente */}
+        <Route path="/" component={HomeRoute}/>
         <Route path="/feed" component={FeedPage}/>
         <Route path="/auth" component={AuthPage}/>
         <Route path="/create" component={CreatePage}/>
