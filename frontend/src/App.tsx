@@ -439,11 +439,11 @@ function FeedPage() {
   const list=Array.isArray(videos)?videos:[];
 
   return (
-    <div className="fixed inset-0 overflow-y-scroll snap-y snap-mandatory" style={{paddingTop:'56px',paddingBottom:'56px',background:'#000'}}>
+    <div className="fixed inset-0 overflow-y-scroll snap-y snap-mandatory" style={{top:'56px',bottom:'56px',background:'#000'}}>
       {commentId&&<CommentsPanel videoId={commentId} onClose={()=>setCommentId(null)}/>}
       {challenge&&<div className="fixed top-14 left-0 right-0 z-30 pointer-events-none"><div className="max-w-md mx-auto px-4 pt-2"><div className="rounded-xl px-3 py-2 pointer-events-auto flex items-center gap-2" style={{background:'rgba(11,11,18,0.85)',border:'1px solid #1e1e2a',backdropFilter:'blur(10px)'}}><Zap size={14} className="text-yellow-400"/><span className="text-xs font-semibold text-white flex-1 truncate">{challenge.title}</span><span className="text-xs text-gray-400">{left(challenge.expiresAt)}</span></div></div></div>}
       {list.map((v:DominoVideo,idx:number)=>(
-        <div key={v._id} className="relative w-full snap-start flex-shrink-0 overflow-hidden bg-black" style={{height:'calc(100vh - 112px)'}}>
+        <div key={v._id} className="relative w-full snap-start flex-shrink-0 overflow-hidden bg-black" style={{height:'100%',minHeight:'calc(100svh - 112px)'}}>
           {v.videoUrl?<video ref={el=>{videoRefs.current[idx]=el;}} src={v.videoUrl} className="absolute inset-0 w-full h-full object-cover" loop playsInline muted onDoubleClick={()=>doLike(v._id)}/>:v.thumbnailUrl?<img src={v.thumbnailUrl} alt={`Reto DOMINO de @${v.userId?.username||'usuario'}, cadena nivel ${v.chainDepth+1}`} loading={idx===0?'eager':'lazy'} className="absolute inset-0 w-full h-full object-cover"/>:<div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={48} className="text-gray-600"/></div>}
           {v.isAIGenerated && <div className="absolute top-3 left-3 z-10"><AIBadge size="md"/></div>}
           <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.85) 0%,rgba(0,0,0,0.1) 50%,transparent 100%)'}}/>
@@ -474,6 +474,8 @@ function ProfilePage({ userId }: { userId?: string }) {
 
   const { data: profile, loading } = useApi(isOwn ? '/api/users/me' : `/api/users/${targetId}`, [targetId]);
   const { data: userVideos } = useApi(targetId ? `/api/users/${targetId}/videos` : '', [targetId]);
+  const { data: nd } = useApi('/api/notifications', [me?._id]);
+  const unread = Array.isArray(nd) ? nd.filter((n:Notification)=>!n.read).length : 0;
   const [tab, setTab] = useState<'videos'|'private'|'repost'|'saved'|'likes'>('videos');
   const [following, setFollowing] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<DominoVideo|null>(null);
@@ -535,7 +537,7 @@ function ProfilePage({ userId }: { userId?: string }) {
           <div className="w-full max-w-lg rounded-t-2xl overflow-hidden" style={{background:'#1e1e2a'}} onClick={e=>e.stopPropagation()}>
             <div className="p-4 space-y-1">
               {isOwn && <>
-                <button onClick={()=>{setShowMenu(false);setLocation('/settings');}} className="w-full text-left px-4 py-3.5 rounded-xl text-white font-medium hover:bg-white/5">⚙️ Ajustes</button>
+                <button onClick={()=>{setShowMenu(false);setLocation('/profile/edit');}} className="w-full text-left px-4 py-3.5 rounded-xl text-white font-medium hover:bg-white/5">⚙️ Ajustes y perfil</button>
                 <button onClick={()=>{setShowMenu(false);setLocation('/coins');}} className="w-full text-left px-4 py-3.5 rounded-xl text-white font-medium hover:bg-white/5">🪙 Comprar Monedas</button>
                 <div className="border-t my-2" style={{borderColor:'#2a2a3a'}}/>
                 <button onClick={()=>{logout();setShowMenu(false);setLocation('/');}} className="w-full text-left px-4 py-3.5 rounded-xl font-medium hover:bg-white/5" style={{color:'#FF007F'}}>🚪 Cerrar sesión</button>
@@ -562,7 +564,7 @@ function ProfilePage({ userId }: { userId?: string }) {
             <button onClick={()=>setLocation(-1 as any)} className="p-2"><ChevronLeft size={24} className="text-white"/></button>
           )}
           <div className="flex items-center gap-3">
-            {isOwn && <div className="relative"><Av u={displayUser} s={28}/><span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{background:'#FF007F',fontSize:'9px'}}>2</span></div>}
+            {isOwn && <button onClick={()=>setLocation('/notifications')} className="relative"><Av u={displayUser} s={28}/>{unread>0&&<span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{background:'#FF007F',fontSize:'9px'}}>{unread}</span>}</button>}
             {isOwn && <button onClick={()=>shareProfile(targetId, displayUser.username)}><Share size={20} className="text-white"/></button>}
             <button onClick={()=>setShowMenu(true)}><span className="text-white text-xl">☰</span></button>
           </div>
