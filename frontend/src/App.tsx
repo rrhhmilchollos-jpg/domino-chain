@@ -478,6 +478,9 @@ function ProfilePage({ userId }: { userId?: string }) {
   const { data: userVideos } = useApi(targetId ? `/api/users/${targetId}/videos` : '', [targetId]);
   const { data: nd } = useApi('/api/notifications', [me?._id]);
   const unread = Array.isArray(nd) ? nd.filter((n:Notification)=>!n.read).length : 0;
+  // Liked y saved: cargar desde endpoints dedicados (más fiable que confiar en el objeto usuario)
+  const { data: likedVideosData } = useApi(isOwn && me?._id ? `/api/videos/liked/${me._id}` : '', [me?._id, isOwn]);
+  const { data: savedVideosData } = useApi(isOwn && me?._id ? `/api/videos/saved/${me._id}` : '', [me?._id, isOwn]);
   // Comprobar si el usuario tiene un live activo — para mostrar botón de unirse
   const { data: lives } = useApi('/api/lives', [targetId]);
   const activeLive = Array.isArray(lives) ? lives.find((l:LiveStream) => l.userId?._id === targetId) : null;
@@ -518,8 +521,8 @@ function ProfilePage({ userId }: { userId?: string }) {
   if (!displayUser) return null;
 
   const videos = Array.isArray(userVideos) ? userVideos : [];
-  const savedVids: DominoVideo[] = Array.isArray(displayUser.savedVideos) ? displayUser.savedVideos.filter((v:any)=>v&&v._id) : [];
-  const likedVids: DominoVideo[] = Array.isArray(displayUser.likedVideos) ? displayUser.likedVideos.filter((v:any)=>v&&v._id) : [];
+  const savedVids: DominoVideo[] = Array.isArray(savedVideosData) ? savedVideosData.filter((v:any)=>v&&v._id) : (Array.isArray(displayUser.savedVideos) ? displayUser.savedVideos.filter((v:any)=>v&&v._id) : []);
+  const likedVids: DominoVideo[] = Array.isArray(likedVideosData) ? likedVideosData.filter((v:any)=>v&&v._id) : (Array.isArray(displayUser.likedVideos) ? displayUser.likedVideos.filter((v:any)=>v&&v._id) : []);
   const totalLikes = videos.reduce((a:number,v:DominoVideo)=>a+(v.likes?.length||0),0);
 
   const tabVideos = tab==='videos'?videos:tab==='saved'?savedVids:tab==='likes'?likedVids:[];
