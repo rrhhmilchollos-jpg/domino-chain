@@ -10,9 +10,6 @@ const SavedVideo = require('../models/SavedVideo');
 const VideoView = require('../models/VideoView');
 const { SOUND_LIBRARY } = require('./sounds');
 
-// Marca isSaved en cada video de una lista según quién pregunta (una sola
-// consulta batch) — así el icono de guardado sale correcto desde el primer
-// render en vez de asumir que nada está guardado.
 async function withIsSaved(videos, requester) {
   if (!requester || videos.length === 0) return videos.map(v => ({ ...v.toObject(), isSaved: false }));
   const ids = videos.map(v => v._id);
@@ -28,35 +25,35 @@ router.get('/feed', optionalAuth, async (req, res) => {
     const pageNum = Number(page);
     const limitNum = Number(limit);
 
-    // Solo videos con archivo real y públicos: uno sin videoUrl no tiene nada
-    // que reproducir, y uno privado no debe verlo nadie salvo su dueño (que
-    // accede a sus propios videos desde el Dashboard, no desde este feed).
-    // FIX: usamos $ne:false en vez de true — los videos creados antes de
-    // añadir el campo isPublic al schema no lo tienen guardado en Mongo
-    // (el default de Mongoose solo aplica a documentos nuevos), así que
-    // exigir isPublic:true los excluía aunque siguieran siendo públicos.
-    const pool = await Video.find({ isPublished: true, isPublic: { $ne: false }, videoUrl: { $ne: '' } })
+    // FIX: si hay sesión, excluir los propios vídeos del usuario del feed público.
+    // El usuario ve sus propios vídeos desde su perfil/dashboard, no aquí.
+    const feedFilter = {
+      isPublished: true,
+      isPublic: { $ne: false },
+      videoUrl: { $ne: '' }
+    };
+    if (req.user) {
+      feedFilter.userId = { $ne: req.user._id };
+    }
+
+    const pool = await Video.find(feedFilter)
       .populate('userId', 'username avatarUrl country city flag impactPoints currentStreak')
       .sort({ createdAt: -1 })
-      .limit(200); // ventana de candidatos recientes sobre la que rankear/diversificar
+      .limit(200);
 
     const now = Date.now();
     const scored = pool.map(v => {
       const hours = Math.max(0.5, (now - new Date(v.createdAt).getTime()) / 3.6e6);
-      // Más interacción (likes) sube el video; cuanto más viejo, más decae —
-      // parecido a cómo TikTok pesa interacción + recencia, sin pretender
-      // ser su modelo de ML real.
       const score = ((v.likes?.length || 0) * 3 + 1) / Math.pow(hours + 2, 1.3);
       return { v, score };
     }).sort((a, b) => b.score - a.score).map(x => x.v);
 
-    // Diversidad: nunca dos publicaciones seguidas del mismo autor (igual
-    // que documenta TikTok para su Following/For You feed).
+    // Diversidad: nunca dos del mismo autor seguidos
     const diversified = [];
     const pending = [...scored];
     while (pending.length) {
       let idx = pending.findIndex(v => diversified.length === 0 || String(v.userId?._id) !== String(diversified[diversified.length - 1].userId?._id));
-      if (idx === -1) idx = 0; // no hay alternativa (p.ej. solo queda un autor): se permite repetir
+      if (idx === -1) idx = 0;
       diversified.push(pending.splice(idx, 1)[0]);
     }
 
@@ -68,8 +65,7 @@ router.get('/feed', optionalAuth, async (req, res) => {
   }
 });
 
-// GET /api/videos/feed/following — pestaña "Siguiendo": solo videos de
-// cuentas reales a las que sigue el usuario logueado (nunca sugeridas).
+// GET /api/videos/feed/following
 router.get('/feed/following', auth, async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
@@ -98,8 +94,7 @@ router.get('/feed/following', auth, async (req, res) => {
   }
 });
 
-// GET /api/videos/trending — videos más populares recientes, para la
-// pantalla de Descubrir cuando todavía no se ha escrito ninguna búsqueda.
+// GET /api/videos/trending
 router.get('/trending', optionalAuth, async (req, res) => {
   try {
     const limit = Math.min(30, Number(req.query.limit) || 12);
@@ -133,9 +128,7 @@ router.get('/chain/:rootId', async (req, res) => {
   }
 });
 
-// GET /api/videos/user/:userId — videos publicados por un usuario (para su dashboard/perfil)
-// Usa optionalAuth: si quien pregunta es el propio dueño, ve también sus videos
-// privados; cualquier otro visitante (o nadie logueado) solo ve los públicos.
+// GET /api/videos/user/:userId
 router.get('/user/:userId', optionalAuth, async (req, res) => {
   try {
     const isOwner = req.user && String(req.user._id) === String(req.params.userId);
@@ -151,21 +144,26 @@ router.get('/user/:userId', optionalAuth, async (req, res) => {
   }
 });
 
-// GET /api/videos/liked/:userId — videos a los que el usuario ha dado 'me gusta' (pestaña Me Gusta, solo el propio dueño la ve desde el frontend)
-router.get('/liked/:userId', async (req, res) => {
+// GET /api/videos/liked/:userId
+// FIX: antes buscaba { likes: req.params.userId } (string) pero el array
+// guarda ObjectIds — con $elemMatch o conversión funciona bien en ambos casos.
+router.get('/liked/:userId', auth, async (req, res) => {
   try {
-    const videos = await Video.find({ likes: req.params.userId, isPublished: true })
+    // Solo el propio usuario puede ver sus likes
+    if (req.user._id.toString() !== req.params.userId) {
+      return res.status(403).json({ error: 'Solo puedes ver tus propios likes' });
+    }
+    const videos = await Video.find({ likes: req.user._id, isPublished: true })
       .populate('userId', 'username avatarUrl country city flag')
-      .sort({ createdAt: -1 });
-    res.json(videos);
+      .sort({ createdAt: -1 })
+      .limit(100);
+    res.json(await withIsSaved(videos, req.user));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// GET /api/videos/saved/:userId — videos guardados/favoritos. A diferencia
-// de /liked, esto SÍ se protege en el servidor (no solo se oculta en el
-// frontend): los guardados son una lista privada y solo su dueño puede verla.
+// GET /api/videos/saved/:userId
 router.get('/saved/:userId', auth, async (req, res) => {
   try {
     if (req.user._id.toString() !== req.params.userId) {
@@ -175,7 +173,6 @@ router.get('/saved/:userId', auth, async (req, res) => {
     const videoIds = saves.map(s => s.videoId);
     const videos = await Video.find({ _id: { $in: videoIds } })
       .populate('userId', 'username avatarUrl country city flag');
-    // Mantener el orden "guardado más reciente primero", no el orden de Mongo
     const byId = new Map(videos.map(v => [v._id.toString(), v]));
     const ordered = videoIds.map(id => byId.get(id.toString())).filter(Boolean);
     res.json(ordered);
@@ -196,7 +193,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/videos — publicar video
+// POST /api/videos
 router.post('/', auth, async (req, res) => {
   try {
     const { challengeId, videoUrl, thumbnailUrl, parentVideoId, geoCoordinates, nominatedUserIds, caption, remixOfVideoId, remixType, soundId } = req.body;
@@ -214,12 +211,9 @@ router.post('/', auth, async (req, res) => {
       rootVideoId = parent.rootVideoId || parent._id;
     }
 
-    // Hashtags reales extraídos del texto que escribió el usuario — nunca inventados.
     const cleanCaption = (caption || '').trim().slice(0, 150);
     const hashtags = Array.from(new Set((cleanCaption.match(/#[\p{L}0-9_]+/gu) || []).map(h => h.slice(1).toLowerCase())));
 
-    // Dueto/Stitch: si viene remixOfVideoId, validamos que el original existe
-    // y es público, y guardamos quién es su autor real (cuenta real, nunca inventada).
     let remixOf = undefined;
     if (remixOfVideoId && ['duet', 'stitch'].includes(remixType)) {
       const original = await Video.findById(remixOfVideoId).populate('userId', 'username');
@@ -230,8 +224,6 @@ router.post('/', auth, async (req, res) => {
       remixOf = { videoId: original._id, type: remixType, authorId: original.userId._id, authorUsername: original.userId.username };
     }
 
-    // Música — validamos contra el catálogo real para no guardar nunca un
-    // título inventado; si el id no existe simplemente se publica sin sonido.
     let sound = undefined;
     if (soundId) {
       const s = SOUND_LIBRARY.find(s => s.id === soundId);
@@ -261,7 +253,6 @@ router.post('/', auth, async (req, res) => {
     }
 
     await Challenge.findByIdAndUpdate(challengeId, { $inc: { globalCounter: 1 } });
-
     await User.findByIdAndUpdate(req.user._id, {
       $inc: { impactPoints: 100 + chainDepth * 50 },
       lastActiveDate: new Date()
@@ -297,7 +288,7 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-// PUT /api/videos/:id/visibility — el dueño cambia un video a público o privado
+// PUT /api/videos/:id/visibility
 router.put('/:id/visibility', auth, async (req, res) => {
   try {
     const { isPublic } = req.body;
@@ -312,7 +303,7 @@ router.put('/:id/visibility', auth, async (req, res) => {
   }
 });
 
-// POST /api/videos/:id/save — guardar/quitar de guardados (toggle, privado — sin notificación, a diferencia del like)
+// POST /api/videos/:id/save
 router.post('/:id/save', auth, async (req, res) => {
   try {
     const video = await Video.findById(req.params.id);
@@ -332,17 +323,13 @@ router.post('/:id/save', auth, async (req, res) => {
   }
 });
 
-// POST /api/videos/:id/view — registra una reproducción real. Se llama desde
-// el feed cuando un video lleva un rato visible en pantalla (no en cada
-// scroll de paso). Si hay sesión, además registra el "alcance" único —
-// este mismo usuario nunca vuelve a contar como persona nueva alcanzada
-// para este video, gracias al índice único de VideoView.
+// POST /api/videos/:id/view
 router.post('/:id/view', optionalAuth, async (req, res) => {
   try {
     await Video.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } });
     if (req.user) {
       try { await VideoView.create({ videoId: req.params.id, userId: req.user._id }); }
-      catch { /* índice único: este usuario ya contaba como alcance, no pasa nada */ }
+      catch { }
     }
     res.json({ ok: true });
   } catch (e) {
@@ -350,9 +337,7 @@ router.post('/:id/view', optionalAuth, async (req, res) => {
   }
 });
 
-// POST /api/videos/:id/share — registra una vez compartido real (se llama
-// solo cuando el panel nativo de compartir se completa o el enlace se
-// copia de verdad, nunca solo por abrir el menú).
+// POST /api/videos/:id/share
 router.post('/:id/share', async (req, res) => {
   try {
     await Video.findByIdAndUpdate(req.params.id, { $inc: { sharesCount: 1 } });
@@ -363,14 +348,32 @@ router.post('/:id/share', async (req, res) => {
 });
 
 // POST /api/videos/:id/like
+// FIX: ahora también actualiza el array likedVideos del usuario para que
+// aparezca en su pestaña "Me gusta" del perfil/dashboard
 router.post('/:id/like', auth, async (req, res) => {
   try {
     const video = await Video.findById(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video no encontrado' });
-    const liked = video.likes.includes(req.user._id);
-    if (liked) video.likes.pull(req.user._id);
-    else {
+
+    const liked = video.likes.map(id => id.toString()).includes(req.user._id.toString());
+
+    if (liked) {
+      // Quitar like
+      video.likes.pull(req.user._id);
+      await video.save();
+      // Quitar de likedVideos del usuario
+      await User.findByIdAndUpdate(req.user._id, {
+        $pull: { likedVideos: video._id }
+      });
+    } else {
+      // Dar like
       video.likes.push(req.user._id);
+      await video.save();
+      // Añadir a likedVideos del usuario (addToSet evita duplicados)
+      await User.findByIdAndUpdate(req.user._id, {
+        $addToSet: { likedVideos: video._id }
+      });
+      // Notificar al autor si no es el mismo usuario
       if (video.userId.toString() !== req.user._id.toString()) {
         await Notification.create({
           userId: video.userId,
@@ -382,7 +385,7 @@ router.post('/:id/like', auth, async (req, res) => {
         });
       }
     }
-    await video.save();
+
     res.json({ liked: !liked, count: video.likes.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
