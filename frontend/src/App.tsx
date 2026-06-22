@@ -11,6 +11,7 @@ import {
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import LiveViewerPage from './pages/LiveViewerPage';
+import { AuthProvider, useAuth } from './lib/shared';
 
 function cn(...args: Parameters<typeof clsx>) { return twMerge(clsx(...args)); }
 
@@ -50,44 +51,6 @@ const GIFT_CATALOG: Record<string, { name: string; emoji: string; coins: number 
 };
 
 // ===================== AUTH =====================
-const AuthContext = React.createContext<{
-  user: AppUser|null; token: string|null;
-  login:(e:string,p:string)=>Promise<void>; register:(d:any)=>Promise<void>;
-  logout:()=>void; loading:boolean; refreshUser:()=>Promise<void>;
-}>({ user:null, token:null, login:async()=>{}, register:async()=>{}, logout:()=>{}, loading:true, refreshUser:async()=>{} });
-
-function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AppUser|null>(null);
-  const [token, setToken] = useState<string|null>(() => localStorage.getItem('domino_token'));
-  const [loading, setLoading] = useState(true);
-
-  const fetchUser = async (t: string) => {
-    const r = await fetch(`${API}/api/users/me`, { headers: { Authorization:`Bearer ${t}` } });
-    if (r.ok) setUser(await r.json());
-    else { setToken(null); localStorage.removeItem('domino_token'); }
-  };
-
-  useEffect(() => {
-    if (token) fetchUser(token).finally(() => setLoading(false));
-    else setLoading(false);
-  }, [token]);
-
-  const login = async (email:string, password:string) => {
-    const r = await fetch(`${API}/api/auth/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email,password}) });
-    const d = await r.json(); if (!r.ok) throw new Error(d.error||'Error');
-    localStorage.setItem('domino_token', d.token); setToken(d.token); setUser(d.user);
-  };
-  const register = async (fd:any) => {
-    const r = await fetch(`${API}/api/auth/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(fd) });
-    const d = await r.json(); if (!r.ok) throw new Error(d.error||'Error');
-    localStorage.setItem('domino_token', d.token); setToken(d.token); setUser(d.user);
-  };
-  const logout = () => { localStorage.removeItem('domino_token'); setToken(null); setUser(null); };
-  const refreshUser = async () => { if (token) await fetchUser(token); };
-  return <AuthContext.Provider value={{user,token,login,register,logout,loading,refreshUser}}>{children}</AuthContext.Provider>;
-}
-function useAuth() { return React.useContext(AuthContext); }
-
 function useApi(endpoint: string, deps: any[] = []) {
   const { token } = useAuth();
   const [data, setData] = useState<any>(null);
