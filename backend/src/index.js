@@ -53,12 +53,16 @@ app.get('/api/health', (req, res) => res.json({
 async function cleanupZombieLives() {
   try {
     const Live = require('./models/Live');
+    // Solo limpiar lives con más de 30 minutos de antigüedad — así si el
+    // servidor se reinicia durante un live recién creado, no lo mata.
+    // Un live de más de 30 min sin señal de LiveKit sí es un zombie real.
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
     const result = await Live.updateMany(
-      { status: 'active' },
+      { status: 'active', createdAt: { $lt: thirtyMinutesAgo } },
       { status: 'ended', endedAt: new Date() }
     );
     if (result.modifiedCount > 0) {
-      console.log(`🧹 Limpiados ${result.modifiedCount} lives zombies del reinicio anterior`);
+      console.log(`🧹 Limpiados ${result.modifiedCount} lives zombies (>30min) del reinicio anterior`);
     }
   } catch (e) {
     console.warn('⚠️ No se pudieron limpiar lives zombies:', e.message);
