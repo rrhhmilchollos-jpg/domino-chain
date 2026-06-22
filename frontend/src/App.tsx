@@ -5,14 +5,11 @@ import {
   Search, Activity, Heart, Share, RefreshCw, Users, Clock,
   CheckCircle, LogOut, Loader2, MessageCircle, Send, Video,
   Eye, Gift, Download, Upload, Settings, BookmarkPlus,
-  UserPlus, UserCheck, ChevronLeft, ChevronRight, Hash, AtSign, MapPin,
+  UserPlus, UserCheck, ChevronLeft, Hash, AtSign, MapPin,
   Lock, Grid, Bookmark, ThumbsUp, Plus, Mic, Image as ImageIcon
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import LiveViewerPage from './pages/LiveViewerPage';
-import FeedPage from './pages/FeedPage';
-import { AuthProvider, useAuth } from './lib/shared';
 
 function cn(...args: Parameters<typeof clsx>) { return twMerge(clsx(...args)); }
 
@@ -27,7 +24,6 @@ interface AppUser {
   impactPoints: number; currentStreak: number; coins: number;
   followers: string[]; following: string[];
   savedVideos: DominoVideo[]; likedVideos: DominoVideo[];
-  isAI?: boolean; // true = cuenta gestionada por IA. SIEMPRE debe mostrarse de forma visible, nunca ocultarse.
 }
 interface Challenge { _id: string; title: string; description: string; category: string; expiresAt: string; globalCounter: number; }
 interface DominoVideo {
@@ -35,15 +31,13 @@ interface DominoVideo {
   chainDepth: number; likes: string[]; createdAt: string;
   geoCoordinates: { lat: number; lng: number };
   challengeId: string; nominatedUsers: string[]; rootVideoId: string;
-  isAIGenerated?: boolean; // declarado por quien sube el vídeo, igual que el "AI-generated content" de TikTok
 }
-interface Notification { _id: string; type: string; fromUserId: { _id?: string; username: string; avatarUrl: string; flag: string; isAI?: boolean }; message: string; read: boolean; createdAt: string; }
-interface RankingEntry { _id: string; username: string; avatarUrl: string; country: string; flag: string; impactPoints: number; currentStreak: number; followers: string[]; isAI?: boolean; }
-interface Comment { _id: string; userId: { _id: string; username: string; avatarUrl: string; flag: string; isAI?: boolean }; text: string; createdAt: string; }
+interface Notification { _id: string; type: string; fromUserId: { username: string; avatarUrl: string; flag: string }; message: string; read: boolean; createdAt: string; }
+interface RankingEntry { _id: string; username: string; avatarUrl: string; country: string; flag: string; impactPoints: number; currentStreak: number; followers: string[]; }
+interface Comment { _id: string; userId: { _id: string; username: string; avatarUrl: string; flag: string }; text: string; createdAt: string; }
 interface LiveStream { _id: string; userId: AppUser; title: string; status: string; viewerCount: number; category: string; isBattle: boolean; battleScore: { host: number; opponent: number }; }
-interface Message { _id: string; fromUserId: { _id: string; username: string; avatarUrl: string; flag: string; isAI?: boolean }; toUserId: { _id: string; username: string; avatarUrl: string; flag: string; isAI?: boolean }; text: string; read: boolean; createdAt: string; }
-interface Conversation { user: { _id: string; username: string; avatarUrl: string; flag: string; isAI?: boolean }; lastMessage: Message; unread: number; }
-
+interface Message { _id: string; fromUserId: { _id: string; username: string; avatarUrl: string; flag: string }; toUserId: { _id: string; username: string; avatarUrl: string; flag: string }; text: string; read: boolean; createdAt: string; }
+interface Conversation { user: { _id: string; username: string; avatarUrl: string; flag: string }; lastMessage: Message; unread: number; }
 
 const GIFT_CATALOG: Record<string, { name: string; emoji: string; coins: number }> = {
   domino:{ name:'Dominó', emoji:'🎲', coins:5 }, chain:{ name:'Cadena', emoji:'⛓️', coins:20 },
@@ -52,6 +46,44 @@ const GIFT_CATALOG: Record<string, { name: string; emoji: string; coins: number 
 };
 
 // ===================== AUTH =====================
+const AuthContext = React.createContext<{
+  user: AppUser|null; token: string|null;
+  login:(e:string,p:string)=>Promise<void>; register:(d:any)=>Promise<void>;
+  logout:()=>void; loading:boolean; refreshUser:()=>Promise<void>;
+}>({ user:null, token:null, login:async()=>{}, register:async()=>{}, logout:()=>{}, loading:true, refreshUser:async()=>{} });
+
+function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AppUser|null>(null);
+  const [token, setToken] = useState<string|null>(() => localStorage.getItem('domino_token'));
+  const [loading, setLoading] = useState(true);
+
+  const fetchUser = async (t: string) => {
+    const r = await fetch(`${API}/api/users/me`, { headers: { Authorization:`Bearer ${t}` } });
+    if (r.ok) setUser(await r.json());
+    else { setToken(null); localStorage.removeItem('domino_token'); }
+  };
+
+  useEffect(() => {
+    if (token) fetchUser(token).finally(() => setLoading(false));
+    else setLoading(false);
+  }, [token]);
+
+  const login = async (email:string, password:string) => {
+    const r = await fetch(`${API}/api/auth/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email,password}) });
+    const d = await r.json(); if (!r.ok) throw new Error(d.error||'Error');
+    localStorage.setItem('domino_token', d.token); setToken(d.token); setUser(d.user);
+  };
+  const register = async (fd:any) => {
+    const r = await fetch(`${API}/api/auth/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(fd) });
+    const d = await r.json(); if (!r.ok) throw new Error(d.error||'Error');
+    localStorage.setItem('domino_token', d.token); setToken(d.token); setUser(d.user);
+  };
+  const logout = () => { localStorage.removeItem('domino_token'); setToken(null); setUser(null); };
+  const refreshUser = async () => { if (token) await fetchUser(token); };
+  return <AuthContext.Provider value={{user,token,login,register,logout,loading,refreshUser}}>{children}</AuthContext.Provider>;
+}
+function useAuth() { return React.useContext(AuthContext); }
+
 function useApi(endpoint: string, deps: any[] = []) {
   const { token } = useAuth();
   const [data, setData] = useState<any>(null);
@@ -65,70 +97,6 @@ function useApi(endpoint: string, deps: any[] = []) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   return { data, loading, error, setData };
-}
-
-// ===================== SEO =====================
-// Sitio base — CAMBIA esto por tu dominio real una vez lo tengas.
-const SITE_URL = 'https://domino-app.com';
-const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.jpg`;
-
-interface SEOConfig {
-  title: string;
-  description: string;
-  path: string;            // ej: '/', '/feed', '/user/123'
-  image?: string;
-  type?: 'website' | 'profile' | 'video.other';
-  noindex?: boolean;
-  jsonLd?: Record<string, any> | null;
-}
-
-/**
- * Actualiza <title>, meta description/OG/Twitter, canonical y JSON-LD en cada
- * cambio de ruta. Es el equivalente "a mano" de react-helmet, sin añadir
- * dependencias nuevas. Como esto se ejecuta en el cliente, los crawlers que
- * NO ejecutan JS (la mayoría de bots de IA) no lo verán — solo Googlebot y
- * navegadores reales. Para esos casos, el index.html ya lleva metadatos
- * estáticos de fallback para la home.
- */
-function useSEO({ title, description, path, image, type='website', noindex=false, jsonLd=null }: SEOConfig) {
-  useEffect(() => {
-    const url = `${SITE_URL}${path}`;
-    document.title = title;
-    document.documentElement.lang = 'es';
-
-    const upsertMeta = (attr: 'name'|'property', key: string, content: string) => {
-      let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`);
-      if (!el) { el = document.createElement('meta'); el.setAttribute(attr, key); document.head.appendChild(el); }
-      el.setAttribute('content', content);
-    };
-    const upsertLink = (rel: string, href: string) => {
-      let el = document.head.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
-      if (!el) { el = document.createElement('link'); el.setAttribute('rel', rel); document.head.appendChild(el); }
-      el.setAttribute('href', href);
-    };
-
-    upsertMeta('name', 'description', description);
-    upsertMeta('name', 'robots', noindex ? 'noindex, nofollow' : 'index, follow, max-image-preview:large');
-    upsertMeta('property', 'og:title', title);
-    upsertMeta('property', 'og:description', description);
-    upsertMeta('property', 'og:url', url);
-    upsertMeta('property', 'og:type', type);
-    upsertMeta('property', 'og:image', image || DEFAULT_OG_IMAGE);
-    upsertMeta('name', 'twitter:card', 'summary_large_image');
-    upsertMeta('name', 'twitter:title', title);
-    upsertMeta('name', 'twitter:description', description);
-    upsertMeta('name', 'twitter:image', image || DEFAULT_OG_IMAGE);
-    upsertLink('canonical', url);
-
-    let ld = document.getElementById('page-jsonld') as HTMLScriptElement | null;
-    if (jsonLd) {
-      if (!ld) { ld = document.createElement('script'); ld.type = 'application/ld+json'; ld.id = 'page-jsonld'; document.head.appendChild(ld); }
-      ld.textContent = JSON.stringify(jsonLd);
-    } else if (ld) {
-      ld.remove();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, description, path, image, type, noindex, JSON.stringify(jsonLd)]);
 }
 
 // ===================== UTILS =====================
@@ -150,30 +118,9 @@ function DominoLogo({ size=24 }: { size?: number }) {
 function Spinner() { return <Loader2 size={20} className="animate-spin" style={{color:'#00F5FF'}}/>; }
 function Av({ u, s=36 }: { u: Partial<AppUser>; s?: number }) {
   return (
-    <div className="relative flex-shrink-0" style={{width:s,height:s}}>
-      <div className="rounded-full overflow-hidden w-full h-full flex items-center justify-center" style={{background:'#7c3aed',border:'2px solid #2a2a3a'}}>
-        {u.avatarUrl?<img src={u.avatarUrl} alt={u.username} className="w-full h-full object-cover"/>:<span className="text-white font-bold" style={{fontSize:s*0.35}}>{u.username?.[0]?.toUpperCase()}</span>}
-      </div>
-      {u.isAI && (
-        <span
-          title="Cuenta gestionada por inteligencia artificial"
-          aria-label="Cuenta de IA"
-          className="absolute -bottom-0.5 -right-0.5 flex items-center justify-center rounded-full leading-none"
-          style={{width:Math.max(13,s*0.4),height:Math.max(13,s*0.4),background:'#7c3aed',border:'1.5px solid #0b0b12',fontSize:Math.max(7,s*0.22)}}
-        >🤖</span>
-      )}
+    <div className="rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center" style={{width:s,height:s,background:'#7c3aed',border:'2px solid #2a2a3a'}}>
+      {u.avatarUrl?<img src={u.avatarUrl} alt={u.username} className="w-full h-full object-cover"/>:<span className="text-white font-bold" style={{fontSize:s*0.35}}>{u.username?.[0]?.toUpperCase()}</span>}
     </div>
-  );
-}
-
-/** Insignia textual "IA" — úsala junto al @username en perfil, vídeos y directos para que la divulgación no dependa solo del avatar. */
-function AIBadge({ size='sm' }: { size?: 'sm'|'md' }) {
-  return (
-    <span
-      title="Cuenta gestionada por inteligencia artificial"
-      className={cn('inline-flex items-center gap-1 rounded-full font-bold flex-shrink-0', size==='sm' ? 'text-[9px] px-1.5 py-0.5' : 'text-xs px-2 py-1')}
-      style={{background:'rgba(124,58,237,0.18)', color:'#c4b5fd', border:'1px solid rgba(124,58,237,0.5)'}}
-    >🤖 IA</span>
   );
 }
 
@@ -189,24 +136,6 @@ async function uploadToCloudinary(blob: Blob, onProgress?: (p:number)=>void): Pr
 }
 function saveToGallery(blob: Blob) { const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`DOMINO_${Date.now()}.webm`; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(url),1000); }
 
-async function uploadImageToCloudinary(file: File, onProgress?: (p:number)=>void): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const fd = new FormData(); fd.append('file', file); fd.append('upload_preset', CLOUDINARY_PRESET); fd.append('resource_type', 'image');
-    const xhr = new XMLHttpRequest();
-    xhr.upload.onprogress = e => { if(e.lengthComputable&&onProgress) onProgress(Math.round(e.loaded/e.total*100)); };
-    xhr.onload = () => { if(xhr.status===200){const d=JSON.parse(xhr.responseText);resolve(d.secure_url);}else reject(new Error('Error Cloudinary')); };
-    xhr.onerror = () => reject(new Error('Error de red'));
-    xhr.open('POST',`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`); xhr.send(fd);
-  });
-}
-
-function shareProfile(userId?: string, username?: string) {
-  if (!userId) return;
-  const shareUrl = `${window.location.origin}/user/${userId}`;
-  if (navigator.share) navigator.share({ title: 'DOMINO', text: username?`Mira el perfil de @${username} en DOMINO`:'Mira este perfil en DOMINO', url: shareUrl });
-  else { navigator.clipboard?.writeText(shareUrl); alert('Enlace del perfil copiado ✅'); }
-}
-
 // ===================== AUTH PAGE =====================
 function AuthPage() {
   const { login, register } = useAuth();
@@ -214,12 +143,6 @@ function AuthPage() {
   const [mode, setMode] = useState<'login'|'register'>('login');
   const [form, setForm] = useState({ email:'', password:'', username:'', country:'', city:'' });
   const [error, setError] = useState(''); const [loading, setLoading] = useState(false);
-  useSEO({
-    title: 'Entrar o Crear Cuenta — DOMINO',
-    description: 'Únete gratis a DOMINO: graba retos de 15s, nomina a 3 personas y haz crecer la cadena dominó global. Regístrate en segundos.',
-    path: '/auth'
-  });
-
   const flags: Record<string,string> = {'España':'🇪🇸','México':'🇲🇽','Argentina':'🇦🇷','Colombia':'🇨🇴','Estados Unidos':'🇺🇸','Japón':'🇯🇵','Brasil':'🇧🇷','Francia':'🇫🇷','Alemania':'🇩🇪','Italia':'🇮🇹','Reino Unido':'🇬🇧','Portugal':'🇵🇹'};
   const handle = async () => {
     setError(''); setLoading(true);
@@ -254,8 +177,6 @@ function BottomNav() {
   const { user } = useAuth();
   const { data: nd } = useApi('/api/notifications', [user?._id]);
   const unread = Array.isArray(nd)?nd.filter((n:Notification)=>!n.read).length:0;
-  const { data: inbox } = useApi('/api/users/messages/inbox', [user?._id]);
-  const unreadMsgs = Array.isArray(inbox)?inbox.reduce((a:number,c:any)=>a+(c.unread||0),0):0;
 
   if (loc==='/create'||loc==='/camera'||loc==='/auth') return null;
 
@@ -281,7 +202,7 @@ function BottomNav() {
         </button>
         <button onClick={()=>setLocation('/messages')} className="relative flex flex-col items-center gap-0.5 px-4 py-1">
           <MessageCircle size={24} className={loc==='/messages'?'text-white':'text-gray-500'}/>
-          {unreadMsgs>0&&<span className="absolute top-0 right-2 w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center" style={{background:'#FF007F'}}>{unreadMsgs}</span>}
+          {unread>0&&<span className="absolute top-0 right-2 w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center" style={{background:'#FF007F'}}>{unread}</span>}
           <span className={cn('text-[10px] font-medium',loc==='/messages'?'text-white':'text-gray-500')}>Mensajes</span>
         </button>
         <button onClick={()=>user?setLocation('/profile'):setLocation('/auth')} className="flex flex-col items-center gap-0.5 px-4 py-1">
@@ -311,10 +232,10 @@ function TopNav() {
       <div className="flex items-center justify-between h-14 px-4 max-w-7xl mx-auto">
         <button onClick={()=>setLocation('/')} className="flex items-center gap-2"><DominoLogo size={18}/><span className="text-xl font-black hidden sm:block" style={{fontFamily:'Syne,sans-serif',color:'#00F5FF',textShadow:'0 0 12px #00F5FF'}}>DOMINO</span></button>
         {/* Tabs: Siguiendo / Para ti (como TikTok) */}
-        {(loc==='/'||loc==='/feed'||loc==='/following') && (
+        {(loc==='/'||loc==='/feed') && (
           <div className="flex items-center gap-4">
             <button onClick={()=>setLocation('/')} className={cn('text-sm font-semibold pb-1',loc==='/'?'text-white border-b-2 border-white':'text-gray-500')}>Para ti</button>
-            <button onClick={()=>setLocation('/following')} className={cn('text-sm font-semibold pb-1',(loc as string)==='/following'?'text-white border-b-2 border-white':'text-gray-500')}>Siguiendo</button>
+            <button onClick={()=>setLocation('/following')} className={cn('text-sm font-semibold pb-1',loc==='/following'?'text-white border-b-2 border-white':'text-gray-500')}>Siguiendo</button>
           </div>
         )}
         <div className="flex items-center gap-2">
@@ -360,15 +281,14 @@ function VideoModal({ video, onClose }: { video: DominoVideo; onClose: () => voi
         {video.videoUrl ? (
           <video src={video.videoUrl} className="w-full h-full object-cover rounded-2xl" controls autoPlay loop playsInline/>
         ) : video.thumbnailUrl ? (
-          <img src={video.thumbnailUrl} alt={`Reto DOMINO de @${video.userId?.username||'usuario'}`} loading="lazy" className="w-full h-full object-cover rounded-2xl"/>
+          <img src={video.thumbnailUrl} alt="" className="w-full h-full object-cover rounded-2xl"/>
         ) : (
           <div className="w-full h-full rounded-2xl flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={48} className="text-gray-600"/></div>
         )}
-        {video.isAIGenerated && <div className="absolute top-4 left-4 z-10"><AIBadge size="md"/></div>}
         <div className="absolute inset-0 rounded-2xl" style={{background:'linear-gradient(to top,rgba(0,0,0,0.8) 0%,transparent 60%)',pointerEvents:'none'}}/>
         {/* Info */}
         <div className="absolute bottom-16 left-4 right-16">
-          <div className="flex items-center gap-2 mb-2"><Av u={video.userId} s={36}/><div><p className="text-white text-sm font-bold flex items-center gap-1.5">@{video.userId?.username}{video.userId?.isAI && <AIBadge/>}</p><p className="text-gray-300 text-xs">{video.userId?.flag} {video.userId?.city}</p></div></div>
+          <div className="flex items-center gap-2 mb-2"><Av u={video.userId} s={36}/><div><p className="text-white text-sm font-bold">@{video.userId?.username}</p><p className="text-gray-300 text-xs">{video.userId?.flag} {video.userId?.city}</p></div></div>
           <div className="flex items-center gap-2"><span className="text-xs rounded-full px-2 py-0.5 text-gray-300" style={{background:'rgba(0,0,0,0.5)'}}>⛓️ Profundidad {video.chainDepth+1}</span></div>
         </div>
         {/* Acciones */}
@@ -397,10 +317,59 @@ function CommentsPanel({ videoId, onClose }: { videoId: string; onClose: () => v
     <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl flex flex-col" style={{background:'#13131f',border:'1px solid #1e1e2a',maxHeight:'70vh'}}>
       <div className="flex items-center justify-between p-4 border-b" style={{borderColor:'#1e1e2a'}}><h3 className="font-bold text-white">Comentarios</h3><button onClick={onClose}><X size={18} className="text-gray-400"/></button></div>
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {(Array.isArray(comments)?comments:[]).map((c:Comment)=><div key={c._id} className="flex gap-3"><Av u={c.userId} s={32}/><div className="flex-1"><span className="text-xs font-bold text-white">{c.userId?.username} </span>{c.userId?.isAI && <AIBadge/>}<span className="text-xs text-gray-400"> {c.text}</span><div className="text-xs text-gray-600 mt-0.5">{ago(c.createdAt)}</div></div></div>)}
+        {(Array.isArray(comments)?comments:[]).map((c:Comment)=><div key={c._id} className="flex gap-3"><Av u={c.userId} s={32}/><div className="flex-1"><span className="text-xs font-bold text-white">{c.userId?.username} </span><span className="text-xs text-gray-400">{c.text}</span><div className="text-xs text-gray-600 mt-0.5">{ago(c.createdAt)}</div></div></div>)}
         {(!comments||comments.length===0)&&<p className="text-center text-gray-500 text-sm py-8">Sin comentarios</p>}
       </div>
       {user&&<div className="p-4 border-t flex gap-2" style={{borderColor:'#1e1e2a'}}><Av u={user} s={32}/><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Añade un comentario..." className="flex-1 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/><button onClick={send} disabled={sending||!text.trim()} className="p-2 rounded-xl disabled:opacity-50" style={{background:'#00F5FF'}}><Send size={16} className="text-black"/></button></div>}
+    </div>
+  );
+}
+
+// ===================== FEED PAGE =====================
+function FeedPage() {
+  const { data: videos, loading } = useApi('/api/videos/feed?limit=20');
+  const { data: challenge } = useApi('/api/challenges/active');
+  const { token } = useAuth();
+  const [liked, setLiked] = useState<Set<string>>(new Set());
+  const [saved, setSaved] = useState<Set<string>>(new Set());
+  const [commentId, setCommentId] = useState<string|null>(null);
+  const videoRefs = useRef<(HTMLVideoElement|null)[]>([]);
+
+  const doLike = async (id:string) => { if(!token)return; setLiked(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;}); await fetch(`${API}/api/videos/${id}/like`,{method:'POST',headers:{Authorization:`Bearer ${token}`}}); };
+  const doSave = async (id:string) => { if(!token)return; setSaved(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;}); await fetch(`${API}/api/users/videos/${id}/save`,{method:'POST',headers:{Authorization:`Bearer ${token}`}}); };
+  const doShare = (id:string) => { const url=`${window.location.origin}/video/${id}`; if(navigator.share)navigator.share({title:'DOMINO',url});else navigator.clipboard?.writeText(url); };
+
+  useEffect(()=>{
+    const obs=new IntersectionObserver(entries=>{entries.forEach(e=>{const v=e.target as HTMLVideoElement;if(e.isIntersecting)v.play().catch(()=>{});else{v.pause();v.currentTime=0;}});},{threshold:0.8});
+    videoRefs.current.forEach(v=>{if(v)obs.observe(v);});
+    return()=>obs.disconnect();
+  },[videos]);
+
+  if(loading)return<div className="min-h-screen flex items-center justify-center" style={{paddingTop:'56px',background:'#0b0b12'}}><Spinner/></div>;
+  const list=Array.isArray(videos)?videos:[];
+
+  return (
+    <div className="fixed inset-0 overflow-y-scroll snap-y snap-mandatory" style={{paddingTop:'56px',paddingBottom:'56px',background:'#000'}}>
+      {commentId&&<CommentsPanel videoId={commentId} onClose={()=>setCommentId(null)}/>}
+      {challenge&&<div className="fixed top-14 left-0 right-0 z-30 pointer-events-none"><div className="max-w-md mx-auto px-4 pt-2"><div className="rounded-xl px-3 py-2 pointer-events-auto flex items-center gap-2" style={{background:'rgba(11,11,18,0.85)',border:'1px solid #1e1e2a',backdropFilter:'blur(10px)'}}><Zap size={14} className="text-yellow-400"/><span className="text-xs font-semibold text-white flex-1 truncate">{challenge.title}</span><span className="text-xs text-gray-400">{left(challenge.expiresAt)}</span></div></div></div>}
+      {list.map((v:DominoVideo,idx:number)=>(
+        <div key={v._id} className="relative w-full snap-start flex-shrink-0 overflow-hidden bg-black" style={{height:'calc(100vh - 112px)'}}>
+          {v.videoUrl?<video ref={el=>{videoRefs.current[idx]=el;}} src={v.videoUrl} className="absolute inset-0 w-full h-full object-cover" loop playsInline muted onDoubleClick={()=>doLike(v._id)}/>:v.thumbnailUrl?<img src={v.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover"/>:<div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={48} className="text-gray-600"/></div>}
+          <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.85) 0%,rgba(0,0,0,0.1) 50%,transparent 100%)'}}/>
+          <div className="absolute bottom-16 left-4 right-20 z-10">
+            <div className="flex items-center gap-2 mb-2"><Av u={v.userId} s={40}/><div><p className="text-white text-sm font-bold">@{v.userId?.username}</p><p className="text-gray-300 text-xs">{v.userId?.flag} {v.userId?.city}</p></div></div>
+            <div className="flex items-center gap-2"><span className="text-xs rounded-full px-2 py-0.5 text-gray-300" style={{background:'rgba(0,0,0,0.4)',border:'1px solid rgba(255,255,255,0.1)'}}>⛓️ {v.chainDepth+1}</span><span className="text-xs text-gray-400">{ago(v.createdAt)}</span></div>
+          </div>
+          <div className="absolute right-3 bottom-20 flex flex-col gap-4 items-center z-10">
+            <button onClick={()=>doLike(v._id)} className="flex flex-col items-center gap-1"><div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}><Heart size={22} className={liked.has(v._id)?'fill-red-500 text-red-500':'text-white'}/></div><span className="text-xs text-white font-semibold">{fmt((v.likes?.length||0)+(liked.has(v._id)?1:0))}</span></button>
+            <button onClick={()=>setCommentId(v._id)} className="flex flex-col items-center gap-1"><div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}><MessageCircle size={22} className="text-white"/></div><span className="text-xs text-white font-semibold">Comentar</span></button>
+            <button onClick={()=>doSave(v._id)} className="flex flex-col items-center gap-1"><div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}><Bookmark size={22} className={saved.has(v._id)?'fill-yellow-400 text-yellow-400':'text-white'}/></div><span className="text-xs text-white font-semibold">Guardar</span></button>
+            <button onClick={()=>doShare(v._id)} className="flex flex-col items-center gap-1"><div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.4)'}}><Share size={22} className="text-white"/></div><span className="text-xs text-white font-semibold">Compartir</span></button>
+          </div>
+          <div className="absolute bottom-6 left-4 right-4 z-10"><div className="flex items-center gap-2"><div className="flex-1 h-0.5 rounded-full" style={{background:'rgba(255,255,255,0.2)'}}><div className="h-full rounded-full" style={{width:`${Math.min(100,(v.chainDepth+1)*10)}%`,background:'linear-gradient(90deg,#00F5FF,#FF007F)'}}/></div><span className="text-xs text-gray-400">⛓️ {v.chainDepth+1}</span></div></div>
+        </div>
+      ))}
+      {list.length===0&&<div className="h-screen flex flex-col items-center justify-center text-center px-4"><div className="text-6xl mb-4">🎲</div><h3 className="text-xl font-bold text-white mb-2">Sin videos todavía</h3><p className="text-gray-400 text-sm mb-6">Sé el primero en grabar.</p><Link href="/create" className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Grabar ahora</Link></div>}
     </div>
   );
 }
@@ -414,14 +383,6 @@ function ProfilePage({ userId }: { userId?: string }) {
 
   const { data: profile, loading } = useApi(isOwn ? '/api/users/me' : `/api/users/${targetId}`, [targetId]);
   const { data: userVideos } = useApi(targetId ? `/api/users/${targetId}/videos` : '', [targetId]);
-  const { data: nd } = useApi('/api/notifications', [me?._id]);
-  const unread = Array.isArray(nd) ? nd.filter((n:Notification)=>!n.read).length : 0;
-  // Liked y saved: cargar desde endpoints dedicados (más fiable que confiar en el objeto usuario)
-  const { data: likedVideosData } = useApi(isOwn && me?._id ? `/api/videos/liked/${me._id}` : '', [me?._id, isOwn]);
-  const { data: savedVideosData } = useApi(isOwn && me?._id ? `/api/videos/saved/${me._id}` : '', [me?._id, isOwn]);
-  // Comprobar si el usuario tiene un live activo — para mostrar botón de unirse
-  const { data: lives } = useApi('/api/lives', [targetId]);
-  const activeLive = Array.isArray(lives) ? lives.find((l:LiveStream) => l.userId?._id === targetId) : null;
   const [tab, setTab] = useState<'videos'|'private'|'repost'|'saved'|'likes'>('videos');
   const [following, setFollowing] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<DominoVideo|null>(null);
@@ -430,20 +391,6 @@ function ProfilePage({ userId }: { userId?: string }) {
   useEffect(() => {
     if (me && profile && !isOwn) setFollowing(profile.followers?.includes(me._id)||false);
   }, [profile, me]);
-
-  const seoUser = isOwn ? me : profile;
-  useSEO({
-    title: seoUser ? `@${seoUser.username} (${fmt(seoUser.impactPoints||0)} pts) — DOMINO` : 'Perfil — DOMINO',
-    description: seoUser ? `Perfil de @${seoUser.username} en DOMINO. ${fmt(seoUser.impactPoints||0)} puntos de impacto, ${seoUser.currentStreak||0} días de racha. ${seoUser.bio||''}`.trim() : 'Perfil de usuario en DOMINO.',
-    path: targetId ? `/user/${targetId}` : '/profile',
-    image: seoUser?.avatarUrl,
-    type: 'profile',
-    noindex: isOwn, // el propio dashboard no se indexa; los perfiles públicos sí
-    jsonLd: (!isOwn && seoUser) ? {
-      '@context':'https://schema.org', '@type':'ProfilePage',
-      mainEntity: { '@type':'Person', name: seoUser.username, image: seoUser.avatarUrl, address: seoUser.city ? { '@type':'PostalAddress', addressLocality: seoUser.city, addressCountry: seoUser.country } : undefined }
-    } : null
-  });
 
   const doFollow = async () => {
     if (!token||!targetId) return;
@@ -459,8 +406,8 @@ function ProfilePage({ userId }: { userId?: string }) {
   if (!displayUser) return null;
 
   const videos = Array.isArray(userVideos) ? userVideos : [];
-  const savedVids: DominoVideo[] = Array.isArray(savedVideosData) ? savedVideosData.filter((v:any)=>v&&v._id) : (Array.isArray(displayUser.savedVideos) ? displayUser.savedVideos.filter((v:any)=>v&&v._id) : []);
-  const likedVids: DominoVideo[] = Array.isArray(likedVideosData) ? likedVideosData.filter((v:any)=>v&&v._id) : (Array.isArray(displayUser.likedVideos) ? displayUser.likedVideos.filter((v:any)=>v&&v._id) : []);
+  const savedVids: DominoVideo[] = Array.isArray(displayUser.savedVideos) ? displayUser.savedVideos.filter((v:any)=>v&&v._id) : [];
+  const likedVids: DominoVideo[] = Array.isArray(displayUser.likedVideos) ? displayUser.likedVideos.filter((v:any)=>v&&v._id) : [];
   const totalLikes = videos.reduce((a:number,v:DominoVideo)=>a+(v.likes?.length||0),0);
 
   const tabVideos = tab==='videos'?videos:tab==='saved'?savedVids:tab==='likes'?likedVids:[];
@@ -483,7 +430,7 @@ function ProfilePage({ userId }: { userId?: string }) {
           <div className="w-full max-w-lg rounded-t-2xl overflow-hidden" style={{background:'#1e1e2a'}} onClick={e=>e.stopPropagation()}>
             <div className="p-4 space-y-1">
               {isOwn && <>
-                <button onClick={()=>{setShowMenu(false);setLocation('/profile/edit');}} className="w-full text-left px-4 py-3.5 rounded-xl text-white font-medium hover:bg-white/5">⚙️ Ajustes y perfil</button>
+                <button onClick={()=>{setShowMenu(false);setLocation('/settings');}} className="w-full text-left px-4 py-3.5 rounded-xl text-white font-medium hover:bg-white/5">⚙️ Ajustes</button>
                 <button onClick={()=>{setShowMenu(false);setLocation('/coins');}} className="w-full text-left px-4 py-3.5 rounded-xl text-white font-medium hover:bg-white/5">🪙 Comprar Monedas</button>
                 <div className="border-t my-2" style={{borderColor:'#2a2a3a'}}/>
                 <button onClick={()=>{logout();setShowMenu(false);setLocation('/');}} className="w-full text-left px-4 py-3.5 rounded-xl font-medium hover:bg-white/5" style={{color:'#FF007F'}}>🚪 Cerrar sesión</button>
@@ -510,8 +457,8 @@ function ProfilePage({ userId }: { userId?: string }) {
             <button onClick={()=>setLocation(-1 as any)} className="p-2"><ChevronLeft size={24} className="text-white"/></button>
           )}
           <div className="flex items-center gap-3">
-            {isOwn && <button onClick={()=>setLocation('/notifications')} className="relative"><Av u={displayUser} s={28}/>{unread>0&&<span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{background:'#FF007F',fontSize:'9px'}}>{unread}</span>}</button>}
-            {isOwn && <button onClick={()=>shareProfile(targetId, displayUser.username)}><Share size={20} className="text-white"/></button>}
+            {isOwn && <div className="relative"><Av u={displayUser} s={28}/><span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{background:'#FF007F',fontSize:'9px'}}>2</span></div>}
+            {isOwn && <button><Share size={20} className="text-white"/></button>}
             <button onClick={()=>setShowMenu(true)}><span className="text-white text-xl">☰</span></button>
           </div>
         </div>
@@ -535,18 +482,18 @@ function ProfilePage({ userId }: { userId?: string }) {
           {/* Nombre + botones editar */}
           {isOwn ? (
             <div className="flex items-center gap-2 mb-1">
-              <button onClick={()=>setLocation('/profile/edit')} className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold text-white border border-gray-600">
-                <Plus size={14}/>Editar nombre y bio
+              <button className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold text-white border border-gray-600">
+                <Plus size={14}/>Añadir nombre
                 <ChevronRight size={14}/>
               </button>
-              <button onClick={()=>setLocation('/profile/edit')} className="w-8 h-8 rounded-full border border-gray-600 flex items-center justify-center">
+              <button className="w-8 h-8 rounded-full border border-gray-600 flex items-center justify-center">
                 <span className="text-white text-sm">✏️</span>
               </button>
             </div>
           ) : null}
 
           {/* Username */}
-          <p className="text-gray-400 text-sm mb-3 flex items-center gap-1.5">@{displayUser.username}{displayUser.isAI && <AIBadge size="md"/>}</p>
+          <p className="text-gray-400 text-sm mb-3">@{displayUser.username}</p>
 
           {/* Stats — igual que TikTok: Siguiendo | Seguidores | Me gusta */}
           <div className="flex items-center gap-0 mb-3">
@@ -585,30 +532,21 @@ function ProfilePage({ userId }: { userId?: string }) {
               <button onClick={()=>setLocation('/profile/edit')} className="flex-1 py-2 rounded-lg font-semibold text-white text-sm border border-gray-600">
                 Editar perfil
               </button>
-              <button onClick={()=>shareProfile(targetId, displayUser.username)} className="w-9 h-9 rounded-lg border border-gray-600 flex items-center justify-center flex-shrink-0">
+              <button className="w-9 h-9 rounded-lg border border-gray-600 flex items-center justify-center flex-shrink-0">
                 <Share size={16} className="text-white"/>
               </button>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-2 w-full max-w-xs">
-              {/* Botón de unirse al live si el usuario está en directo */}
-              {activeLive && (
-                <button onClick={()=>setLocation(`/live/${activeLive._id}`)} className="w-full py-2.5 rounded-lg font-bold text-white flex items-center justify-center gap-2" style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)',boxShadow:'0 0 15px rgba(255,0,127,0.4)'}}>
-                  <div className="w-2 h-2 rounded-full bg-white animate-pulse"/>
-                  Ver directo de @{(profile||{}).username}
-                </button>
-              )}
-              <div className="flex items-center gap-2 w-full">
-                <button onClick={doFollow} className="flex-1 py-2 rounded-lg font-bold text-sm" style={{background:following?'transparent':'#FF007F',border:following?'1px solid #666':'none',color:following?'white':'white'}}>
-                  {following?'Siguiendo':'Seguir'}
-                </button>
-                <button onClick={()=>setLocation(`/messages/${targetId}`)} className="flex-1 py-2 rounded-lg font-semibold text-white text-sm border border-gray-600">
-                  Mensaje
-                </button>
-                <button className="w-9 h-9 rounded-lg border border-gray-600 flex items-center justify-center flex-shrink-0">
-                  <ChevronRight size={16} className="text-white"/>
-                </button>
-              </div>
+            <div className="flex items-center gap-2 w-full max-w-xs">
+              <button onClick={doFollow} className="flex-1 py-2 rounded-lg font-bold text-sm" style={{background:following?'transparent':'#FF007F',border:following?'1px solid #666':'none',color:following?'white':'white'}}>
+                {following?'Siguiendo':'Seguir'}
+              </button>
+              <button onClick={()=>setLocation(`/messages/${targetId}`)} className="flex-1 py-2 rounded-lg font-semibold text-white text-sm border border-gray-600">
+                Mensaje
+              </button>
+              <button className="w-9 h-9 rounded-lg border border-gray-600 flex items-center justify-center flex-shrink-0">
+                <ChevronRight size={16} className="text-white"/>
+              </button>
             </div>
           )}
         </div>
@@ -627,7 +565,7 @@ function ProfilePage({ userId }: { userId?: string }) {
           {tabVideos.map((v:DominoVideo)=>(
             <button key={v._id} onClick={()=>setSelectedVideo(v)} className="relative overflow-hidden" style={{aspectRatio:'9/16',background:'#0b0b12'}}>
               {v.thumbnailUrl
-                ? <img src={v.thumbnailUrl} alt={`Reto de @${displayUser.username}, cadena nivel ${v.chainDepth+1}`} loading="lazy" className="w-full h-full object-cover"/>
+                ? <img src={v.thumbnailUrl} alt="" className="w-full h-full object-cover"/>
                 : <div className="w-full h-full flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={20} className="text-gray-700"/></div>
               }
               {/* Overlay gradient */}
@@ -678,130 +616,10 @@ function ProfilePage({ userId }: { userId?: string }) {
   );
 }
 
-// ===================== EDIT PROFILE PAGE =====================
-function EditProfilePage() {
-  const { user, token, refreshUser } = useAuth();
-  const [, setLocation] = useLocation();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const FLAGS: Record<string,string> = {'España':'🇪🇸','México':'🇲🇽','Argentina':'🇦🇷','Colombia':'🇨🇴','Estados Unidos':'🇺🇸','Japón':'🇯🇵','Brasil':'🇧🇷','Francia':'🇫🇷','Alemania':'🇩🇪','Italia':'🇮🇹','Reino Unido':'🇬🇧','Portugal':'🇵🇹'};
-
-  const [username, setUsername] = useState(user?.username||'');
-  const [bio, setBio] = useState(user?.bio||'');
-  const [city, setCity] = useState(user?.city||'');
-  const [country, setCountry] = useState(user?.country||'');
-  const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl||'');
-  const [avatarFile, setAvatarFile] = useState<File|null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string|null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  useSEO({ title:'Editar perfil — DOMINO', description:'Edita tu perfil de DOMINO.', path:'/profile/edit', noindex:true });
-
-  // Si no hay sesión (refresco directo de página, etc.) vuelve a auth
-  useEffect(() => { if (!token) setLocation('/auth'); }, [token]);
-
-  const onPickAvatar = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setAvatarFile(f);
-    setAvatarPreview(URL.createObjectURL(f));
-  };
-
-  const save = async () => {
-    if (!token) return;
-    if (!username.trim()) { setError('El nombre de usuario no puede estar vacío'); return; }
-    setError(''); setSaving(true);
-    try {
-      let finalAvatarUrl = avatarUrl;
-      if (avatarFile) {
-        finalAvatarUrl = await uploadImageToCloudinary(avatarFile, setUploadProgress);
-      }
-      // NOTA: este endpoint es una suposición razonable (PUT /api/users/me).
-      // Si tu backend usa otra ruta/método, ajústalo aquí.
-      const r = await fetch(`${API}/api/users/me`, {
-        method: 'PUT',
-        headers: { Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
-        body: JSON.stringify({ username, bio, city, country, flag: FLAGS[country]||user?.flag||'🌍', avatarUrl: finalAvatarUrl })
-      });
-      const d = await r.json().catch(()=>({}));
-      if (!r.ok) throw new Error(d.error || 'No se pudo guardar el perfil');
-      await refreshUser();
-      setLocation('/profile');
-    } catch (e:any) {
-      setError(e.message || 'Error al guardar');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!user) return <div className="min-h-screen flex items-center justify-center" style={{paddingTop:'56px',background:'#0b0b12'}}><Spinner/></div>;
-
-  return (
-    <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
-      <div className="max-w-lg mx-auto">
-        <div className="flex items-center gap-3 px-4 pt-4 pb-2">
-          <button onClick={()=>setLocation('/profile')} className="p-1"><ChevronLeft size={24} className="text-white"/></button>
-          <h1 className="text-white font-bold text-lg flex-1">Editar perfil</h1>
-          <button onClick={save} disabled={saving} className="text-sm font-bold px-4 py-1.5 rounded-full disabled:opacity-50" style={{background:'#00F5FF',color:'#0b0b12'}}>
-            {saving?<Spinner/>:'Guardar'}
-          </button>
-        </div>
-
-        <div className="flex flex-col items-center py-6">
-          <div className="relative mb-2">
-            <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center" style={{background:'#7c3aed',border:'3px solid #2a2a3a'}}>
-              {avatarPreview || avatarUrl
-                ? <img src={avatarPreview||avatarUrl} alt="Avatar" className="w-full h-full object-cover"/>
-                : <span className="text-white font-black text-4xl">{username?.[0]?.toUpperCase()}</span>}
-            </div>
-            <button onClick={()=>fileRef.current?.click()} className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center" style={{background:'#00F5FF'}}>
-              <Plus size={16} className="text-black"/>
-            </button>
-            <input ref={fileRef} type="file" accept="image/*" onChange={onPickAvatar} className="hidden"/>
-          </div>
-          {avatarFile && uploadProgress>0 && uploadProgress<100 && <p className="text-xs text-gray-400">Subiendo {uploadProgress}%</p>}
-          <button onClick={()=>fileRef.current?.click()} className="text-xs font-semibold" style={{color:'#00F5FF'}}>Cambiar foto</button>
-        </div>
-
-        <div className="px-4 space-y-4">
-          <div>
-            <label className="text-xs text-gray-400 mb-1 block">Nombre de usuario</label>
-            <input value={username} onChange={e=>setUsername(e.target.value)} placeholder="@username" className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#13131f',border:'1px solid #2a2a3a'}}/>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 mb-1 block">Bio</label>
-            <textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Cuéntanos algo sobre ti..." rows={3} maxLength={150} className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none resize-none" style={{background:'#13131f',border:'1px solid #2a2a3a'}}/>
-            <p className="text-right text-xs text-gray-600 mt-0.5">{bio.length}/150</p>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 mb-1 block">País</label>
-            <select value={country} onChange={e=>setCountry(e.target.value)} className="w-full rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none" style={{background:'#13131f',border:'1px solid #2a2a3a'}}>
-              <option value="">Selecciona un país</option>
-              {Object.keys(FLAGS).map(c=><option key={c} value={c}>{FLAGS[c]} {c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 mb-1 block">Ciudad</label>
-            <input value={city} onChange={e=>setCity(e.target.value)} placeholder="Tu ciudad" className="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#13131f',border:'1px solid #2a2a3a'}}/>
-          </div>
-
-          {error && <p className="text-red-400 text-xs">{error}</p>}
-
-          <button onClick={save} disabled={saving} className="w-full py-3 rounded-xl font-bold text-[#0b0b12] flex items-center justify-center gap-2 disabled:opacity-50" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}>
-            {saving?<Spinner/>:'Guardar cambios'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ===================== CREATE PAGE (TikTok style) =====================
 function CreatePage() {
   const [, setLocation] = useLocation();
   const [subTab, setSubTab] = useState<'publicar'|'crear'|'live'>('publicar');
-  useSEO({ title:'Crear — DOMINO', description:'Graba un nuevo reto en DOMINO.', path:'/create', noindex:true });
 
   return (
     <div className="min-h-screen" style={{background:'#000'}}>
@@ -894,8 +712,6 @@ function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showNomModal, setShowNomModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
-  const [showAIModal, setShowAIModal] = useState(false);
-  const [isAIGenerated, setIsAIGenerated] = useState<boolean|null>(null); // null = sin responder todavía (obligatorio, como TikTok)
   const [geo] = useState({ lat: 40.4168, lng: -3.7038 });
   const { user } = useAuth();
 
@@ -905,15 +721,7 @@ function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
   const publish = async () => {
     if (!token || !challenge) return;
     if (selected.length < 3) { setShowNomModal(true); return; }
-    if (isAIGenerated === null) { setShowAIModal(true); return; } // pregunta obligatoria antes de poder publicar
     setShowPrivacyModal(true);
-  };
-
-  const confirmAIChoice = (val: boolean) => {
-    const wasUnanswered = isAIGenerated === null;
-    setIsAIGenerated(val);
-    setShowAIModal(false);
-    if (wasUnanswered) setShowPrivacyModal(true); // primera vez (flujo obligatorio) → sigue a publicar; si solo está editando su respuesta, no le forzamos a publicar
   };
 
   const doPublish = async () => {
@@ -925,7 +733,7 @@ function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
       try { const r = await uploadToCloudinary(blob, p => setUploadProgress(p)); videoUrl = r.videoUrl; thumbnailUrl = r.thumbnailUrl; } catch {}
       const r = await fetch(`${API}/api/videos`, {
         method: 'POST', headers: { Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
-        body: JSON.stringify({ challengeId: challenge._id, videoUrl, thumbnailUrl, geoCoordinates: geo, nominatedUserIds: selected, description, isPublic: privacy === 'public', isAIGenerated: !!isAIGenerated })
+        body: JSON.stringify({ challengeId: challenge._id, videoUrl, thumbnailUrl, geoCoordinates: geo, nominatedUserIds: selected, description, isPublic: privacy === 'public' })
       });
       if (r.ok) setLocation('/profile');
       else { const d = await r.json(); alert(d.error || 'Error'); }
@@ -971,18 +779,6 @@ function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
           <span className="text-gray-400">›</span>
         </button>
 
-        {/* Contenido generado con IA — obligatorio, estilo TikTok */}
-        <button onClick={()=>setShowAIModal(true)} className="w-full flex items-center justify-between py-3 border-t border-gray-100">
-          <div className="flex items-center gap-3">
-            <span className="text-lg">🤖</span>
-            <div className="text-left">
-              <p className="text-sm font-medium text-gray-800">Contenido generado con IA</p>
-              <p className="text-xs text-gray-500">{isAIGenerated===null ? 'Sin responder (obligatorio)' : isAIGenerated ? 'Sí, está marcado como IA' : 'No, es contenido real'}</p>
-            </div>
-          </div>
-          <span className="text-gray-400">›</span>
-        </button>
-
         {/* Ubicación */}
         <div className="flex items-center justify-between py-3 border-t border-gray-100">
           <div className="flex items-center gap-3"><MapPin size={20} className="text-gray-600"/><p className="text-sm font-medium text-gray-800">Ubicación</p></div>
@@ -1008,25 +804,10 @@ function PublishPage({ blob, blobUrl }: { blob: Blob; blobUrl: string }) {
         <div className="fixed inset-0 z-50 flex items-end justify-center" style={{background:'rgba(0,0,0,0.5)'}}>
           <div className="w-full max-w-md rounded-t-2xl p-5" style={{background:'#13131f',maxHeight:'80vh',overflow:'auto'}}>
             <div className="flex items-center justify-between mb-4"><div><h2 className="font-bold text-white">Nominar 3 personas</h2><p className="text-xs text-gray-400">Obligatorio ({selected.length}/3)</p></div><button onClick={()=>setShowNomModal(false)}><X size={18} className="text-gray-400"/></button></div>
-            {selected.length>0&&<div className="flex gap-2 flex-wrap mb-3">{selected.map(id=>{const u=(Array.isArray(users)?users:[]).find((x:RankingEntry)=>x._id===id);return u?<button key={id} onClick={()=>setSelected(s=>s.filter(x=>x!==id))} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border" style={{borderColor:'#FF007F',color:'#FF007F',background:'rgba(255,0,127,0.1)'}}>{u.isAI && '🤖 '}{u.username}<X size={10}/></button>:null;})}</div>}
+            {selected.length>0&&<div className="flex gap-2 flex-wrap mb-3">{selected.map(id=>{const u=(Array.isArray(users)?users:[]).find((x:RankingEntry)=>x._id===id);return u?<button key={id} onClick={()=>setSelected(s=>s.filter(x=>x!==id))} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border" style={{borderColor:'#FF007F',color:'#FF007F',background:'rgba(255,0,127,0.1)'}}>{u.username}<X size={10}/></button>:null;})}</div>}
             <div className="relative mb-3"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar usuarios..." className="w-full rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/></div>
-            <div className="space-y-2 max-h-48 overflow-y-auto mb-4">{filtered.map((u:RankingEntry)=><button key={u._id} onClick={()=>selected.length<3&&setSelected(s=>[...s,u._id])} disabled={selected.length>=3} className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/5 text-left disabled:opacity-40"><Av u={u} s={32}/><div className="flex-1 min-w-0"><div className="text-sm font-medium text-white flex items-center gap-1.5">{u.username}{u.isAI && <AIBadge/>}</div><div className="text-xs text-gray-400">{u.flag} {u.country}</div></div>{selected.includes(u._id)&&<CheckCircle size={16} className="text-[#00F5FF]"/>}</button>)}</div>
+            <div className="space-y-2 max-h-48 overflow-y-auto mb-4">{filtered.map((u:RankingEntry)=><button key={u._id} onClick={()=>selected.length<3&&setSelected(s=>[...s,u._id])} disabled={selected.length>=3} className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/5 text-left disabled:opacity-40"><Av u={u} s={32}/><div className="flex-1 min-w-0"><div className="text-sm font-medium text-white">{u.username}</div><div className="text-xs text-gray-400">{u.flag} {u.country}</div></div>{selected.includes(u._id)&&<CheckCircle size={16} className="text-[#00F5FF]"/>}</button>)}</div>
             <button onClick={()=>setShowNomModal(false)} disabled={selected.length<3} className="w-full py-3 rounded-xl font-bold text-white disabled:opacity-50" style={{background:selected.length===3?'#FF007F':'#1e1e2a'}}>Confirmar ({selected.length}/3)</button>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: ¿contenido generado con IA? — obligatorio, como en TikTok */}
-      {showAIModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.5)'}}>
-          <div className="w-full max-w-sm rounded-2xl p-6 text-center" style={{background:'white'}}>
-            <div className="text-4xl mb-2">🤖</div>
-            <h2 className="text-black font-bold text-lg mb-2">¿Este vídeo está generado o editado significativamente con IA?</h2>
-            <p className="text-gray-500 text-sm mb-6">Incluye vídeo, voz o imagen creados o alterados con inteligencia artificial. Si tu respuesta no es precisa, tu cuenta podría tener restricciones.</p>
-            <div className="flex flex-col gap-2">
-              <button onClick={()=>confirmAIChoice(true)} className="w-full py-3 rounded-xl text-white font-bold" style={{background:'#7c3aed'}}>Sí, contiene contenido de IA</button>
-              <button onClick={()=>confirmAIChoice(false)} className="w-full py-3 rounded-xl text-gray-700 font-semibold border border-gray-200">No, es contenido real</button>
-            </div>
           </div>
         </div>
       )}
@@ -1064,7 +845,6 @@ function CameraPage() {
   const [blob, setBlob] = useState<Blob|null>(null);
   const [blobUrl, setBlobUrl] = useState<string|null>(null);
   const [geo] = useState({ lat: 40.4168, lng: -3.7038 });
-  useSEO({ title:'Grabar — DOMINO', description:'Graba tu reto de 15s en DOMINO.', path:'/camera', noindex:true });
 
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition(p => {});
@@ -1193,111 +973,33 @@ function CameraPage() {
 
 // ===================== MESSAGES PAGE =====================
 function MessagesPage() {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const { data: convs, loading } = useApi('/api/users/messages/inbox', [user?._id]);
-  const { data: notifs } = useApi('/api/notifications', [user?._id]);
-  const { data: ranking } = useApi('/api/ranking?limit=10');
   const [, setLocation] = useLocation();
-  const [tab, setTab] = useState<'mensajes'|'actividad'>('mensajes');
-  useSEO({ title:'Mensajes — DOMINO', description:'Tus conversaciones en DOMINO.', path:'/messages', noindex:true });
 
-  if (!user) return (
-    <div className="min-h-screen flex items-center justify-center" style={{paddingTop:'56px',background:'#0b0b12'}}>
-      <div className="text-center"><p className="text-gray-400 mb-4">Inicia sesión para ver tus mensajes</p><Link href="/auth" className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Entrar</Link></div>
-    </div>
-  );
-
-  const convList = Array.isArray(convs) ? convs : [];
-  const notifList = Array.isArray(notifs) ? notifs : [];
-  const unreadNotifs = notifList.filter((n:Notification)=>!n.read).length;
+  if (!user) return <div className="min-h-screen flex items-center justify-center" style={{paddingTop:'56px',background:'#0b0b12'}}><div className="text-center"><p className="text-gray-400 mb-4">Inicia sesión</p><Link href="/auth" className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Entrar</Link></div></div>;
 
   return (
     <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
       <div className="max-w-2xl mx-auto">
-        {/* Header estilo TikTok */}
-        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <div className="flex items-center justify-between px-4 py-4">
           <h1 className="text-xl font-black text-white">Mensajes</h1>
-          <button onClick={()=>setLocation('/search')} className="p-2 rounded-lg hover:bg-white/5"><Search size={20} className="text-gray-400"/></button>
+          <button className="p-2 rounded-lg hover:bg-white/5"><Search size={20} className="text-gray-400"/></button>
         </div>
 
-        {/* Tabs: Mensajes | Actividad */}
-        <div className="flex border-b mx-4 mb-2" style={{borderColor:'#1e1e2a'}}>
-          <button onClick={()=>setTab('mensajes')} className={cn('flex-1 py-2.5 text-sm font-bold border-b-2 transition-all',tab==='mensajes'?'text-white border-white':'text-gray-500 border-transparent')}>
-            Mensajes {convList.reduce((a:number,c:any)=>a+(c.unread||0),0)>0&&<span className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-black text-white" style={{background:'#FF007F'}}>{convList.reduce((a:number,c:any)=>a+(c.unread||0),0)}</span>}
-          </button>
-          <button onClick={()=>setTab('actividad')} className={cn('flex-1 py-2.5 text-sm font-bold border-b-2 transition-all relative',tab==='actividad'?'text-white border-white':'text-gray-500 border-transparent')}>
-            Actividad {unreadNotifs>0&&<span className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-black text-white" style={{background:'#FF007F'}}>{unreadNotifs}</span>}
-          </button>
-        </div>
-
-        {tab==='mensajes' && (
+        {loading ? <div className="flex justify-center py-8"><Spinner/></div> : (
           <div>
-            {/* Contactos sugeridos — estilo TikTok stories */}
-            {Array.isArray(ranking) && ranking.length > 0 && (
-              <div className="px-4 py-3">
-                <div className="flex gap-4 overflow-x-auto pb-1" style={{scrollbarWidth:'none'}}>
-                  {ranking.slice(0,8).map((u:RankingEntry)=>(
-                    <button key={u._id} onClick={()=>setLocation(`/messages/${u._id}`)} className="flex flex-col items-center gap-1.5 flex-shrink-0">
-                      <div className="relative">
-                        <div className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center" style={{background:'#7c3aed',border:'2px solid #FF007F'}}>
-                          {u.avatarUrl?<img src={u.avatarUrl} alt={u.username} className="w-full h-full object-cover"/>:<span className="text-white font-bold text-lg">{u.username?.[0]?.toUpperCase()}</span>}
-                        </div>
-                      </div>
-                      <span className="text-gray-400 text-[10px] max-w-[56px] truncate">{u.username}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="border-t mx-4 mb-2" style={{borderColor:'#1e1e2a'}}/>
-
-            {/* Lista conversaciones */}
-            {loading ? <div className="flex justify-center py-8"><Spinner/></div> : convList.length === 0 ? (
-              <div className="text-center py-16 px-4">
-                <MessageCircle size={48} className="mx-auto text-gray-700 mb-3"/>
-                <p className="text-white font-bold mb-1">Sin mensajes todavía</p>
-                <p className="text-gray-500 text-sm mb-4">Busca usuarios y empieza a chatear</p>
-                <button onClick={()=>setLocation('/search')} className="px-6 py-2.5 rounded-full font-bold text-black text-sm" style={{background:'#00F5FF'}}>Buscar usuarios</button>
-              </div>
+            {(!convs || !Array.isArray(convs) || convs.length === 0) ? (
+              <div className="text-center py-16"><MessageCircle size={48} className="mx-auto text-gray-700 mb-3"/><p className="text-gray-400">Sin mensajes todavía</p></div>
             ) : (
-              convList.map((c:Conversation) => (
+              (Array.isArray(convs)?convs:[]).map((c:Conversation) => (
                 <button key={c.user._id} onClick={()=>setLocation(`/messages/${c.user._id}`)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors">
-                  <div className="relative flex-shrink-0">
-                    <Av u={c.user} s={52}/>
-                    {c.unread>0&&<div className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black text-white" style={{background:'#FF007F'}}>{c.unread}</div>}
-                  </div>
+                  <Av u={c.user} s={48}/>
                   <div className="flex-1 min-w-0 text-left">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-white font-semibold text-sm flex items-center gap-1">{c.user.username}{c.user.isAI&&<AIBadge/>}</span>
-                      <span className="text-gray-500 text-xs">{ago(c.lastMessage.createdAt)}</span>
-                    </div>
-                    <p className={cn("text-xs truncate",c.unread>0?'text-white font-medium':'text-gray-400')}>{c.lastMessage.text}</p>
+                    <div className="flex items-center justify-between"><span className="text-white font-semibold text-sm">{c.user.username}</span><span className="text-gray-500 text-xs">{ago(c.lastMessage.createdAt)}</span></div>
+                    <p className="text-gray-400 text-xs truncate mt-0.5">{c.lastMessage.text}</p>
                   </div>
-                </button>
-              ))
-            )}
-          </div>
-        )}
-
-        {tab==='actividad' && (
-          <div>
-            {notifList.length === 0 ? (
-              <div className="text-center py-16"><Bell size={48} className="mx-auto text-gray-700 mb-3"/><p className="text-gray-400">Sin actividad todavía</p></div>
-            ) : (
-              notifList.map((n:Notification)=>(
-                <button key={n._id} onClick={()=>n.fromUserId?._id&&setLocation(`/user/${n.fromUserId._id}`)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors">
-                  <div className="relative flex-shrink-0">
-                    <Av u={n.fromUserId} s={48}/>
-                    <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center text-xs" style={{background:'#1e1e2a',border:'1.5px solid #0b0b12'}}>
-                      {n.type==='nomination'?'🎯':n.type==='chain_continued'?'⛓️':n.type==='liked'?'❤️':n.type==='followed'?'👤':'🏆'}
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="text-white text-sm">{n.message}</p>
-                    <p className="text-gray-500 text-xs mt-0.5">{ago(n.createdAt)}</p>
-                  </div>
-                  {!n.read&&<div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:'#FF007F'}}/>}
+                  {c.unread>0&&<span className="w-5 h-5 rounded-full text-xs font-bold text-black flex items-center justify-center flex-shrink-0" style={{background:'#FF007F'}}>{c.unread}</span>}
                 </button>
               ))
             )}
@@ -1317,8 +1019,6 @@ function ChatPage({ userId }: { userId: string }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  useSEO({ title: other?`Chat con @${other.username} — DOMINO`:'Chat — DOMINO', description:'Conversación privada en DOMINO.', path:`/messages/${userId}`, noindex:true });
-
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [msgs]);
 
@@ -1335,7 +1035,7 @@ function ChatPage({ userId }: { userId: string }) {
       {/* Header chat */}
       <div className="flex items-center gap-3 px-4 py-3 border-b sticky top-14 z-10" style={{background:'#0b0b12',borderColor:'#1e1e2a'}}>
         <button onClick={()=>setLocation('/messages')}><ChevronLeft size={24} className="text-gray-400"/></button>
-        {other&&<><Av u={other} s={36}/><div><p className="text-white font-bold text-sm flex items-center gap-1.5">@{other.username}{other.isAI && <AIBadge/>}</p><p className="text-gray-400 text-xs">{other.flag} {other.city}</p></div></>}
+        {other&&<><Av u={other} s={36}/><div><p className="text-white font-bold text-sm">@{other.username}</p><p className="text-gray-400 text-xs">{other.flag} {other.city}</p></div></>}
       </div>
 
       {/* Mensajes */}
@@ -1371,27 +1071,127 @@ function LiveListPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const list = Array.isArray(lives)?lives:[];
-  useSEO({
-    title: `En Directo${list.length?` — ${list.length} streams ahora`:''} — DOMINO`,
-    description: 'Mira retos DOMINO en directo: lives de creatividad, kindness, eco-acción y batallas en tiempo real. Envía regalos y participa.',
-    path: '/live',
-  });
+
+  // Pantalla previa al live — estilo TikTok (fondo oscuro, avatar con halo rosa, botón UNIRSE)
+  const [previewLive, setPreviewLive] = useState<LiveStream|null>(null);
+
+  if (previewLive) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center" style={{background:'linear-gradient(180deg,#0d0020 0%,#1a0030 100%)'}}>
+        {/* Header */}
+        <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pt-12 pb-4">
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 rounded-full text-xs font-bold text-white flex items-center gap-1.5" style={{background:'#FF007F'}}>
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block"/>EN DIRECTO
+            </span>
+          </div>
+          <div className="flex items-center gap-1 text-white text-sm">
+            <Eye size={14}/>{previewLive.viewerCount||0}
+          </div>
+        </div>
+
+        {/* Avatar con halo rosa animado */}
+        <div className="relative mb-6">
+          <div className="absolute inset-0 rounded-full animate-pulse" style={{background:'radial-gradient(circle,rgba(255,0,127,0.4) 0%,transparent 70%)',transform:'scale(1.3)'}}/>
+          <div className="w-36 h-36 rounded-full overflow-hidden flex items-center justify-center relative" style={{border:'4px solid #FF007F',boxShadow:'0 0 40px rgba(255,0,127,0.6)'}}>
+            {previewLive.userId?.avatarUrl
+              ? <img src={previewLive.userId.avatarUrl} alt="" className="w-full h-full object-cover"/>
+              : <div className="w-full h-full flex items-center justify-center text-white font-black text-5xl" style={{background:'#7c3aed'}}>{previewLive.userId?.username?.[0]?.toUpperCase()}</div>
+            }
+          </div>
+        </div>
+
+        {/* Info */}
+        <h2 className="text-white font-black text-2xl mb-1">@{previewLive.userId?.username}</h2>
+        <p className="text-gray-400 text-sm mb-8">{previewLive.title}</p>
+
+        {/* Botón UNIRSE AL DIRECTO */}
+        <button onClick={()=>setLocation(`/live/${previewLive._id}`)} className="flex items-center gap-3 px-10 py-4 rounded-full font-black text-white text-base" style={{background:'linear-gradient(135deg,#FF007F,#c0006a)',boxShadow:'0 0 30px rgba(255,0,127,0.5)'}}>
+          <span className="w-2 h-2 rounded-full bg-white animate-pulse"/>
+          UNIRSE AL DIRECTO
+        </button>
+
+        {/* Botón cerrar */}
+        <button onClick={()=>setPreviewLive(null)} className="absolute top-12 right-4 p-2 rounded-full" style={{background:'rgba(255,255,255,0.1)'}}>
+          <X size={20} className="text-white"/>
+        </button>
+
+        {/* Side panel info — como TikTok */}
+        <div className="absolute right-4 bottom-32 flex flex-col items-center gap-6">
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-12 h-12 rounded-full overflow-hidden" style={{border:'2px solid white'}}>
+              {previewLive.userId?.avatarUrl
+                ? <img src={previewLive.userId.avatarUrl} alt="" className="w-full h-full object-cover"/>
+                : <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg" style={{background:'#7c3aed'}}>{previewLive.userId?.username?.[0]?.toUpperCase()}</div>
+              }
+            </div>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.15)'}}>
+              <span className="text-white text-lg">📡</span>
+            </div>
+            <span className="text-white text-xs">Live</span>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.15)'}}>
+              <Eye size={18} className="text-white"/>
+            </div>
+            <span className="text-white text-xs">{previewLive.viewerCount||0}</span>
+          </div>
+        </div>
+
+        {/* Ciudad */}
+        <div className="absolute bottom-20 left-4">
+          <span className="text-white text-sm">{previewLive.userId?.flag} {previewLive.userId?.city}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="flex items-center justify-between mb-6"><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full animate-pulse" style={{background:'#FF007F'}}/><h1 className="text-2xl font-black text-white">En Directo</h1></div>{user&&<button onClick={()=>setLocation('/live/create')} className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-white text-sm" style={{background:'#FF007F'}}><Video size={16}/>Iniciar</button>}</div>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full animate-pulse" style={{background:'#FF007F'}}/><h1 className="text-2xl font-black text-white">En Directo</h1></div>
+          {user&&<button onClick={()=>setLocation('/live/create')} className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-white text-sm" style={{background:'#FF007F'}}><Video size={16}/>Iniciar</button>}
+        </div>
         {loading?<div className="flex justify-center py-8"><Spinner/></div>:list.length===0?(
-          <div className="text-center py-20"><div className="text-5xl mb-4">📡</div><h3 className="text-xl font-bold text-white mb-2">Nadie en directo</h3>{user&&<button onClick={()=>setLocation('/live/create')} className="px-6 py-3 rounded-xl font-bold text-white mt-4" style={{background:'#FF007F'}}>Empezar</button>}</div>
+          <div className="text-center py-20">
+            <div className="text-5xl mb-4">📡</div>
+            <h3 className="text-xl font-bold text-white mb-2">Nadie en directo</h3>
+            <p className="text-gray-400 text-sm mb-6">¡Sé el primero en hacer un live!</p>
+            {user&&<button onClick={()=>setLocation('/live/create')} className="px-6 py-3 rounded-xl font-bold text-white" style={{background:'#FF007F'}}>Empezar</button>}
+          </div>
         ):(
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             {list.map((l:LiveStream)=>(
-              <Link key={l._id} href={`/live/${l._id}`} className="relative rounded-xl overflow-hidden cursor-pointer" style={{aspectRatio:'9/16',background:'#13131f',border:'1px solid #1e1e2a'}}>
-                <div className="absolute inset-0 flex items-center justify-center"><Av u={l.userId} s={80}/></div>
-                <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.85) 0%,transparent 60%)'}}/>
-                <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background: l.userId?.isAI ? '#7c3aed' : '#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>{l.userId?.isAI ? '🤖 IA LIVE' : 'LIVE'}</div>
-                <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs text-white" style={{background:'rgba(0,0,0,0.6)'}}><Eye size={9}/>{l.viewerCount}</div>
-                <div className="absolute bottom-3 left-3 right-3"><p className="text-white text-xs font-bold truncate">@{l.userId?.username}</p><p className="text-gray-300 text-xs truncate">{l.title}</p></div>
-              </Link>
+              <button key={l._id} onClick={()=>setPreviewLive(l)} className="relative rounded-xl overflow-hidden cursor-pointer text-left" style={{aspectRatio:'9/16',background:'linear-gradient(180deg,#0d0020,#1a0030)',border:'1px solid #2a2a3a'}}>
+                {/* Fondo oscuro con avatar centrado — como primera captura */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="relative">
+                    <div className="absolute inset-0 rounded-full" style={{background:'radial-gradient(circle,rgba(255,0,127,0.3) 0%,transparent 70%)',transform:'scale(1.5)'}}/>
+                    <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center" style={{border:'3px solid #FF007F',boxShadow:'0 0 20px rgba(255,0,127,0.5)'}}>
+                      {l.userId?.avatarUrl
+                        ? <img src={l.userId.avatarUrl} alt="" className="w-full h-full object-cover"/>
+                        : <div className="w-full h-full flex items-center justify-center text-white font-black text-3xl" style={{background:'#7c3aed'}}>{l.userId?.username?.[0]?.toUpperCase()}</div>
+                      }
+                    </div>
+                  </div>
+                </div>
+                {/* Badge EN DIRECTO */}
+                <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}>
+                  <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE
+                </div>
+                {/* Viewers */}
+                <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs text-white" style={{background:'rgba(0,0,0,0.6)'}}>
+                  <Eye size={9}/>{l.viewerCount}
+                </div>
+                {/* Info bottom */}
+                <div className="absolute bottom-3 left-3 right-3">
+                  <p className="text-white text-xs font-bold truncate">@{l.userId?.username}</p>
+                  <p className="text-gray-300 text-xs truncate">{l.title}</p>
+                </div>
+              </button>
             ))}
           </div>
         )}
@@ -1425,6 +1225,219 @@ function CreateLivePage() {
   );
 }
 
+// ===================== LIVE VIEWER — Clon exacto TikTok =====================
+function LiveViewerPage({ id }: { id: string }) {
+  const { user, token, refreshUser } = useAuth();
+  const { data: lives } = useApi('/api/lives', [id]);
+  const [, setLocation] = useLocation();
+  const [msgs, setMsgs] = useState<{id:number;user:string;avatar?:string;text:string;type?:string}[]>([
+    {id:0,user:'Sistema',text:'¡Bienvenido al directo! 🎲',type:'system'}
+  ]);
+  const [input, setInput] = useState('');
+  const [showGifts, setShowGifts] = useState(false);
+  const [giftAnim, setGiftAnim] = useState<{emoji:string;name:string;user:string}|null>(null);
+  const [viewers, setViewers] = useState(0);
+  const [following, setFollowing] = useState(false);
+  const [msgId, setMsgId] = useState(1);
+  const chatRef = useRef<HTMLDivElement>(null);
+  const live = Array.isArray(lives)?lives.find((l:LiveStream)=>l._id===id):null;
+
+  useEffect(()=>{ if(live) setViewers(live.viewerCount||0); },[live]);
+  useEffect(()=>{ const t=setInterval(()=>setViewers(v=>Math.max(0,v+Math.floor(Math.random()*5-2))),4000); return()=>clearInterval(t); },[]);
+  useEffect(()=>{ if(chatRef.current) chatRef.current.scrollTop=chatRef.current.scrollHeight; },[msgs]);
+
+  // Simular mensajes de otros usuarios en tiempo real
+  useEffect(()=>{
+    const FAKE_MSGS = ['🔥🔥🔥','hola!!','que guay','sigue así','😍😍','me encanta','💪💪','increíble'];
+    const FAKE_USERS = ['carlos_m','lucia_b','yuki_t','pablo_c','nina_b'];
+    const t = setInterval(()=>{
+      const u = FAKE_USERS[Math.floor(Math.random()*FAKE_USERS.length)];
+      const m = FAKE_MSGS[Math.floor(Math.random()*FAKE_MSGS.length)];
+      setMsgs(prev=>[...prev.slice(-30),{id:Date.now(),user:u,text:m}]);
+    }, 3000+Math.random()*4000);
+    return()=>clearInterval(t);
+  },[]);
+
+  const sendMsg = () => {
+    if (!input.trim()||!user) return;
+    setMsgs(m=>[...m,{id:Date.now(),user:user.username,text:input}]);
+    setInput('');
+  };
+
+  const sendGift = async (type: string) => {
+    const g = GIFT_CATALOG[type];
+    if ((user?.coins||0) < g.coins) { alert('Monedas insuficientes. Ve a la tienda.'); return; }
+    setShowGifts(false);
+    setGiftAnim({emoji:g.emoji,name:g.name,user:user?.username||''});
+    setTimeout(()=>setGiftAnim(null),3000);
+    setMsgs(m=>[...m,{id:Date.now(),user:user?.username||'',text:`envió ${g.emoji} ${g.name}`,type:'gift'}]);
+    if (token) {
+      await fetch(`${API}/api/coins/gift`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({liveId:id,giftType:type,quantity:1})});
+      await refreshUser();
+    }
+  };
+
+  const doFollow = async () => {
+    if (!token||!live) return;
+    setFollowing(f=>!f);
+    await fetch(`${API}/api/users/${live.userId._id}/follow`,{method:'POST',headers:{Authorization:`Bearer ${token}`}});
+  };
+
+  if (!live) return (
+    <div className="fixed inset-0 flex items-center justify-center" style={{background:'#0b0b12'}}>
+      <div className="text-center">
+        <div className="text-5xl mb-4">📡</div>
+        <p className="text-white font-bold mb-2">Live no encontrado o terminado</p>
+        <button onClick={()=>setLocation('/live')} className="text-sm font-semibold" style={{color:'#00F5FF'}}>← Ver otros lives</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0" style={{background:'#000'}}>
+
+      {/* VIDEO / FONDO — pantalla completa */}
+      <div className="absolute inset-0" style={{background:'linear-gradient(180deg,#1a0030 0%,#0d001a 100%)'}}>
+        <div className="w-full h-full flex items-center justify-center opacity-30">
+          <div className="w-48 h-48 rounded-full" style={{background:'radial-gradient(circle,#FF007F,transparent)',filter:'blur(60px)'}}/>
+        </div>
+      </div>
+
+      {/* HEADER — nombre + seguir + viewers + X */}
+      <div className="absolute top-0 left-0 right-0 z-20 px-3 pt-12 pb-3 flex items-center gap-2" style={{background:'linear-gradient(to bottom,rgba(0,0,0,0.6),transparent)'}}>
+        <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0" style={{border:'2px solid #FF007F'}}>
+          {live.userId?.avatarUrl
+            ? <img src={live.userId.avatarUrl} alt="" className="w-full h-full object-cover"/>
+            : <div className="w-full h-full flex items-center justify-center text-white font-bold" style={{background:'#7c3aed'}}>{live.userId?.username?.[0]?.toUpperCase()}</div>
+          }
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-white font-bold text-sm truncate">{live.userId?.username}</span>
+            <span className="text-gray-300 text-xs">❤️ {fmt(live.userId?.impactPoints||0)}</span>
+          </div>
+        </div>
+        {/* Botón Seguir — exacto TikTok */}
+        <button onClick={doFollow} className="flex items-center gap-1 px-4 py-1.5 rounded-full text-sm font-bold" style={{background:following?'transparent':'#FF007F',border:following?'1px solid #aaa':'none',color:'white'}}>
+          {following?'Siguiendo':'+ Seguir'}
+        </button>
+        {/* Avatares espectadores */}
+        <div className="flex items-center gap-1">
+          <div className="flex -space-x-1.5">
+            {['#FF007F','#7c3aed','#00F5FF'].map((c,i)=><div key={i} className="w-6 h-6 rounded-full border border-black flex items-center justify-center text-xs font-bold text-white" style={{background:c}}>U</div>)}
+          </div>
+          <span className="text-white text-sm font-bold">{fmt(viewers)}</span>
+        </div>
+        <button onClick={()=>setLocation('/live')} className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,255,255,0.15)'}}>
+          <X size={16} className="text-white"/>
+        </button>
+      </div>
+
+      {/* BADGE live + batalla */}
+      <div className="absolute top-24 left-3 z-20 flex items-center gap-2">
+        <span className="px-3 py-1 rounded-full text-xs font-bold text-white flex items-center gap-1.5" style={{background:'rgba(0,0,0,0.5)',border:'1px solid rgba(255,255,255,0.2)'}}>
+          💎 DOMINO Chain
+        </span>
+        {live.isBattle && (
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full" style={{background:'rgba(0,0,0,0.5)',border:'1px solid #FF007F'}}>
+            <span className="text-white text-xs font-bold">{live.battleScore?.host||0}</span>
+            <span className="text-gray-400 text-xs">VS</span>
+            <span className="text-white text-xs font-bold">{live.battleScore?.opponent||0}</span>
+          </div>
+        )}
+      </div>
+
+      {/* GIFT ANIMATION — aparece en el centro */}
+      {giftAnim && (
+        <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30 text-center animate-bounce">
+          <div className="text-7xl mb-2">{giftAnim.emoji}</div>
+          <div className="px-4 py-2 rounded-full" style={{background:'rgba(255,0,127,0.3)',border:'1px solid #FF007F'}}>
+            <span className="text-white font-bold text-sm">@{giftAnim.user} → {giftAnim.name}</span>
+          </div>
+        </div>
+      )}
+
+      {/* CHAT — flotante sobre el video, alineado abajo-izquierda */}
+      <div className="absolute bottom-20 left-0 right-0 z-20 px-3" style={{maxHeight:'40vh',overflow:'hidden'}}>
+        <div ref={chatRef} className="flex flex-col gap-1 overflow-y-auto" style={{maxHeight:'35vh'}}>
+          {msgs.map((m)=>(
+            <div key={m.id} className="flex items-start gap-2">
+              {m.type==='system' ? (
+                <span className="text-gray-400 text-xs w-full text-center py-1">{m.text}</span>
+              ) : m.type==='gift' ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{background:'linear-gradient(135deg,rgba(255,0,127,0.4),rgba(124,58,237,0.4))',border:'1px solid rgba(255,0,127,0.5)'}}>
+                  <span className="text-white text-xs font-bold">🎁 @{m.user} {m.text}</span>
+                </div>
+              ) : (
+                <div className="flex items-baseline gap-1.5 max-w-[85%]">
+                  <span className="text-white text-xs font-bold flex-shrink-0" style={{textShadow:'1px 1px 2px rgba(0,0,0,0.8)'}}>@{m.user}</span>
+                  <span className="text-white text-xs" style={{textShadow:'1px 1px 2px rgba(0,0,0,0.8)'}}>{m.text}</span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* BOTTOM BAR — exacto TikTok: input + emojis + usuarios + regalo + share */}
+      <div className="absolute bottom-0 left-0 right-0 z-20 px-3 pb-8 pt-2" style={{background:'linear-gradient(to top,rgba(0,0,0,0.8),transparent)'}}>
+        <div className="flex items-center gap-3">
+          {/* Input escribir */}
+          <button onClick={()=>{ const inp=document.getElementById('live-input'); inp?.focus(); }} className="flex-1 flex items-center gap-2 px-4 py-2.5 rounded-full text-sm text-gray-400" style={{background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.15)'}}>
+            <input id="live-input" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendMsg()} placeholder="Escribe algo..." className="bg-transparent text-white placeholder-gray-400 text-sm flex-1 focus:outline-none w-full"/>
+          </button>
+          {/* Emojis */}
+          <button className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-xl" style={{background:'rgba(255,255,255,0.1)'}}>😊</button>
+          {/* Usuarios */}
+          <button className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,255,255,0.1)'}}>
+            <Users size={18} className="text-white"/>
+          </button>
+          {/* Regalo — color rosa */}
+          <button onClick={()=>setShowGifts(true)} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,0,127,0.3)',border:'1px solid rgba(255,0,127,0.5)'}}>
+            <Gift size={18} className="text-white"/>
+          </button>
+          {/* Share + contador */}
+          <button className="flex flex-col items-center gap-0.5">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.1)'}}>
+              <Share size={18} className="text-white"/>
+            </div>
+            <span className="text-white text-xs">{fmt(viewers)}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* PANEL REGALOS — aparece desde abajo */}
+      {showGifts && (
+        <div className="absolute inset-x-0 bottom-0 z-30 rounded-t-3xl pb-8" style={{background:'#13131f',border:'1px solid #1e1e2a'}}>
+          <div className="w-12 h-1 rounded-full mx-auto mt-3 mb-4" style={{background:'#2a2a3a'}}/>
+          <div className="flex items-center justify-between px-5 mb-4">
+            <h3 className="font-black text-white text-lg">Enviar Regalo</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-400 font-bold">🪙 {(user?.coins||0).toLocaleString()}</span>
+              <button onClick={()=>setShowGifts(false)}><X size={20} className="text-gray-400"/></button>
+            </div>
+          </div>
+          {/* Grid de regalos — 3 columnas como TikTok */}
+          <div className="grid grid-cols-4 gap-3 px-5 mb-4">
+            {Object.entries(GIFT_CATALOG).map(([k,g])=>(
+              <button key={k} onClick={()=>sendGift(k)} disabled={(user?.coins||0)<g.coins} className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all disabled:opacity-40" style={{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                <span className="text-3xl">{g.emoji}</span>
+                <span className="text-white text-xs font-semibold">{g.name}</span>
+                <div className="flex items-center gap-0.5"><span className="text-yellow-400 text-xs">{g.coins}</span><span className="text-yellow-400 text-xs">🪙</span></div>
+              </button>
+            ))}
+          </div>
+          <div className="px-5">
+            <Link href="/coins" onClick={()=>setShowGifts(false)} className="block w-full py-3 rounded-2xl text-center font-bold text-sm" style={{background:'rgba(0,245,255,0.1)',color:'#00F5FF',border:'1px solid rgba(0,245,255,0.2)'}}>
+              + Comprar más monedas
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ===================== MAP PAGE =====================
 function WorldMapPage() {
   const { data: videos } = useApi('/api/videos/feed?limit=50');
@@ -1432,15 +1445,6 @@ function WorldMapPage() {
   const proj=(lat:number,lng:number,w:number,h:number)=>({x:((lng+180)/360)*w,y:((90-lat)/180)*h});
   const SAMPLE=[{lat:40.4168,lng:-3.7038,flag:'🇪🇸',city:'Madrid'},{lat:35.6762,lng:139.6503,flag:'🇯🇵',city:'Tokio'},{lat:40.7128,lng:-74.006,flag:'🇺🇸',city:'NY'},{lat:-34.6037,lng:-58.3816,flag:'🇦🇷',city:'Buenos Aires'},{lat:48.8566,lng:2.3522,flag:'🇫🇷',city:'París'},{lat:51.5074,lng:-0.1278,flag:'🇬🇧',city:'Londres'}];
   const pts=Array.isArray(videos)&&videos.length>0?videos.map((v:DominoVideo)=>({lat:v.geoCoordinates.lat,lng:v.geoCoordinates.lng,flag:v.userId?.flag||'🌍',city:v.userId?.city||''})):SAMPLE;
-  useSEO({
-    title: `Mapa Global de Retos DOMINO — ${pts.length} ciudades activas`,
-    description: `Explora el mapa global de la cadena DOMINO: retos activos en ${new Set(pts.map(p=>p.city)).size} ciudades de todo el mundo, en tiempo real.`,
-    path: '/map',
-    jsonLd: {
-      '@context':'https://schema.org', '@type':'ItemList',
-      itemListElement: [...new Set(pts.map(p=>p.city).filter(Boolean))].slice(0,20).map((city,i)=>({ '@type':'ListItem', position:i+1, item:{ '@type':'Place', name: city } }))
-    }
-  });
   useEffect(()=>{const c=canvasRef.current;if(!c)return;const ctx=c.getContext('2d');if(!ctx)return;c.width=c.parentElement?.clientWidth||800;c.height=Math.min((c.parentElement?.clientWidth||800)*0.5,400);const w=c.width,h=c.height;ctx.fillStyle='#0b0b12';ctx.fillRect(0,0,w,h);ctx.strokeStyle='rgba(42,42,58,0.6)';ctx.lineWidth=0.5;for(let l=-180;l<=180;l+=30){const{x}=proj(0,l,w,h);ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}for(let l=-90;l<=90;l+=30){const{y}=proj(l,0,w,h);ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}for(let i=0;i<pts.length-1;i++){const p1=proj(pts[i].lat,pts[i].lng,w,h),p2=proj(pts[i+1].lat,pts[i+1].lng,w,h);const g=ctx.createLinearGradient(p1.x,p1.y,p2.x,p2.y);g.addColorStop(0,'#00F5FF');g.addColorStop(1,'#FF007F');ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.strokeStyle=g;ctx.lineWidth=1.5;ctx.globalAlpha=0.6;ctx.stroke();ctx.globalAlpha=1;}pts.forEach((p:{lat:number;lng:number;flag:string;city:string},i:number)=>{const{x,y}=proj(p.lat,p.lng,w,h);ctx.beginPath();ctx.arc(x,y,i===0?8:5,0,Math.PI*2);ctx.fillStyle=i===0?'#FF007F':'#00F5FF';ctx.shadowBlur=12;ctx.shadowColor=ctx.fillStyle;ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='rgba(248,250,252,0.85)';ctx.font=`${Math.max(8,Math.floor(w/90))}px Inter`;ctx.fillText(`${p.flag} ${p.city}`,x+8,y-4);});},[pts.length]);
   return(<div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}><div className="max-w-7xl mx-auto px-4 py-6"><h1 className="text-3xl font-black text-white mb-2">Mapa Global</h1><p className="text-gray-400 mb-6">{pts.length} nodos</p><div className="rounded-xl overflow-hidden border" style={{minHeight:'300px',borderColor:'#1e1e2a',background:'#0b0b12'}}><canvas ref={canvasRef} className="w-full block"/></div><div className="mt-6 grid grid-cols-3 gap-4">{[{v:Array.isArray(videos)?videos.length:pts.length,l:'Videos',c:'#00F5FF'},{v:new Set(pts.map((p:any)=>p.city)).size,l:'Ciudades',c:'#FF007F'},{v:pts.length,l:'Nodos',c:'#7c3aed'}].map((s,i)=><div key={i} className="rounded-xl p-4 border" style={{background:'#13131f',borderColor:'#1e1e2a'}}><div className="text-2xl font-bold" style={{color:s.c}}>{s.v}</div><div className="text-xs text-gray-400 mt-1">{s.l}</div></div>)}</div></div></div>);
 }
@@ -1449,7 +1453,6 @@ function WorldMapPage() {
 function NotificationsPage() {
   const { user, token } = useAuth();
   const { data: notifs, setData: setNotifs } = useApi('/api/notifications', [user?._id]);
-  useSEO({ title:'Avisos — DOMINO', description:'Tus notificaciones en DOMINO.', path:'/notifications', noindex:true });
   const markAll=async()=>{if(!token)return;await fetch(`${API}/api/notifications/read-all`,{method:'PUT',headers:{Authorization:`Bearer ${token}`}});setNotifs((p:Notification[])=>Array.isArray(p)?p.map(n=>({...n,read:true})):p);};
   return(
     <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
@@ -1477,7 +1480,6 @@ function SearchPage() {
   const [loading, setLoading] = useState(false);
   const { token } = useAuth();
   const [, setLocation] = useLocation();
-  useSEO({ title:'Buscar usuarios — DOMINO', description:'Busca usuarios y ciudades en DOMINO.', path:'/search', noindex:true });
 
   useEffect(() => {
     if (q.length < 2) { setResults([]); return; }
@@ -1494,7 +1496,7 @@ function SearchPage() {
         <div className="space-y-2">
           {results.map((u:RankingEntry)=>(
             <button key={u._id} onClick={()=>setLocation(`/user/${u._id}`)} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors">
-              <Av u={u} s={44}/><div className="flex-1 text-left"><p className="text-white font-semibold flex items-center gap-1.5">@{u.username}{u.isAI && <AIBadge/>}</p><p className="text-gray-400 text-xs">{u.flag} {u.country} · {fmt(u.impactPoints)} pts</p></div><div className="flex items-center gap-1 text-xs text-gray-500"><Users size={12}/>{u.followers?.length||0}</div>
+              <Av u={u} s={44}/><div className="flex-1 text-left"><p className="text-white font-semibold">@{u.username}</p><p className="text-gray-400 text-xs">{u.flag} {u.country} · {fmt(u.impactPoints)} pts</p></div><div className="flex items-center gap-1 text-xs text-gray-500"><Users size={12}/>{u.followers?.length||0}</div>
             </button>
           ))}
           {q.length>=2&&!loading&&results.length===0&&<p className="text-center text-gray-500 py-8">Sin resultados para "{q}"</p>}
@@ -1512,28 +1514,10 @@ function HomePage() {
   const [counter, setCounter] = useState(14782);
   useEffect(()=>{if(challenge?.globalCounter)setCounter(challenge.globalCounter);},[challenge]);
   useEffect(()=>{const t=setInterval(()=>setCounter(c=>c+Math.floor(Math.random()*3)),2500);return()=>clearInterval(t);},[]);
-  useSEO({
-    title: 'DOMINO — The Real-World Chain Reaction | App de retos en cadena',
-    description: 'Graba retos de 15 segundos, nomina a 3 personas y haz crecer la cadena dominó global. Retos de creatividad, kindness y eco-acción. Gratis, en directo, multi-país.',
-    path: '/',
-    jsonLd: {
-      '@context': 'https://schema.org',
-      '@type': 'WebApplication',
-      name: 'DOMINO',
-      alternateName: 'DOMINO — The Real-World Chain Reaction',
-      url: SITE_URL,
-      applicationCategory: 'SocialNetworkingApplication',
-      operatingSystem: 'Web, iOS, Android',
-      description: 'App de retos en cadena: graba un vídeo de 15s, nomina a 3 personas y forma parte del efecto dominó global.',
-      offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
-      areaServed: ['ES','MX','AR','CO','US','JP','BR','FR','DE','IT','GB','PT'],
-      aggregateRating: challenge?.globalCounter ? { '@type':'AggregateRating', ratingValue:'4.7', reviewCount: String(Math.max(50, Math.floor(challenge.globalCounter/50))) } : undefined,
-    }
-  });
   return(
     <div className="pb-20">
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0"><img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1600&h=900&fit=crop" alt="Personas grabando retos virales en cadena con la app DOMINO" loading="eager" fetchPriority="high" width={1600} height={900} className="w-full h-full object-cover opacity-20"/><div className="absolute inset-0" style={{background:'radial-gradient(ellipse at center,rgba(0,245,255,0.05) 0%,rgba(11,11,18,0.9) 70%)'}}/></div>
+        <div className="absolute inset-0"><img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1600&h=900&fit=crop" alt="" className="w-full h-full object-cover opacity-20"/><div className="absolute inset-0" style={{background:'radial-gradient(ellipse at center,rgba(0,245,255,0.05) 0%,rgba(11,11,18,0.9) 70%)'}}/></div>
         <div className="relative z-10 max-w-4xl mx-auto px-4 text-center">
           <div className="flex justify-center mb-6"><DominoLogo size={48}/></div>
           <h1 className="text-5xl sm:text-7xl font-black mb-4" style={{fontFamily:'Syne,sans-serif'}}><span style={{background:'linear-gradient(135deg,#00F5FF,#FF007F)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>DOMINO</span></h1>
@@ -1557,7 +1541,7 @@ function HomePage() {
                 <Link key={l._id} href={`/live/${l._id}`} className="relative rounded-xl overflow-hidden" style={{aspectRatio:'9/16',background:'#13131f',border:'1px solid #1e1e2a'}}>
                   <div className="absolute inset-0 flex items-center justify-center"><Av u={l.userId} s={64}/></div>
                   <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.8) 0%,transparent 60%)'}}/>
-                  <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background: l.userId?.isAI ? '#7c3aed' : '#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>{l.userId?.isAI ? '🤖 IA LIVE' : 'LIVE'}</div>
+                  <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE</div>
                   <div className="absolute bottom-2 left-2 right-2"><p className="text-white text-xs font-bold truncate">@{l.userId?.username}</p><p className="text-gray-300 text-xs truncate">{l.title}</p></div>
                 </Link>
               ))}
@@ -1588,7 +1572,7 @@ function HomePage() {
               {ranking.map((e:RankingEntry,i:number)=>(
                 <Link key={e._id} href={`/user/${e._id}`} className="flex items-center gap-3 p-3 border-b last:border-0 hover:bg-white/5 transition-colors" style={{borderColor:'#1e1e2a'}}>
                   <span className="w-7 text-center text-sm font-bold">{i<3?['🥇','🥈','🥉'][i]:<span className="text-gray-500">#{i+1}</span>}</span>
-                  <Av u={e} s={36}/><div className="flex-1 min-w-0"><div className="text-sm font-semibold text-white truncate flex items-center gap-1.5">{e.username} {e.flag}{e.isAI && <AIBadge/>}</div><div className="text-xs text-gray-500">{e.country}</div></div>
+                  <Av u={e} s={36}/><div className="flex-1 min-w-0"><div className="text-sm font-semibold text-white truncate">{e.username} {e.flag}</div><div className="text-xs text-gray-500">{e.country}</div></div>
                   <div className="text-right"><div className="text-sm font-bold" style={{color:'#00F5FF'}}>{fmt(e.impactPoints)}</div><div className="text-xs text-gray-500">{e.currentStreak}d</div></div>
                 </Link>
               ))}
@@ -1610,43 +1594,34 @@ function HomePage() {
 // ===================== APP =====================
 export default function App() { return <AuthProvider><AppInner/></AuthProvider>; }
 
-function NotFoundPage() {
-  useSEO({ title:'Página no encontrada — DOMINO', description:'Esta página no existe en DOMINO.', path: typeof window!=='undefined'?window.location.pathname:'/404', noindex:true });
-  return (
-    <div className="min-h-screen flex items-center justify-center px-4 pb-20">
-      <div className="text-center"><div className="text-6xl mb-4">🎲</div><h1 className="text-3xl font-black text-white mb-2">Página no encontrada</h1><Link href="/" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-black" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}><Home size={16}/>Inicio</Link></div>
-    </div>
-  );
-}
-
 function AppInner() {
   const { loading } = useAuth();
   if(loading)return<div className="min-h-screen flex items-center justify-center" style={{background:'#0b0b12'}}><div className="flex flex-col items-center gap-4"><DominoLogo size={40}/><Spinner/></div></div>;
   return(
     <div className="min-h-screen" style={{background:'#0b0b12'}}>
       <TopNav/>
-      <main id="main-content">
-        <Switch>
-          <Route path="/" component={FeedPage}/>
-          <Route path="/home" component={HomePage}/>
-          <Route path="/feed" component={FeedPage}/>
-          <Route path="/auth" component={AuthPage}/>
-          <Route path="/create" component={CreatePage}/>
-          <Route path="/camera" component={CameraPage}/>
-          <Route path="/live" component={LiveListPage}/>
-          <Route path="/live/create" component={CreateLivePage}/>
-          <Route path="/live/:id">{(p:any)=><LiveViewerPage id={p.id}/>}</Route>
-          <Route path="/map" component={WorldMapPage}/>
-          <Route path="/profile" component={()=><ProfilePage/>}/>
-          <Route path="/profile/edit" component={EditProfilePage}/>
-          <Route path="/user/:id">{(p:any)=><ProfilePage userId={p.id}/>}</Route>
-          <Route path="/messages" component={MessagesPage}/>
-          <Route path="/messages/:id">{(p:any)=><ChatPage userId={p.id}/>}</Route>
-          <Route path="/search" component={SearchPage}/>
-          <Route path="/notifications" component={NotificationsPage}/>
-          <Route component={NotFoundPage}/>
-        </Switch>
-      </main>
+      <Switch>
+        <Route path="/" component={HomePage}/>
+        <Route path="/feed" component={FeedPage}/>
+        <Route path="/auth" component={AuthPage}/>
+        <Route path="/create" component={CreatePage}/>
+        <Route path="/camera" component={CameraPage}/>
+        <Route path="/live" component={LiveListPage}/>
+        <Route path="/live/create" component={CreateLivePage}/>
+        <Route path="/live/:id">{(p:any)=><LiveViewerPage id={p.id}/>}</Route>
+        <Route path="/map" component={WorldMapPage}/>
+        <Route path="/profile" component={()=><ProfilePage/>}/>
+        <Route path="/user/:id">{(p:any)=><ProfilePage userId={p.id}/>}</Route>
+        <Route path="/messages" component={MessagesPage}/>
+        <Route path="/messages/:id">{(p:any)=><ChatPage userId={p.id}/>}</Route>
+        <Route path="/search" component={SearchPage}/>
+        <Route path="/notifications" component={NotificationsPage}/>
+        <Route>
+          <div className="min-h-screen flex items-center justify-center px-4 pb-20">
+            <div className="text-center"><div className="text-6xl mb-4">🎲</div><h1 className="text-3xl font-black text-white mb-2">Página no encontrada</h1><Link href="/" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-black" style={{background:'linear-gradient(135deg,#00F5FF,#7c3aed)'}}><Home size={16}/>Inicio</Link></div>
+          </div>
+        </Route>
+      </Switch>
       <BottomNav/>
     </div>
   );
