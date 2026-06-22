@@ -36,7 +36,7 @@ interface DominoVideo {
   challengeId: string; nominatedUsers: string[]; rootVideoId: string;
   isAIGenerated?: boolean; // declarado por quien sube el vídeo, igual que el "AI-generated content" de TikTok
 }
-interface Notification { _id: string; type: string; fromUserId: { username: string; avatarUrl: string; flag: string; isAI?: boolean }; message: string; read: boolean; createdAt: string; }
+interface Notification { _id: string; type: string; fromUserId: { _id?: string; username: string; avatarUrl: string; flag: string; isAI?: boolean }; message: string; read: boolean; createdAt: string; }
 interface RankingEntry { _id: string; username: string; avatarUrl: string; country: string; flag: string; impactPoints: number; currentStreak: number; followers: string[]; isAI?: boolean; }
 interface Comment { _id: string; userId: { _id: string; username: string; avatarUrl: string; flag: string; isAI?: boolean }; text: string; createdAt: string; }
 interface LiveStream { _id: string; userId: AppUser; title: string; status: string; viewerCount: number; category: string; isBattle: boolean; battleScore: { host: number; opponent: number }; }
