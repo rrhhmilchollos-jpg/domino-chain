@@ -90,7 +90,6 @@ router.get('/:id', async (req, res) => {
 // GET /api/users/messages/inbox — lista de conversaciones
 router.get('/messages/inbox', auth, async (req, res) => {
   try {
-    // Obtener últimos mensajes agrupados por conversación
     const messages = await Message.find({
       $or: [{ fromUserId: req.user._id }, { toUserId: req.user._id }]
     })
@@ -99,9 +98,9 @@ router.get('/messages/inbox', auth, async (req, res) => {
       .populate('toUserId', 'username avatarUrl flag')
       .limit(50);
 
-    // Agrupar por conversación (par de usuarios)
-    const conversations: Record<string, any> = {};
-    messages.forEach((m: any) => {
+    // FIX: eliminada anotación TypeScript ": Record<string, any>" que rompía Node.js
+    const conversations = {};
+    messages.forEach((m) => {
       const otherId = m.fromUserId._id.toString() === req.user._id.toString()
         ? m.toUserId._id.toString() : m.fromUserId._id.toString();
       if (!conversations[otherId]) {
@@ -133,7 +132,6 @@ router.get('/messages/:userId', auth, async (req, res) => {
       .populate('fromUserId', 'username avatarUrl flag')
       .populate('toUserId', 'username avatarUrl flag')
       .limit(100);
-    // Marcar como leídos
     await Message.updateMany({ fromUserId: req.params.userId, toUserId: req.user._id, read: false }, { read: true });
     res.json(messages);
   } catch(e) { res.status(500).json({ error: e.message }); }
