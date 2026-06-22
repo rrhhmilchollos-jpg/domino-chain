@@ -253,6 +253,8 @@ function BottomNav() {
   const { user } = useAuth();
   const { data: nd } = useApi('/api/notifications', [user?._id]);
   const unread = Array.isArray(nd)?nd.filter((n:Notification)=>!n.read).length:0;
+  const { data: inbox } = useApi('/api/users/messages/inbox', [user?._id]);
+  const unreadMsgs = Array.isArray(inbox)?inbox.reduce((a:number,c:any)=>a+(c.unread||0),0):0;
 
   if (loc==='/create'||loc==='/camera'||loc==='/auth') return null;
 
@@ -278,7 +280,7 @@ function BottomNav() {
         </button>
         <button onClick={()=>setLocation('/messages')} className="relative flex flex-col items-center gap-0.5 px-4 py-1">
           <MessageCircle size={24} className={loc==='/messages'?'text-white':'text-gray-500'}/>
-          {unread>0&&<span className="absolute top-0 right-2 w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center" style={{background:'#FF007F'}}>{unread}</span>}
+          {unreadMsgs>0&&<span className="absolute top-0 right-2 w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center" style={{background:'#FF007F'}}>{unreadMsgs}</span>}
           <span className={cn('text-[10px] font-medium',loc==='/messages'?'text-white':'text-gray-500')}>Mensajes</span>
         </button>
         <button onClick={()=>user?setLocation('/profile'):setLocation('/auth')} className="flex flex-col items-center gap-0.5 px-4 py-1">
@@ -1238,34 +1240,111 @@ function CameraPage() {
 
 // ===================== MESSAGES PAGE =====================
 function MessagesPage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { data: convs, loading } = useApi('/api/users/messages/inbox', [user?._id]);
+  const { data: notifs } = useApi('/api/notifications', [user?._id]);
+  const { data: ranking } = useApi('/api/ranking?limit=10');
   const [, setLocation] = useLocation();
+  const [tab, setTab] = useState<'mensajes'|'actividad'>('mensajes');
   useSEO({ title:'Mensajes — DOMINO', description:'Tus conversaciones en DOMINO.', path:'/messages', noindex:true });
 
-  if (!user) return <div className="min-h-screen flex items-center justify-center" style={{paddingTop:'56px',background:'#0b0b12'}}><div className="text-center"><p className="text-gray-400 mb-4">Inicia sesión</p><Link href="/auth" className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Entrar</Link></div></div>;
+  if (!user) return (
+    <div className="min-h-screen flex items-center justify-center" style={{paddingTop:'56px',background:'#0b0b12'}}>
+      <div className="text-center"><p className="text-gray-400 mb-4">Inicia sesión para ver tus mensajes</p><Link href="/auth" className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Entrar</Link></div>
+    </div>
+  );
+
+  const convList = Array.isArray(convs) ? convs : [];
+  const notifList = Array.isArray(notifs) ? notifs : [];
+  const unreadNotifs = notifList.filter((n:Notification)=>!n.read).length;
 
   return (
     <div className="min-h-screen pb-20" style={{paddingTop:'56px',background:'#0b0b12'}}>
       <div className="max-w-2xl mx-auto">
-        <div className="flex items-center justify-between px-4 py-4">
+        {/* Header estilo TikTok */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <h1 className="text-xl font-black text-white">Mensajes</h1>
-          <button className="p-2 rounded-lg hover:bg-white/5"><Search size={20} className="text-gray-400"/></button>
+          <button onClick={()=>setLocation('/search')} className="p-2 rounded-lg hover:bg-white/5"><Search size={20} className="text-gray-400"/></button>
         </div>
 
-        {loading ? <div className="flex justify-center py-8"><Spinner/></div> : (
+        {/* Tabs: Mensajes | Actividad */}
+        <div className="flex border-b mx-4 mb-2" style={{borderColor:'#1e1e2a'}}>
+          <button onClick={()=>setTab('mensajes')} className={cn('flex-1 py-2.5 text-sm font-bold border-b-2 transition-all',tab==='mensajes'?'text-white border-white':'text-gray-500 border-transparent')}>
+            Mensajes {convList.reduce((a:number,c:any)=>a+(c.unread||0),0)>0&&<span className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-black text-white" style={{background:'#FF007F'}}>{convList.reduce((a:number,c:any)=>a+(c.unread||0),0)}</span>}
+          </button>
+          <button onClick={()=>setTab('actividad')} className={cn('flex-1 py-2.5 text-sm font-bold border-b-2 transition-all relative',tab==='actividad'?'text-white border-white':'text-gray-500 border-transparent')}>
+            Actividad {unreadNotifs>0&&<span className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-black text-white" style={{background:'#FF007F'}}>{unreadNotifs}</span>}
+          </button>
+        </div>
+
+        {tab==='mensajes' && (
           <div>
-            {(!convs || !Array.isArray(convs) || convs.length === 0) ? (
-              <div className="text-center py-16"><MessageCircle size={48} className="mx-auto text-gray-700 mb-3"/><p className="text-gray-400">Sin mensajes todavía</p></div>
+            {/* Contactos sugeridos — estilo TikTok stories */}
+            {Array.isArray(ranking) && ranking.length > 0 && (
+              <div className="px-4 py-3">
+                <div className="flex gap-4 overflow-x-auto pb-1" style={{scrollbarWidth:'none'}}>
+                  {ranking.slice(0,8).map((u:RankingEntry)=>(
+                    <button key={u._id} onClick={()=>setLocation(`/messages/${u._id}`)} className="flex flex-col items-center gap-1.5 flex-shrink-0">
+                      <div className="relative">
+                        <div className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center" style={{background:'#7c3aed',border:'2px solid #FF007F'}}>
+                          {u.avatarUrl?<img src={u.avatarUrl} alt={u.username} className="w-full h-full object-cover"/>:<span className="text-white font-bold text-lg">{u.username?.[0]?.toUpperCase()}</span>}
+                        </div>
+                      </div>
+                      <span className="text-gray-400 text-[10px] max-w-[56px] truncate">{u.username}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="border-t mx-4 mb-2" style={{borderColor:'#1e1e2a'}}/>
+
+            {/* Lista conversaciones */}
+            {loading ? <div className="flex justify-center py-8"><Spinner/></div> : convList.length === 0 ? (
+              <div className="text-center py-16 px-4">
+                <MessageCircle size={48} className="mx-auto text-gray-700 mb-3"/>
+                <p className="text-white font-bold mb-1">Sin mensajes todavía</p>
+                <p className="text-gray-500 text-sm mb-4">Busca usuarios y empieza a chatear</p>
+                <button onClick={()=>setLocation('/search')} className="px-6 py-2.5 rounded-full font-bold text-black text-sm" style={{background:'#00F5FF'}}>Buscar usuarios</button>
+              </div>
             ) : (
-              (Array.isArray(convs)?convs:[]).map((c:Conversation) => (
+              convList.map((c:Conversation) => (
                 <button key={c.user._id} onClick={()=>setLocation(`/messages/${c.user._id}`)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors">
-                  <Av u={c.user} s={48}/>
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="flex items-center justify-between"><span className="text-white font-semibold text-sm flex items-center gap-1.5">{c.user.username}{c.user.isAI && <AIBadge/>}</span><span className="text-gray-500 text-xs">{ago(c.lastMessage.createdAt)}</span></div>
-                    <p className="text-gray-400 text-xs truncate mt-0.5">{c.lastMessage.text}</p>
+                  <div className="relative flex-shrink-0">
+                    <Av u={c.user} s={52}/>
+                    {c.unread>0&&<div className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black text-white" style={{background:'#FF007F'}}>{c.unread}</div>}
                   </div>
-                  {c.unread>0&&<span className="w-5 h-5 rounded-full text-xs font-bold text-black flex items-center justify-center flex-shrink-0" style={{background:'#FF007F'}}>{c.unread}</span>}
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-white font-semibold text-sm flex items-center gap-1">{c.user.username}{c.user.isAI&&<AIBadge/>}</span>
+                      <span className="text-gray-500 text-xs">{ago(c.lastMessage.createdAt)}</span>
+                    </div>
+                    <p className={cn("text-xs truncate",c.unread>0?'text-white font-medium':'text-gray-400')}>{c.lastMessage.text}</p>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {tab==='actividad' && (
+          <div>
+            {notifList.length === 0 ? (
+              <div className="text-center py-16"><Bell size={48} className="mx-auto text-gray-700 mb-3"/><p className="text-gray-400">Sin actividad todavía</p></div>
+            ) : (
+              notifList.map((n:Notification)=>(
+                <button key={n._id} onClick={()=>n.fromUserId?._id&&setLocation(`/user/${n.fromUserId._id}`)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors">
+                  <div className="relative flex-shrink-0">
+                    <Av u={n.fromUserId} s={48}/>
+                    <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center text-xs" style={{background:'#1e1e2a',border:'1.5px solid #0b0b12'}}>
+                      {n.type==='nomination'?'🎯':n.type==='chain_continued'?'⛓️':n.type==='liked'?'❤️':n.type==='followed'?'👤':'🏆'}
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="text-white text-sm">{n.message}</p>
+                    <p className="text-gray-500 text-xs mt-0.5">{ago(n.createdAt)}</p>
+                  </div>
+                  {!n.read&&<div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:'#FF007F'}}/>}
                 </button>
               ))
             )}
