@@ -310,13 +310,19 @@ function CommentsPanel({ videoId, onClose }: { videoId: string; onClose: () => v
     try { const r=await fetch(`${API}/api/videos/${videoId}/comments`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({text})}); const c=await r.json(); if(r.ok){setData((p:Comment[])=>[c,...(Array.isArray(p)?p:[])]);setText('');} } finally{setSending(false);}
   };
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl flex flex-col" style={{background:'#13131f',border:'1px solid #1e1e2a',maxHeight:'70vh'}}>
-      <div className="flex items-center justify-between p-4 border-b" style={{borderColor:'#1e1e2a'}}><h3 className="font-bold text-white">Comentarios</h3><button onClick={onClose}><X size={18} className="text-gray-400"/></button></div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+    <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl flex flex-col" style={{background:'#13131f',border:'1px solid #1e1e2a',maxHeight:'75svh',paddingBottom:'env(safe-area-inset-bottom,0px)'}}>
+      <div className="flex items-center justify-between p-4 border-b flex-shrink-0" style={{borderColor:'#1e1e2a'}}><h3 className="font-bold text-white">Comentarios</h3><button onClick={onClose}><X size={18} className="text-gray-400"/></button></div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
         {(Array.isArray(comments)?comments:[]).map((c:Comment)=><div key={c._id} className="flex gap-3"><Av u={c.userId} s={32}/><div className="flex-1"><span className="text-xs font-bold text-white">{c.userId?.username} </span><span className="text-xs text-gray-400">{c.text}</span><div className="text-xs text-gray-600 mt-0.5">{ago(c.createdAt)}</div></div></div>)}
-        {(!comments||comments.length===0)&&<p className="text-center text-gray-500 text-sm py-8">Sin comentarios</p>}
+        {(!comments||comments.length===0)&&<p className="text-center text-gray-500 text-sm py-8">Sin comentarios aún</p>}
       </div>
-      {user&&<div className="p-4 border-t flex gap-2" style={{borderColor:'#1e1e2a'}}><Av u={user} s={32}/><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Añade un comentario..." className="flex-1 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/><button onClick={send} disabled={sending||!text.trim()} className="p-2 rounded-xl disabled:opacity-50" style={{background:'#00F5FF'}}><Send size={16} className="text-black"/></button></div>}
+      <div className="p-4 border-t flex-shrink-0 flex gap-2" style={{borderColor:'#1e1e2a'}}>
+        {user ? (
+          <><Av u={user} s={32}/><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Añade un comentario..." className="flex-1 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/><button onClick={send} disabled={sending||!text.trim()} className="p-2 rounded-xl disabled:opacity-50 flex-shrink-0" style={{background:'#00F5FF'}}><Send size={16} className="text-black"/></button></>
+        ) : (
+          <Link href="/auth" onClick={onClose} className="w-full py-2.5 rounded-xl text-center text-sm font-bold text-black" style={{background:'#00F5FF'}}>Entra para comentar</Link>
+        )}
+      </div>
     </div>
   );
 }
@@ -349,7 +355,7 @@ function FeedPage() {
       {commentId&&<CommentsPanel videoId={commentId} onClose={()=>setCommentId(null)}/>}
       {challenge&&<div className="fixed top-14 left-0 right-0 z-30 pointer-events-none"><div className="max-w-md mx-auto px-4 pt-2"><div className="rounded-xl px-3 py-2 pointer-events-auto flex items-center gap-2" style={{background:'rgba(11,11,18,0.85)',border:'1px solid #1e1e2a',backdropFilter:'blur(10px)'}}><Zap size={14} className="text-yellow-400"/><span className="text-xs font-semibold text-white flex-1 truncate">{challenge.title}</span><span className="text-xs text-gray-400">{left(challenge.expiresAt)}</span></div></div></div>}
       {list.map((v:DominoVideo,idx:number)=>(
-        <div key={v._id} className="relative w-full snap-start flex-shrink-0 overflow-hidden bg-black" style={{height:'calc(100vh - 112px)'}}>
+        <div key={v._id} className="relative w-full snap-start flex-shrink-0 overflow-hidden bg-black" style={{height:'calc(100svh - 112px)'}}>
           {v.videoUrl?<video ref={el=>{videoRefs.current[idx]=el;}} src={v.videoUrl} className="absolute inset-0 w-full h-full object-cover" loop playsInline muted onDoubleClick={()=>doLike(v._id)}/>:v.thumbnailUrl?<img src={v.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover"/>:<div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><Camera size={48} className="text-gray-600"/></div>}
           <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.85) 0%,rgba(0,0,0,0.1) 50%,transparent 100%)'}}/>
           <div className="absolute bottom-16 left-4 right-20 z-10">
