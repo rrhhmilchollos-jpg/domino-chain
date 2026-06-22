@@ -4,7 +4,6 @@ const Live = require('../models/Live');
 const Gift = require('../models/Gift');
 const Video = require('../models/Video');
 
-// LiveKit token generation + grabación (Egress)
 let AccessToken, EgressClient, EncodedFileOutput, EncodedFileType, DirectFileOutput;
 try {
   const livekit = require('livekit-server-sdk');
@@ -17,7 +16,6 @@ try {
   console.warn('livekit-server-sdk no instalado — lives desactivados');
 }
 
-// Cloudinary para subir grabaciones de directos
 let cloudinary = null;
 try {
   const { v2 } = require('cloudinary');
@@ -43,26 +41,21 @@ async function generateLivekitToken(roomName, userId, username, isHost = false) 
   const apiKey = process.env.LIVEKIT_API_KEY;
   const apiSecret = process.env.LIVEKIT_API_SECRET;
   if (!apiKey || !apiSecret) return null;
-
   const at = new AccessToken(apiKey, apiSecret, { identity: userId, name: username });
   at.addGrant({
     roomJoin: true,
     room: roomName,
-    canPublish: isHost,      // solo el host publica video/audio
-    canSubscribe: true,      // todos pueden ver
-    canPublishData: true     // todos pueden enviar mensajes de chat (host y espectadores)
+    canPublish: isHost,
+    canSubscribe: true,
+    canPublishData: true
   });
-  return await at.toJwt(); // v2 del SDK: toJwt() devuelve una Promise
+  return await at.toJwt();
 }
 
 function getLivekitUrl() {
   return process.env.LIVEKIT_URL || null;
 }
 
-// ===== Grabación automática (LiveKit Egress -> fichero temporal -> Cloudinary) =====
-// Estrategia: LiveKit graba a un fichero local temporal en /tmp, y al terminar
-// el live subimos ese fichero a Cloudinary. No necesita S3 ni R2.
-// Solo necesita CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.
 const fs = require('fs');
 const path = require('path');
 
@@ -77,7 +70,6 @@ function getEgressClient() {
   return new EgressClient(host, process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
 }
 
-// Mapa en memoria: egressId -> ruta del fichero temporal
 const egressFiles = {};
 
 async function startRecording(roomName) {
@@ -108,16 +100,12 @@ async function stopRecording(egressId) {
   } catch (e) {
     console.error('Error al detener egress:', e.message);
   }
-
-  // Esperar un momento a que el fichero se cierre
   await new Promise(r => setTimeout(r, 4000));
-
   const tmpPath = egressFiles[egressId];
   if (!tmpPath || !fs.existsSync(tmpPath)) {
     console.warn('Fichero de grabación no encontrado:', tmpPath);
     return null;
   }
-
   try {
     console.log(`☁️ Subiendo grabación a Cloudinary: ${tmpPath}`);
     const result = await cloudinary.uploader.upload(tmpPath, {
@@ -126,7 +114,6 @@ async function stopRecording(egressId) {
       public_id: `live-${egressId}`,
       overwrite: true,
     });
-    // Limpiar fichero temporal
     try { fs.unlinkSync(tmpPath); } catch {}
     delete egressFiles[egressId];
     console.log(`✅ Grabación subida: ${result.secure_url}`);
@@ -137,7 +124,7 @@ async function stopRecording(egressId) {
   }
 }
 
-// GET /api/lives — lives activos
+// GET /api/lives
 router.get('/', async (req, res) => {
   try {
     const lives = await Live.find({ status: 'active' })
@@ -151,21 +138,17 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/lives — crear live
+// POST /api/lives
 router.post('/', auth, async (req, res) => {
   try {
     const { title, description, category, isBattle } = req.body;
     if (!title) return res.status(400).json({ error: 'Título requerido' });
-
-    // Terminar lives anteriores del usuario
     await Live.updateMany(
       { userId: req.user._id, status: 'active' },
       { status: 'ended', endedAt: new Date() }
     );
-
     const roomName = generateRoomName(req.user._id);
     const token = await generateLivekitToken(roomName, req.user._id.toString(), req.user.username, true);
-
     const live = await Live.create({
       userId: req.user._id,
       title,
@@ -176,39 +159,33 @@ router.post('/', auth, async (req, res) => {
       isBattle: isBattle || false,
       status: 'active'
     });
-
-    // Grabación automática si está configurada (no bloquea la creación del live si falla)
     const egressId = await startRecording(roomName);
     if (egressId) await Live.findByIdAndUpdate(live._id, { egressId });
-
     await live.populate('userId', 'username avatarUrl flag');
-
     res.status(201).json({ live, token, roomName, livekitUrl: getLivekitUrl(), recording: !!egressId });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// POST /api/lives/:id/join — conectar a un live (host o espectador, se detecta aquí)
+// POST /api/lives/:id/join
 router.post('/:id/join', auth, async (req, res) => {
   try {
-    const live = await Live.findById(req.params.id).populate('userId', 'username avatarUrl flag').populate('battleOpponentId', 'username avatarUrl flag');
+    const live = await Live.findById(req.params.id)
+      .populate('userId', 'username avatarUrl flag')
+      .populate('battleOpponentId', 'username avatarUrl flag');
     if (!live || live.status !== 'active') return res.status(404).json({ error: 'Live no encontrado o terminado' });
 
-    // BUG ARREGLADO: antes /join siempre emitía un token de espectador
-    // (canPublish:false), incluso si quien lo pedía era el propio dueño
-    // del live (p.ej. al recargar la página y perder el token guardado
-    // en sessionStorage al crearlo). Ahora se comprueba aquí de forma
-    // fiable, así el host siempre puede publicar venga de donde venga.
+    // Comprobar si el usuario está bloqueado
+    if (live.blockedUserIds && live.blockedUserIds.map(id => id.toString()).includes(req.user._id.toString())) {
+      return res.status(403).json({ error: 'blocked' });
+    }
+
     const isHost = live.userId._id.toString() === req.user._id.toString();
-    // El rival de una batalla también publica su propia cámara — su
-    // identidad es su userId real (nunca un nombre inventado), así el
-    // visor lo reconoce por su cuenta real igual que al host.
     const isOpponent = !!live.battleOpponentId && live.battleOpponentId._id.toString() === req.user._id.toString();
     const token = await generateLivekitToken(live.roomName, req.user._id.toString(), req.user.username, isHost || isOpponent);
 
     if (!isHost && !isOpponent) {
-      // Contador en vivo + espectadores únicos reales (no simulados)
       const updated = await Live.findByIdAndUpdate(live._id, {
         $inc: { viewerCount: 1 },
         $addToSet: { viewerIds: req.user._id }
@@ -235,9 +212,114 @@ router.post('/:id/leave', auth, async (req, res) => {
   }
 });
 
-// POST /api/lives/:id/battle/invite — el host invita a OTRA CUENTA REAL a la
-// batalla VS (nunca un nombre inventado). Solo el host puede invitar, y solo
-// si el live está marcado como isBattle.
+// POST /api/lives/:id/request — espectador solicita unirse al live
+router.post('/:id/request', auth, async (req, res) => {
+  try {
+    const live = await Live.findById(req.params.id).populate('userId', 'username');
+    if (!live || live.status !== 'active') return res.status(404).json({ error: 'Live no encontrado' });
+    if (live.userId._id.toString() === req.user._id.toString()) return res.status(400).json({ error: 'Eres el host' });
+
+    const Notification = require('../models/Notification');
+    const existing = await Notification.findOne({
+      userId: live.userId._id,
+      type: 'join_request',
+      fromUserId: req.user._id,
+      liveId: live._id,
+      read: false
+    });
+    if (existing) return res.status(409).json({ error: 'Ya tienes una solicitud pendiente' });
+
+    await Notification.create({
+      userId: live.userId._id,
+      type: 'join_request',
+      fromUserId: req.user._id,
+      liveId: live._id,
+      message: `${req.user.username} quiere unirse a tu directo`,
+    });
+
+    res.status(201).json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/lives/:id/requests — host ve solicitudes pendientes
+router.get('/:id/requests', auth, async (req, res) => {
+  try {
+    const live = await Live.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!live) return res.status(403).json({ error: 'No eres el host' });
+
+    const Notification = require('../models/Notification');
+    const requests = await Notification.find({
+      userId: req.user._id,
+      type: 'join_request',
+      liveId: live._id,
+      read: false
+    }).populate('fromUserId', 'username avatarUrl flag');
+
+    res.json(requests);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/lives/:id/request/:userId/accept — host acepta solicitud
+router.post('/:id/request/:userId/accept', auth, async (req, res) => {
+  try {
+    const live = await Live.findOne({ _id: req.params.id, userId: req.user._id, status: 'active' });
+    if (!live) return res.status(404).json({ error: 'Live no encontrado o no eres el host' });
+    if (live.battleOpponentId) return res.status(409).json({ error: 'Ya hay un co-host en este live' });
+
+    live.battleOpponentId = req.params.userId;
+    await live.save();
+
+    const Notification = require('../models/Notification');
+    await Notification.create({
+      userId: req.params.userId,
+      type: 'join_accepted',
+      fromUserId: req.user._id,
+      liveId: live._id,
+      message: `${req.user.username} aceptó tu solicitud — ¡ya puedes entrar al directo!`,
+    });
+    await Notification.updateMany(
+      { userId: req.user._id, type: 'join_request', fromUserId: req.params.userId, liveId: live._id },
+      { read: true }
+    );
+
+    await live.populate('userId', 'username avatarUrl flag');
+    await live.populate('battleOpponentId', 'username avatarUrl flag');
+    res.json({ ok: true, live });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/lives/:id/request/:userId/reject — host rechaza solicitud
+router.post('/:id/request/:userId/reject', auth, async (req, res) => {
+  try {
+    const live = await Live.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!live) return res.status(404).json({ error: 'Live no encontrado' });
+
+    const Notification = require('../models/Notification');
+    await Notification.create({
+      userId: req.params.userId,
+      type: 'join_rejected',
+      fromUserId: req.user._id,
+      liveId: live._id,
+      message: `${req.user.username} no aceptó tu solicitud de unirte al directo`,
+    });
+    await Notification.updateMany(
+      { userId: req.user._id, type: 'join_request', fromUserId: req.params.userId, liveId: live._id },
+      { read: true }
+    );
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/lives/:id/battle/invite
 router.post('/:id/battle/invite', auth, async (req, res) => {
   try {
     const { userId } = req.body;
@@ -246,7 +328,6 @@ router.post('/:id/battle/invite', auth, async (req, res) => {
 
     const live = await Live.findOne({ _id: req.params.id, userId: req.user._id, status: 'active' });
     if (!live) return res.status(404).json({ error: 'Live no encontrado' });
-    if (!live.isBattle) return res.status(400).json({ error: 'Este live no está en modo batalla' });
 
     const Notification = require('../models/Notification');
     await Notification.create({
@@ -263,9 +344,7 @@ router.post('/:id/battle/invite', auth, async (req, res) => {
   }
 });
 
-// POST /api/lives/:id/battle/accept — el usuario invitado acepta y se
-// convierte en battleOpponentId con su cuenta real. A partir de aquí /join
-// le dará permiso de publicar su propia cámara junto a la del host.
+// POST /api/lives/:id/battle/accept
 router.post('/:id/battle/accept', auth, async (req, res) => {
   try {
     const live = await Live.findById(req.params.id);
@@ -287,13 +366,37 @@ router.post('/:id/battle/accept', auth, async (req, res) => {
   }
 });
 
-// POST /api/lives/:id/battle/decline — el invitado rechaza, simplemente no pasa nada más
+// POST /api/lives/:id/battle/decline
 router.post('/:id/battle/decline', auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// DELETE /api/lives/:id — terminar live. Devuelve el resumen real (espectadores
-// únicos, pico simultáneo, regalos) y la URL de la grabación si la hubo.
+// POST /api/lives/:id/block — bloquear espectador
+router.post('/:id/block', auth, async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const live = await Live.findOne({ _id: req.params.id, userId: req.user._id, status: 'active' });
+    if (!live) return res.status(404).json({ error: 'Live no encontrado' });
+
+    await Live.findByIdAndUpdate(live._id, { $addToSet: { blockedUserIds: userId } });
+
+    // Intentar expulsar de la sala LiveKit
+    try {
+      const lkUrl = getLivekitUrl()?.replace(/^wss?:\/\//, 'https://');
+      if (lkUrl && AccessToken) {
+        const { RoomServiceClient } = require('livekit-server-sdk');
+        const svc = new RoomServiceClient(lkUrl, process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
+        await svc.removeParticipant(live.roomName, userId);
+      }
+    } catch { /* silencioso */ }
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/lives/:id
 router.delete('/:id', auth, async (req, res) => {
   try {
     const live = await Live.findOne({ _id: req.params.id, userId: req.user._id });
@@ -325,8 +428,7 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
-// POST /api/lives/:id/publish-as-video — publica la grabación del directo como
-// un video normal en el feed de DOMINO (solo el dueño del live, y solo si hay grabación).
+// POST /api/lives/:id/publish-as-video
 router.post('/:id/publish-as-video', auth, async (req, res) => {
   try {
     const live = await Live.findOne({ _id: req.params.id, userId: req.user._id });
@@ -351,10 +453,21 @@ router.post('/:id/publish-as-video', auth, async (req, res) => {
   }
 });
 
-// GET /api/lives/catalog — catálogo de regalos
+// PATCH /api/lives/:id/recording
+router.patch('/:id/recording', auth, async (req, res) => {
+  try {
+    const { recordingUrl } = req.body;
+    await Live.findOneAndUpdate({ _id: req.params.id, userId: req.user._id }, { recordingUrl });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/lives/catalog/gifts
 router.get('/catalog/gifts', (req, res) => {
   res.json(Gift.CATALOG || {
-    domino:  { name: 'Dominó',   emoji: '🁣', coins: 5,    points: 10   },
+    domino:  { name: 'Dominó',   emoji: '🎲', coins: 5,    points: 10   },
     chain:   { name: 'Cadena',   emoji: '⛓️', coins: 20,   points: 50   },
     star:    { name: 'Estrella', emoji: '⭐', coins: 50,   points: 100  },
     rocket:  { name: 'Cohete',   emoji: '🚀', coins: 100,  points: 200  },
@@ -363,8 +476,7 @@ router.get('/catalog/gifts', (req, res) => {
   });
 });
 
-// POST /api/lives/:id/gift — DEPRECATED: el envío de regalos vive ahora en
-// POST /api/coins/gift (esta versión nunca restaba monedas al remitente).
+// POST /api/lives/:id/gift — DEPRECATED
 router.post('/:id/gift', auth, async (req, res) => {
   res.status(410).json({ error: 'Usa POST /api/coins/gift' });
 });
