@@ -140,14 +140,27 @@ export default function FeedPage() {
   // Mezcla videos y lives: inserta un live cada 5 vídeos
   const feedItems: Array<{type:'video';data:DominoVideo}|{type:'live';data:LiveStream}> = [];
   let liveIdx = 0;
+  // Insertar todos los lives primero al inicio del feed (posición 2),
+  // igual que TikTok que muestra los lives activos muy arriba del feed.
+  // Después de cada 4 vídeos, otro live si hay más.
   videoList.forEach((v:DominoVideo, i:number) => {
+    // Insertar live después del 2º vídeo (posición prominente)
+    if (i === 2 && liveIdx < liveList.length) {
+      feedItems.push({type:'live', data:liveList[liveIdx]});
+      liveIdx++;
+    }
     feedItems.push({type:'video', data:v});
-    // Cada 5 vídeos, inserta el siguiente live activo (si hay)
-    if ((i+1) % 5 === 0 && liveIdx < liveList.length) {
+    // Después cada 4 vídeos, otro live
+    if (i > 2 && (i - 2) % 4 === 0 && liveIdx < liveList.length) {
       feedItems.push({type:'live', data:liveList[liveIdx]});
       liveIdx++;
     }
   });
+  // Si hay lives pero pocos vídeos, ponerlos al final igual
+  while (liveIdx < liveList.length) {
+    feedItems.push({type:'live', data:liveList[liveIdx]});
+    liveIdx++;
+  }
 
   return (
     <div className="fixed inset-0 overflow-y-scroll snap-y snap-mandatory" style={{background:'#000'}}>
@@ -201,10 +214,22 @@ export default function FeedPage() {
 
               {/* Acciones derecha */}
               <div className="absolute right-2.5 bottom-3 z-10 flex flex-col items-center gap-4">
-                <Link href={`/user/${v.userId?._id}`} className="relative mb-1">
-                  <Av u={v.userId} s={46}/>
-                  {showFollowBadge&&<button onClick={(e)=>quickFollow(e,v.userId._id)} className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full flex items-center justify-center" style={{background:'#FE2C55',border:'1.5px solid #000'}}><Plus size={12} className="text-white" strokeWidth={3.5}/></button>}
-                </Link>
+                {(() => {
+                  const authorLive = liveList.find(l => l.userId?._id === v.userId?._id);
+                  return (
+                    <button onClick={()=>v.userId?._id&&setLocation(authorLive ? `/live/${authorLive._id}` : `/user/${v.userId._id}`)} className="relative mb-1">
+                      {authorLive && (
+                        <div className="absolute -top-5 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-black text-white z-10 whitespace-nowrap" style={{background:'#FF007F'}}>
+                          <div className="w-1 h-1 rounded-full bg-white animate-pulse"/>LIVE
+                        </div>
+                      )}
+                      <div className={authorLive ? 'ring-2 ring-[#FF007F] rounded-full' : ''}>
+                        <Av u={v.userId} s={46}/>
+                      </div>
+                      {showFollowBadge&&!authorLive&&<button onClick={(e)=>quickFollow(e,v.userId._id)} className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full flex items-center justify-center" style={{background:'#FE2C55',border:'1.5px solid #000'}}><Plus size={12} className="text-white" strokeWidth={3.5}/></button>}
+                    </button>
+                  );
+                })()}
                 <button onClick={()=>doLike(v._id)} className="flex flex-col items-center gap-1">
                   <Heart size={32} style={shadow} className={liked.has(v._id)?'fill-red-500 text-red-500':'text-white'}/>
                   <span className="text-xs text-white font-semibold" style={shadow}>{fmt((v.likes?.length||0)+(liked.has(v._id)?1:0))}</span>
@@ -241,7 +266,7 @@ export default function FeedPage() {
 
             {/* Leyenda debajo del video */}
             <div className="flex-shrink-0 flex items-start justify-between gap-3 px-3.5 pt-2.5 pb-2" style={{background:'#000'}}>
-              <Link href={`/user/${v.userId?._id}`} className="flex-1 min-w-0">
+              <button onClick={()=>v.userId?._id&&setLocation(`/user/${v.userId._id}`)} className="flex-1 min-w-0 text-left">
                 <p className="text-white font-bold text-[15px] truncate">@{v.userId?.username}</p>
                 {v.remixOf&&<div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{background:'rgba(124,58,237,0.35)',border:'1px solid rgba(124,58,237,0.6)',color:'#c4b5fd'}}>{v.remixOf.type==='duet'?'🎭 Dueto':'✂️ Stitch'} con @{v.remixOf.authorUsername}</div>}
                 {v.caption
@@ -249,8 +274,8 @@ export default function FeedPage() {
                   : <p className="text-gray-400 text-sm mt-1">{v.userId?.flag} {v.userId?.city} · ⛓️ Cadena {v.chainDepth+1} · {ago(v.createdAt)}</p>
                 }
                 {v.sound&&<span onClick={(e)=>{e.preventDefault();e.stopPropagation();setLocation(`/camera?soundId=${v.sound!.id}`);}} className="flex items-center gap-1 mt-1"><Music2 size={11} className="text-gray-300 flex-shrink-0"/><span className="text-gray-300 text-xs truncate">{v.sound.title}</span></span>}
-              </Link>
-              <Av u={v.userId} s={34}/>
+              </button>
+              <button onClick={()=>v.userId?._id&&setLocation(`/user/${v.userId._id}`)}><Av u={v.userId} s={34}/></button>
             </div>
 
             {v.hashtags&&v.hashtags.length>0&&(
