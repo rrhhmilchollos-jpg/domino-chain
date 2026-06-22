@@ -478,6 +478,9 @@ function ProfilePage({ userId }: { userId?: string }) {
   const { data: userVideos } = useApi(targetId ? `/api/users/${targetId}/videos` : '', [targetId]);
   const { data: nd } = useApi('/api/notifications', [me?._id]);
   const unread = Array.isArray(nd) ? nd.filter((n:Notification)=>!n.read).length : 0;
+  // Comprobar si el usuario tiene un live activo — para mostrar botón de unirse
+  const { data: lives } = useApi('/api/lives', [targetId]);
+  const activeLive = Array.isArray(lives) ? lives.find((l:LiveStream) => l.userId?._id === targetId) : null;
   const [tab, setTab] = useState<'videos'|'private'|'repost'|'saved'|'likes'>('videos');
   const [following, setFollowing] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<DominoVideo|null>(null);
@@ -646,16 +649,25 @@ function ProfilePage({ userId }: { userId?: string }) {
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2 w-full max-w-xs">
-              <button onClick={doFollow} className="flex-1 py-2 rounded-lg font-bold text-sm" style={{background:following?'transparent':'#FF007F',border:following?'1px solid #666':'none',color:following?'white':'white'}}>
-                {following?'Siguiendo':'Seguir'}
-              </button>
-              <button onClick={()=>setLocation(`/messages/${targetId}`)} className="flex-1 py-2 rounded-lg font-semibold text-white text-sm border border-gray-600">
-                Mensaje
-              </button>
-              <button className="w-9 h-9 rounded-lg border border-gray-600 flex items-center justify-center flex-shrink-0">
-                <ChevronRight size={16} className="text-white"/>
-              </button>
+            <div className="flex flex-col items-center gap-2 w-full max-w-xs">
+              {/* Botón de unirse al live si el usuario está en directo */}
+              {activeLive && (
+                <button onClick={()=>setLocation(`/live/${activeLive._id}`)} className="w-full py-2.5 rounded-lg font-bold text-white flex items-center justify-center gap-2" style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)',boxShadow:'0 0 15px rgba(255,0,127,0.4)'}}>
+                  <div className="w-2 h-2 rounded-full bg-white animate-pulse"/>
+                  Ver directo de @{(profile||{}).username}
+                </button>
+              )}
+              <div className="flex items-center gap-2 w-full">
+                <button onClick={doFollow} className="flex-1 py-2 rounded-lg font-bold text-sm" style={{background:following?'transparent':'#FF007F',border:following?'1px solid #666':'none',color:following?'white':'white'}}>
+                  {following?'Siguiendo':'Seguir'}
+                </button>
+                <button onClick={()=>setLocation(`/messages/${targetId}`)} className="flex-1 py-2 rounded-lg font-semibold text-white text-sm border border-gray-600">
+                  Mensaje
+                </button>
+                <button className="w-9 h-9 rounded-lg border border-gray-600 flex items-center justify-center flex-shrink-0">
+                  <ChevronRight size={16} className="text-white"/>
+                </button>
+              </div>
             </div>
           )}
         </div>
