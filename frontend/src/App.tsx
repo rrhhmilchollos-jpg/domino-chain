@@ -1390,6 +1390,7 @@ function AppInner() {
         {/* FIX 1: ruta "/" usa HomeRoute en vez de HomePage directamente */}
         <Route path="/" component={HomeRoute}/>
         <Route path="/feed" component={FeedPage}/>
+        <Route path="/following" component={FeedPage}/>
         <Route path="/auth" component={AuthPage}/>
         <Route path="/create" component={CreatePage}/>
         <Route path="/camera" component={CameraPage}/>
