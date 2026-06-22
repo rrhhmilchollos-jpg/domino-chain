@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
-
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const challengeRoutes = require('./routes/challenges');
@@ -20,10 +19,8 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors({ origin: '*', credentials: false }));
 
-// El webhook de Stripe necesita el body SIN parsear para poder verificar la
-// firma (stripe-signature). Tiene que ir ANTES de express.json() global, si
-// no, cuando llegue aquí el body ya estaría parseado como objeto y la
-// verificación de firma fallaría siempre.
+// El webhook de Stripe necesita el body SIN parsear para verificar la firma.
+// Tiene que ir ANTES de express.json() global.
 app.post('/api/coins/webhook', express.raw({ type: 'application/json' }), coinsRoutes.stripeWebhookHandler);
 
 app.use(express.json({ limit: '50mb' }));
@@ -48,10 +45,35 @@ app.get('/api/health', (req, res) => res.json({
   version: '2.0.0'
 }));
 
-// Conectar MongoDB
+// Limpieza de lives "zombies" al arrancar
+// Cuando el servidor se reinicia (deploy, crash, etc.) los lives que estaban
+// activos quedan con status:'active' en MongoDB para siempre porque nadie
+// los cerró. Esto los marca como 'ended' automáticamente al arrancar,
+// igual que hace TikTok con sus sesiones huérfanas.
+async function cleanupZombieLives() {
+  try {
+    const Live = require('./models/Live');
+    const result = await Live.updateMany(
+      { status: 'active' },
+      { status: 'ended', endedAt: new Date() }
+    );
+    if (result.modifiedCount > 0) {
+      console.log(`🧹 Limpiados ${result.modifiedCount} lives zombies del reinicio anterior`);
+    }
+  } catch (e) {
+    console.warn('⚠️ No se pudieron limpiar lives zombies:', e.message);
+  }
+}
+
+// Conectar MongoDB y arrancar servidor
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/domino')
-  .then(() => {
+  .then(async () => {
     console.log('✅ MongoDB conectado');
+
+    // Limpiar lives zombies ANTES de arrancar el servidor
+    // para que los usuarios nunca vean un live "activo" que en realidad no existe
+    await cleanupZombieLives();
+
     app.listen(PORT, () => console.log(`🚀 Backend DOMINO v2.0 en http://localhost:${PORT}`));
   })
   .catch(err => {
