@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import LiveViewerPage from './pages/LiveViewerPage';
 
 function cn(...args: Parameters<typeof clsx>) { return twMerge(clsx(...args)); }
 
@@ -1422,60 +1423,6 @@ function CreateLivePage() {
           {error&&<p className="text-red-400 text-xs">{error}</p>}
           <button onClick={create} disabled={loading} className="w-full py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50" style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)'}}>{loading?<Spinner/>:<><Video size={18}/>Empezar Live</>}</button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ===================== LIVE VIEWER =====================
-function LiveViewerPage({ id }: { id: string }) {
-  const { user, token, refreshUser } = useAuth();
-  const { data: lives } = useApi('/api/lives', [id]);
-  const [msgs, setMsgs] = useState<{user:string;text:string;type?:string}[]>([{user:'Sistema',text:'¡Bienvenido! 🎲',type:'system'}]);
-  const [input, setInput] = useState(''); const [showGifts, setShowGifts] = useState(false);
-  const [giftAnim, setGiftAnim] = useState<string|null>(null); const [viewers, setViewers] = useState(0);
-  const chatRef = useRef<HTMLDivElement>(null);
-  const live = Array.isArray(lives)?lives.find((l:LiveStream)=>l._id===id):null;
-  useSEO({
-    title: live ? `🔴 ${live.userId?.isAI?'🤖 ':''}${live.title} — @${live.userId?.username}${live.userId?.isAI?' (IA)':''} en directo — DOMINO` : 'Live — DOMINO',
-    description: live ? `Sigue en directo a @${live.userId?.username}${live.userId?.isAI?' (cuenta de IA)':''}: ${live.title}. ${live.viewerCount||0} espectadores ahora en DOMINO.` : 'Live en DOMINO.',
-    path: `/live/${id}`,
-    image: live?.userId?.avatarUrl,
-    type: 'video.other',
-    jsonLd: live ? {
-      '@context':'https://schema.org', '@type':'BroadcastEvent',
-      name: live.title, isLiveBroadcast: true,
-      startDate: new Date().toISOString(),
-      organizer: { '@type':'Person', name: live.userId?.username }
-    } : null
-  });
-  useEffect(()=>{if(live)setViewers(live.viewerCount||0);},[live]);
-  useEffect(()=>{const t=setInterval(()=>setViewers(v=>Math.max(0,v+Math.floor(Math.random()*3-1))),5000);return()=>clearInterval(t);},[]);
-  useEffect(()=>{if(chatRef.current)chatRef.current.scrollTop=chatRef.current.scrollHeight;},[msgs]);
-  const sendMsg=()=>{if(!input.trim()||!user)return;setMsgs(m=>[...m,{user:user.username,text:input}]);setInput('');};
-  const sendGift=async(type:string)=>{
-    const g=GIFT_CATALOG[type];if((user?.coins||0)<g.coins){alert('Monedas insuficientes');return;}
-    const r=await fetch(`${API}/api/coins/gift`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({liveId:id,giftType:type,quantity:1})});
-    if(r.ok){setGiftAnim(`${g.emoji} ${g.name}`);setTimeout(()=>setGiftAnim(null),3000);setMsgs(m=>[...m,{user:user?.username||'Tú',text:`envió ${g.emoji} ${g.name}!`,type:'gift'}]);await refreshUser();}
-    else alert('Error al enviar regalo');setShowGifts(false);
-  };
-  if(!live)return<div className="min-h-screen flex items-center justify-center" style={{paddingTop:'80px',background:'#0b0b12'}}><div className="text-center"><div className="text-5xl mb-4">📡</div><p className="text-white font-bold mb-2">Live no encontrado</p><Link href="/live" className="text-sm font-semibold" style={{color:'#00F5FF'}}>Ver otros</Link></div></div>;
-  return(
-    <div className="fixed inset-0 flex" style={{paddingTop:'0',background:'#000'}}>
-      <div className="relative flex-1">
-        <div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}><div className="text-center"><Av u={live.userId} s={120}/><p className="text-white font-bold mt-4 text-xl flex items-center justify-center gap-2">@{live.userId?.username}{live.userId?.isAI && <AIBadge size="md"/>}</p><p className="text-gray-400 text-sm mt-1">{live.title}</p><div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full" style={{background:'rgba(255,0,127,0.2)',border:'1px solid #FF007F'}}><div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#FF007F'}}/><span className="text-white text-sm font-bold">{live.userId?.isAI ? '🤖 IA EN DIRECTO' : 'EN DIRECTO'}</span></div>{live.userId?.isAI && <p className="text-gray-500 text-xs mt-2 max-w-xs mx-auto">Este directo está generado y conducido por una inteligencia artificial, no por una persona real.</p>}</div></div>
-        <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-10"><div className="flex items-center gap-2"><div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE</div>{live.userId?.isAI && <AIBadge/>}<div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs text-white" style={{background:'rgba(0,0,0,0.6)'}}><Eye size={10}/>{Math.max(0,viewers)}</div></div><Link href="/live" className="p-1.5 rounded-full" style={{background:'rgba(0,0,0,0.6)'}}><X size={16} className="text-white"/></Link></div>
-        {giftAnim&&<div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center animate-bounce z-20"><div className="text-5xl mb-2">{giftAnim.split(' ')[0]}</div><p className="text-white font-bold">{giftAnim}</p></div>}
-        <div className="absolute bottom-4 left-2 flex items-center gap-2 z-10">
-          <button onClick={()=>setShowGifts(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold text-white" style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)'}}><Gift size={16}/>Regalar</button>
-          {user&&<div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold" style={{background:'rgba(0,0,0,0.6)',color:'#FFD700'}}>🪙 {(user.coins||0)}</div>}
-        </div>
-        {showGifts&&<div className="absolute bottom-16 left-2 z-20 rounded-2xl p-4 w-72" style={{background:'#13131f',border:'1px solid #1e1e2a'}}><div className="flex items-center justify-between mb-3"><h3 className="font-bold text-white text-sm">Enviar Regalo</h3><button onClick={()=>setShowGifts(false)}><X size={16} className="text-gray-400"/></button></div><div className="grid grid-cols-3 gap-2">{Object.entries(GIFT_CATALOG).map(([k,g])=><button key={k} onClick={()=>sendGift(k)} disabled={(user?.coins||0)<g.coins} className="flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-white/10 disabled:opacity-40 border border-transparent hover:border-[#FF007F]"><span className="text-2xl">{g.emoji}</span><span className="text-white text-xs font-bold">{g.name}</span><span className="text-yellow-400 text-xs">{g.coins}🪙</span></button>)}</div></div>}
-      </div>
-      <div className="w-72 flex flex-col" style={{background:'#13131f',borderLeft:'1px solid #1e1e2a'}}>
-        <div className="p-3 border-b flex items-center gap-2" style={{borderColor:'#1e1e2a'}}><Av u={live.userId} s={28}/><div><p className="text-white text-xs font-bold flex items-center gap-1.5">@{live.userId?.username}{live.userId?.isAI && <AIBadge/>}</p><p className="text-gray-400 text-xs truncate">{live.title}</p></div></div>
-        <div ref={chatRef} className="flex-1 overflow-y-auto p-3 space-y-2">{msgs.map((m,i)=><div key={i} className={cn('text-xs',m.type==='system'?'text-center text-gray-500':m.type==='gift'?'text-center':'')}>{m.type==='gift'?<span className="px-2 py-1 rounded-full font-bold" style={{background:'rgba(255,0,127,0.2)',color:'#FF007F'}}>🎁 {m.user} {m.text}</span>:m.type==='system'?<span>{m.text}</span>:<span><span className="font-bold" style={{color:'#00F5FF'}}>{m.user}: </span><span className="text-gray-300">{m.text}</span></span>}</div>)}</div>
-        {user&&<div className="p-3 border-t flex gap-2" style={{borderColor:'#1e1e2a'}}><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendMsg()} placeholder="Escribe algo..." className="flex-1 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}/><button onClick={sendMsg} className="p-2 rounded-xl" style={{background:'#00F5FF'}}><Send size={14} className="text-black"/></button></div>}
       </div>
     </div>
   );
