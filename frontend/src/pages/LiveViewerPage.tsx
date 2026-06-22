@@ -429,24 +429,27 @@ export default function LiveViewerPage({ id }: { id: string }) {
       <div className="relative w-full h-full">
 
         {/* Vídeo */}
-        {live.isBattle ? (
-          <div className="absolute inset-0 flex flex-row" style={{display:connState==='connected'?'flex':'none'}}>
+        {/* Pantalla dividida siempre que haya co-host — igual que TikTok */}
+        {live.battleOpponentId ? (
+          <div className="absolute inset-0 flex flex-col" style={{display:connState==='connected'?'flex':'none'}}>
+            {/* Host arriba */}
             <div className="relative flex-1 overflow-hidden">
               <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner?true:muted}/>
+              <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'rgba(0,0,0,0.5)'}}>@{live.userId?.username}</div>
             </div>
-            <div className="relative flex-1 overflow-hidden" style={{borderLeft:'2px solid #FF007F'}}>
+            {/* Separador */}
+            <div className="flex-shrink-0 h-0.5 w-full" style={{background: live.isBattle ? '#FF007F' : '#00F5FF'}}/>
+            {/* Co-host abajo */}
+            <div className="relative flex-1 overflow-hidden">
               <video ref={opponentVideoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOpponent?true:muted}/>
-              {!live.battleOpponentId && <div className="absolute inset-0 flex items-center justify-center px-2" style={{background:'#1a1a2e'}}><p className="text-gray-400 text-xs text-center">Esperando al rival...</p></div>}
+              <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'rgba(0,0,0,0.5)'}}>@{live.battleOpponentId?.username}</div>
+              {live.isBattle && (
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs font-black text-white" style={{background:'#FF007F'}}>VS ⚔️</div>
+              )}
             </div>
           </div>
         ) : (
-          <>
-            <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner||muted} style={{display:connState==='connected'?'block':'none'}}/>
-            {/* Panel del co-host si hay battleOpponentId pero no es batalla */}
-            {live.battleOpponentId && !live.isBattle && (
-              <video ref={opponentVideoRef} className="absolute bottom-32 right-2 w-28 rounded-xl object-cover border-2" style={{height:'50px',borderColor:'#00F5FF',display:connState==='connected'?'block':'none'}} autoPlay playsInline muted={isOpponent?true:muted}/>
-            )}
-          </>
+          <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner||muted} style={{display:connState==='connected'?'block':'none'}}/>
         )}
 
         {/* Placeholder mientras conecta */}
@@ -493,8 +496,21 @@ export default function LiveViewerPage({ id }: { id: string }) {
                 <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-black text-black flex items-center justify-center" style={{background:'#00F5FF'}}>{joinRequests.length}</span>
               </button>
             )}
-            {/* Botón invitar a batalla (host dentro del live) */}
-            {isOwner && connState === 'connected' && (
+            {/* Botón batalla — solo si hay co-host y no están ya en batalla */}
+            {isOwner && connState === 'connected' && live.battleOpponentId && !live.isBattle && (
+              <button onClick={async () => {
+                if (!token || !live._id || !live.battleOpponentId) return;
+                const r = await fetch(`${API}/api/lives/${live._id}/battle/invite`, {
+                  method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId: live.battleOpponentId._id })
+                });
+                if (r.ok) { setToast('⚔️ ¡Reto de batalla enviado!'); setTimeout(()=>setToast(null),3000); }
+              }} className="flex items-center gap-1 px-2 py-1.5 rounded-full text-xs font-bold text-white" style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)'}}>
+                <Swords size={13}/>⚔️ Batalla
+              </button>
+            )}
+            {/* Botón espadas general para invitar desde fuera */}
+            {isOwner && connState === 'connected' && !live.battleOpponentId && (
               <button onClick={() => setShowBattleInvite(s => !s)} className="p-1.5 rounded-full" style={{background:'rgba(255,0,127,0.2)',border:'1px solid #FF007F'}}>
                 <Swords size={16} className="text-white"/>
               </button>
