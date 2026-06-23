@@ -942,7 +942,12 @@ function CreateLivePage() {
   if(!user) return <div className="min-h-screen flex items-center justify-center" style={{background:'#0b0b12'}}><button onClick={()=>setLocation('/auth')} className="px-6 py-3 rounded-xl font-bold text-black" style={{background:'#00F5FF'}}>Entrar</button></div>;
   const create=async()=>{
     if(!form.title.trim())return setError('Escribe un título'); setError(''); setLoading(true);
-    try { const r=await fetch(`${API}/api/lives`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(form)}); const d=await r.json(); if(!r.ok)throw new Error(d.error||'Error'); setLocation(`/live/${d.live._id}`); } catch(e:any){setError(e.message);} finally{setLoading(false);}
+    try {
+      const r=await fetch(`${API}/api/lives`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(form)});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||'Error');
+      setLocation(`/live/${d.live._id}`);
+    } catch(e:any){setError(e.message);} finally{setLoading(false);}
   };
   return (
     <div className="min-h-screen" style={{background:'#0b0b12'}}>
@@ -977,57 +982,204 @@ function CreateLivePage() {
   );
 }
 
-// ===================== LIVE VIEWER =====================
+// ===================== LIVE VIEWER — con LiveKit vídeo real =====================
 function LiveViewerPage({ id }: { id: string }) {
-  const { user, token, refreshUser } = useAuth(); const [, setLocation] = useLocation();
-  const [live, setLive] = useState<LiveStream|null>(null); const [liveEnded, setLiveEnded] = useState(false);
+  const { user, token, refreshUser } = useAuth();
+  const [, setLocation] = useLocation();
+
+  // LiveKit state
+  const [room, setRoom] = useState<any>(null);
+  const [connected, setConnected] = useState(false);
+  const [participants, setParticipants] = useState<any[]>([]);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const roomRef = useRef<any>(null);
+
+  // Live metadata
+  const [live, setLive] = useState<LiveStream|null>(null);
+  const [liveEnded, setLiveEnded] = useState(false);
+  const [isHost, setIsHost] = useState(false);
   const liveRef = useRef<LiveStream|null>(null);
   useEffect(()=>{ liveRef.current=live; },[live]);
+
+  // Join LiveKit room
   useEffect(()=>{
-    const fetch_=async()=>{ try { const r=await fetch(`${API}/api/lives`,{headers:token?{Authorization:`Bearer ${token}`}:{}}); if(r.ok){const d=await r.json();const found=(Array.isArray(d)?d:[]).find((l:LiveStream)=>l._id===id);if(found&&(found.status==='active'||found.status==='live')){setLive(found);setLiveEnded(false);}else if(liveRef.current)setLiveEnded(true);} } catch{} };
-    fetch_(); const t=setInterval(fetch_,20000); return()=>clearInterval(t);
-  },[id,token]);
+    if(!token||!id) return;
+    let r: any = null;
+
+    const joinRoom = async () => {
+      try {
+        // 1. Get token + room info from backend
+        const res = await fetch(`${API}/api/lives/${id}/join`, {
+          method:'POST',
+          headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'}
+        });
+        if(!res.ok){ setLiveEnded(true); return; }
+        const data = await res.json();
+        setLive(data.live);
+        setIsHost(data.isHost);
+
+        if(!data.token || !data.livekitUrl) return;
+
+        // 2. Connect to LiveKit
+        const { Room, RoomEvent, Track } = await import('livekit-client');
+        r = new Room({ adaptiveStream:true, dynacast:true });
+        roomRef.current = r;
+
+        r.on(RoomEvent.ParticipantConnected, ()=>setParticipants([...r.participants.values()]));
+        r.on(RoomEvent.ParticipantDisconnected, ()=>setParticipants([...r.participants.values()]));
+        r.on(RoomEvent.TrackSubscribed, (track:any, pub:any, participant:any)=>{
+          if(track.kind===Track.Kind.Video && remoteVideoRef.current){
+            track.attach(remoteVideoRef.current);
+          }
+        });
+        r.on(RoomEvent.Disconnected, ()=>{
+          setConnected(false);
+          if(liveRef.current) setLiveEnded(true);
+        });
+
+        await r.connect(data.livekitUrl, data.token);
+        setConnected(true);
+        setRoom(r);
+        setParticipants([...r.participants.values()]);
+
+        // 3. If host, publish camera
+        if(data.isHost){
+          await r.localParticipant.enableCameraAndMicrophone();
+          const camPub = r.localParticipant.getTrackPublication(Track.Source.Camera);
+          if(camPub?.track && localVideoRef.current){
+            camPub.track.attach(localVideoRef.current);
+          }
+        }
+      } catch(e){ console.error('LiveKit error:', e); }
+    };
+
+    joinRoom();
+
+    return ()=>{
+      if(r) r.disconnect();
+      // Leave backend counter
+      fetch(`${API}/api/lives/${id}/leave`,{method:'POST',headers:{Authorization:`Bearer ${token}`}}).catch(()=>{});
+    };
+  },[id, token]);
+
+  // Poll for live status if NOT connected via LiveKit (fallback)
+  useEffect(()=>{
+    if(connected) return;
+    const fetch_ = async () => {
+      try {
+        const r=await fetch(`${API}/api/lives`,{headers:token?{Authorization:`Bearer ${token}`}:{}});
+        if(r.ok){ const d=await r.json(); const found=(Array.isArray(d)?d:[]).find((l:LiveStream)=>l._id===id); if(!found||(found.status!=='active'&&found.status!=='live')){ if(liveRef.current)setLiveEnded(true); } else setLive(found); }
+      } catch{}
+    };
+    fetch_();
+    const t=setInterval(fetch_,20000);
+    return()=>clearInterval(t);
+  },[id,token,connected]);
+
+  // End live (host only)
+  const endLive = async () => {
+    if(!token) return;
+    await fetch(`${API}/api/lives/${id}`,{method:'DELETE',headers:{Authorization:`Bearer ${token}`}});
+    if(roomRef.current) roomRef.current.disconnect();
+    setLocation('/live');
+  };
+
+  // Chat & gifts
   const [msgs, setMsgs] = useState<{id:number;user:string;text:string;type?:string}[]>([{id:0,user:'Sistema',text:'¡Bienvenido al directo! 🎲',type:'system'}]);
   const [input, setInput] = useState(''); const [showGifts, setShowGifts] = useState(false);
   const [giftAnim, setGiftAnim] = useState<{emoji:string;name:string;user:string}|null>(null);
   const [viewers, setViewers] = useState(0); const [following, setFollowing] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
+
   useEffect(()=>{ if(live)setViewers(live.viewerCount||0); },[live]);
-  useEffect(()=>{ const t=setInterval(()=>setViewers(v=>Math.max(0,v+Math.floor(Math.random()*5-2))),4000); return()=>clearInterval(t); },[]);
+  useEffect(()=>{ const t=setInterval(()=>setViewers(v=>Math.max(0,v+Math.floor(Math.random()*3-1))),5000); return()=>clearInterval(t); },[]);
   useEffect(()=>{ if(chatRef.current)chatRef.current.scrollTop=chatRef.current.scrollHeight; },[msgs]);
   useEffect(()=>{
-    const F=['🔥🔥','que guay!!','sigue así 💪','increíble','😍😍','me encanta','❤️❤️'];
+    const F=['🔥🔥','que guay!!','sigue así 💪','increíble','😍😍','me encanta','❤️❤️','wow'];
     const U=['carlos_m','lucia_b','yuki_t','pablo_c','nina_r'];
-    const t=setInterval(()=>{setMsgs(p=>[...p.slice(-40),{id:Date.now(),user:U[Math.floor(Math.random()*U.length)],text:F[Math.floor(Math.random()*F.length)]}]);},2500+Math.random()*3000);
+    const t=setInterval(()=>{ setMsgs(p=>[...p.slice(-40),{id:Date.now(),user:U[Math.floor(Math.random()*U.length)],text:F[Math.floor(Math.random()*F.length)]}]); },2500+Math.random()*3000);
     return()=>clearInterval(t);
   },[]);
+
   const sendMsg=()=>{ if(!input.trim()||!user)return; setMsgs(m=>[...m,{id:Date.now(),user:user.username,text:input}]); setInput(''); };
   const sendGift=async(type:string)=>{
     const g=GIFT_CATALOG[type]; if((user?.coins||0)<g.coins){alert('Monedas insuficientes');return;}
     setShowGifts(false); setGiftAnim({emoji:g.emoji,name:g.name,user:user?.username||''}); setTimeout(()=>setGiftAnim(null),3000);
     setMsgs(m=>[...m,{id:Date.now(),user:user?.username||'',text:`envió ${g.emoji} ${g.name}`,type:'gift'}]);
-    if(token){await fetch(`${API}/api/coins/gift`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({liveId:id,giftType:type,quantity:1})});await refreshUser();}
+    if(token){await fetch(`${API}/api/coins/gift`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({liveId:id,giftType:type,quantity:1})}); await refreshUser();}
   };
   const doFollow=async()=>{ if(!token||!live)return; setFollowing(f=>!f); await fetch(`${API}/api/users/${live.userId._id}/follow`,{method:'POST',headers:{Authorization:`Bearer ${token}`}}); };
-  if(liveEnded) return <div className="fixed inset-0 flex flex-col items-center justify-center" style={{background:'#0b0b12'}}><div className="text-5xl mb-4">📡</div><h2 className="text-white font-black text-xl mb-2">El directo ha terminado</h2><p className="text-gray-400 text-sm mb-8">El streamer ha finalizado la transmisión</p><button onClick={()=>setLocation('/live')} className="px-6 py-3 rounded-xl font-bold text-white" style={{background:'#FF007F'}}>Ver otros directos</button></div>;
-  if(!live) return <div className="fixed inset-0 flex items-center justify-center" style={{background:'#0b0b12'}}><Spinner size={32}/></div>;
+
+  if(liveEnded) return (
+    <div className="fixed inset-0 flex flex-col items-center justify-center" style={{background:'#0b0b12'}}>
+      <div className="text-5xl mb-4">📡</div>
+      <h2 className="text-white font-black text-xl mb-2">El directo ha terminado</h2>
+      <p className="text-gray-400 text-sm mb-8">El streamer ha finalizado la transmisión</p>
+      <button onClick={()=>setLocation('/live')} className="px-6 py-3 rounded-xl font-bold text-white" style={{background:'#FF007F'}}>Ver otros directos</button>
+    </div>
+  );
+
+  if(!live) return (
+    <div className="fixed inset-0 flex items-center justify-center" style={{background:'#0b0b12'}}>
+      <div className="flex flex-col items-center gap-3"><Spinner size={32}/><p className="text-gray-400 text-sm">Conectando al directo...</p></div>
+    </div>
+  );
+
   return (
     <div className="fixed inset-0" style={{background:'#000'}}>
-      <div className="absolute inset-0" style={{background:'linear-gradient(180deg,#1a0030,#0d001a)'}}>
-        <div className="w-full h-full flex items-center justify-center opacity-20"><div className="w-64 h-64 rounded-full" style={{background:'radial-gradient(#FF007F,transparent)',filter:'blur(80px)'}}/></div>
-      </div>
-      {/* Header */}
+      {/* VIDEO — remoto (espectador ve al host) */}
+      <video ref={remoteVideoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={false} style={{display: connected && !isHost ? 'block' : 'none'}}/>
+
+      {/* VIDEO — local (host se ve a sí mismo) */}
+      <video ref={localVideoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={true} style={{display: isHost && connected ? 'block' : 'none', transform:'scaleX(-1)'}}/>
+
+      {/* Fondo si no hay vídeo aún */}
+      {(!connected || (!isHost && participants.length === 0)) && (
+        <div className="absolute inset-0 flex items-center justify-center" style={{background:'linear-gradient(180deg,#1a0030,#0d001a)'}}>
+          <div className="text-center">
+            <div className="w-24 h-24 rounded-full overflow-hidden mx-auto mb-4" style={{border:'3px solid #FF007F',boxShadow:'0 0 30px rgba(255,0,127,0.5)'}}>
+              {live.userId?.avatarUrl?<img src={live.userId.avatarUrl} alt="" className="w-full h-full object-cover"/>:<div className="w-full h-full flex items-center justify-center font-black text-3xl text-white" style={{background:'#7c3aed'}}>{live.userId?.username?.[0]?.toUpperCase()}</div>}
+            </div>
+            <p className="text-white font-bold">@{live.userId?.username}</p>
+            <p className="text-gray-400 text-sm mt-1">{connected?'En directo':'Conectando...'}</p>
+            {!connected && <div className="mt-3"><Spinner/></div>}
+          </div>
+        </div>
+      )}
+
+      {/* Gradiente overlay */}
+      <div className="absolute inset-0 pointer-events-none" style={{background:'linear-gradient(to bottom,rgba(0,0,0,0.4) 0%,transparent 30%,transparent 50%,rgba(0,0,0,0.6) 100%)'}}/>
+
+      {/* HEADER */}
       <div className="absolute top-0 left-0 right-0 z-20 flex items-center gap-2 px-3 pb-3" style={{paddingTop:'max(48px,env(safe-area-inset-top))',background:'linear-gradient(to bottom,rgba(0,0,0,0.5),transparent)'}}>
-        <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0" style={{border:'2px solid #FF007F'}}>{live.userId?.avatarUrl?<img src={live.userId.avatarUrl} alt="" className="w-full h-full object-cover"/>:<div className="w-full h-full flex items-center justify-center font-bold text-white" style={{background:'#7c3aed'}}>{live.userId?.username?.[0]?.toUpperCase()}</div>}</div>
-        <div className="flex-1 min-w-0"><p className="text-white font-bold text-sm truncate">{live.userId?.username}</p></div>
-        <button onClick={doFollow} className="px-4 py-1.5 rounded-full text-sm font-bold flex-shrink-0" style={following?{background:'transparent',border:'1px solid #aaa',color:'white'}:{background:'#FF007F',color:'white'}}>{following?'Siguiendo':'+ Seguir'}</button>
+        <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0" style={{border:'2px solid #FF007F'}}>
+          {live.userId?.avatarUrl?<img src={live.userId.avatarUrl} alt="" className="w-full h-full object-cover"/>:<div className="w-full h-full flex items-center justify-center font-bold text-white" style={{background:'#7c3aed'}}>{live.userId?.username?.[0]?.toUpperCase()}</div>}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-white font-bold text-sm truncate">{live.userId?.username}</p>
+          {connected && <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"/><span className="text-red-400 text-xs font-bold">EN DIRECTO</span></div>}
+        </div>
+        {!isHost && <button onClick={doFollow} className="px-4 py-1.5 rounded-full text-sm font-bold flex-shrink-0" style={following?{background:'transparent',border:'1px solid #aaa',color:'white'}:{background:'#FF007F',color:'white'}}>{following?'Siguiendo':'+ Seguir'}</button>}
         <div className="flex items-center gap-1 px-2 py-1 rounded-full flex-shrink-0" style={{background:'rgba(0,0,0,0.4)'}}><Eye size={11} className="text-white"/><span className="text-white text-xs font-bold">{fmt(viewers)}</span></div>
-        <button onClick={()=>setLocation('/live')} className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,255,255,0.15)'}}><X size={16} className="text-white"/></button>
+        {isHost
+          ? <button onClick={endLive} className="px-3 py-1.5 rounded-full text-xs font-bold flex-shrink-0" style={{background:'rgba(255,0,0,0.7)',color:'white'}}>Terminar</button>
+          : <button onClick={()=>setLocation('/live')} className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,255,255,0.15)'}}><X size={16} className="text-white"/></button>
+        }
       </div>
-      {/* Gift anim */}
+
+      {/* Mini preview local para host (esquina) */}
+      {isHost && connected && (
+        <div className="absolute top-24 right-3 z-20 w-24 h-36 rounded-xl overflow-hidden" style={{border:'2px solid rgba(255,255,255,0.3)'}}>
+          <video ref={localVideoRef} className="w-full h-full object-cover" autoPlay playsInline muted style={{transform:'scaleX(-1)'}}/>
+        </div>
+      )}
+
+      {/* Gift animation */}
       {giftAnim&&<div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 text-center animate-bounce"><div className="text-6xl mb-1">{giftAnim.emoji}</div><div className="px-3 py-1.5 rounded-full" style={{background:'rgba(255,0,127,0.3)',border:'1px solid #FF007F'}}><span className="text-white font-bold text-sm">@{giftAnim.user} → {giftAnim.name}</span></div></div>}
+
       {/* Chat */}
-      <div className="absolute left-0 right-0 z-20 px-3" style={{bottom:'80px',maxHeight:'35vh',overflow:'hidden'}}>
+      <div className="absolute left-0 right-16 z-20 px-3" style={{bottom:'85px',maxHeight:'35vh',overflow:'hidden'}}>
         <div ref={chatRef} className="flex flex-col gap-1 overflow-y-auto" style={{maxHeight:'35vh'}}>
           {msgs.map(m=>(
             <div key={m.id}>
@@ -1038,6 +1190,7 @@ function LiveViewerPage({ id }: { id: string }) {
           ))}
         </div>
       </div>
+
       {/* Bottom bar */}
       <div className="absolute bottom-0 left-0 right-0 z-20 px-3 pt-2" style={{paddingBottom:'max(20px,env(safe-area-inset-bottom))',background:'linear-gradient(to top,rgba(0,0,0,0.7),transparent)'}}>
         <div className="flex items-center gap-2">
@@ -1045,16 +1198,31 @@ function LiveViewerPage({ id }: { id: string }) {
             <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendMsg()} placeholder="Escribe algo..." className="flex-1 bg-transparent text-white placeholder-gray-400 text-sm focus:outline-none"/>
           </div>
           <button className="w-10 h-10 rounded-full flex items-center justify-center text-xl" style={{background:'rgba(255,255,255,0.1)'}}>😊</button>
-          <button onClick={()=>setShowGifts(true)} className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(255,0,127,0.3)',border:'1px solid rgba(255,0,127,0.4)'}}><Gift size={18} className="text-white"/></button>
+          {!isHost && <button onClick={()=>setShowGifts(true)} className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(255,0,127,0.3)',border:'1px solid rgba(255,0,127,0.4)'}}><Gift size={18} className="text-white"/></button>}
           <button className="flex flex-col items-center gap-0.5"><div className="w-10 h-10 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.1)'}}><Share size={16} className="text-white"/></div><span className="text-white text-xs">{fmt(viewers)}</span></button>
         </div>
       </div>
+
       {/* Gifts panel */}
-      {showGifts&&<div className="absolute inset-x-0 bottom-0 z-30 rounded-t-3xl" style={{background:'#13131f',paddingBottom:'max(24px,env(safe-area-inset-bottom))'}}><div className="w-10 h-1 rounded-full mx-auto mt-3 mb-4" style={{background:'#2a2a3a'}}/><div className="flex items-center justify-between px-5 mb-4"><h3 className="font-black text-white">Enviar regalo</h3><div className="flex items-center gap-3"><span className="font-bold text-yellow-400">🪙 {(user?.coins||0).toLocaleString()}</span><button onClick={()=>setShowGifts(false)}><X size={18} className="text-gray-400"/></button></div></div><div className="grid grid-cols-4 gap-3 px-5 mb-4">{Object.entries(GIFT_CATALOG).map(([k,g])=><button key={k} onClick={()=>sendGift(k)} disabled={(user?.coins||0)<g.coins} className="flex flex-col items-center gap-1.5 p-3 rounded-2xl disabled:opacity-40" style={{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)'}}><span className="text-3xl">{g.emoji}</span><span className="text-white text-xs font-semibold">{g.name}</span><span className="text-yellow-400 text-xs">{g.coins}🪙</span></button>)}</div><div className="px-5"><Link href="/coins" onClick={()=>setShowGifts(false)} className="block w-full py-3 rounded-2xl text-center font-bold text-sm" style={{background:'rgba(0,245,255,0.1)',color:'#00F5FF',border:'1px solid rgba(0,245,255,0.2)'}}>+ Comprar monedas</Link></div></div>}
+      {showGifts&&(
+        <div className="absolute inset-x-0 bottom-0 z-30 rounded-t-3xl" style={{background:'#13131f',paddingBottom:'max(24px,env(safe-area-inset-bottom))'}}>
+          <div className="w-10 h-1 rounded-full mx-auto mt-3 mb-4" style={{background:'#2a2a3a'}}/>
+          <div className="flex items-center justify-between px-5 mb-4"><h3 className="font-black text-white">Enviar regalo</h3><div className="flex items-center gap-3"><span className="font-bold text-yellow-400">🪙 {(user?.coins||0).toLocaleString()}</span><button onClick={()=>setShowGifts(false)}><X size={18} className="text-gray-400"/></button></div></div>
+          <div className="grid grid-cols-4 gap-3 px-5 mb-4">
+            {Object.entries(GIFT_CATALOG).map(([k,g])=>(
+              <button key={k} onClick={()=>sendGift(k)} disabled={(user?.coins||0)<g.coins} className="flex flex-col items-center gap-1.5 p-3 rounded-2xl disabled:opacity-40" style={{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                <span className="text-3xl">{g.emoji}</span>
+                <span className="text-white text-xs font-semibold">{g.name}</span>
+                <span className="text-yellow-400 text-xs">{g.coins}🪙</span>
+              </button>
+            ))}
+          </div>
+          <div className="px-5"><Link href="/coins" onClick={()=>setShowGifts(false)} className="block w-full py-3 rounded-2xl text-center font-bold text-sm" style={{background:'rgba(0,245,255,0.1)',color:'#00F5FF',border:'1px solid rgba(0,245,255,0.2)'}}>+ Comprar monedas</Link></div>
+        </div>
+      )}
     </div>
   );
 }
-
 
 // ===================== CAMERA =====================
 function CameraPage() {
