@@ -431,7 +431,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
         {/* Vídeo */}
         {/* Pantalla dividida siempre que haya co-host — igual que TikTok */}
         {live.battleOpponentId ? (
-          <div className="absolute inset-0 flex flex-col" style={{display:connState==='connected'?'flex':'none'}}>
+          <div className="absolute inset-0 flex flex-col" style={{visibility:connState==='connected'?'visible':'hidden',opacity:connState==='connected'?1:0}}>
             {/* Host arriba */}
             <div className="relative flex-1 overflow-hidden">
               <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner?true:muted}/>
@@ -449,7 +449,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
             </div>
           </div>
         ) : (
-          <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner||muted} style={{display:connState==='connected'?'block':'none'}}/>
+          <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner||muted} style={{visibility:connState==='connected'?'visible':'hidden',opacity:connState==='connected'?1:0}}/>
         )}
 
         {/* Placeholder mientras conecta */}
