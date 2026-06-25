@@ -8,6 +8,7 @@ type ConnState = 'idle' | 'connecting' | 'connected' | 'error' | 'unavailable' |
 type EndSummary = { totalUniqueViewers: number; peakViewerCount: number; totalGiftsReceived: number; durationSeconds: number; recordingUrl: string | null; liveId: string } | null;
 type ChatMsg = { user: string; userId?: string; text: string; type?: string };
 type JoinRequest = { _id: string; fromUserId: { _id: string; username: string; avatarUrl: string; flag: string }; message: string };
+type FloatMsg = { id: number; text: string; emoji: string };
 
 export default function LiveViewerPage({ id }: { id: string }) {
   const { user, token, refreshUser } = useAuth();
@@ -41,6 +42,12 @@ export default function LiveViewerPage({ id }: { id: string }) {
   const [requestStatus, setRequestStatus] = useState<'none'|'pending'|'accepted'|'rejected'>('none');
   // Panel de invitar a batalla desde dentro
   const [showBattleInvite, setShowBattleInvite] = useState(false);
+  // Mensajes flotantes que el host lanza a todos los espectadores
+  const [floatMsgs, setFloatMsgs] = useState<FloatMsg[]>([]);
+  const [floatInput, setFloatInput] = useState('');
+  const [showFloatPanel, setShowFloatPanel] = useState(false);
+  const floatCounterRef = useRef(0);
+  const FLOAT_PRESETS = ['🔥','❤️','😍','👏','💯','🎉','🤩','💪','✨','🎲'];
 
   const kbOffset = useKeyboardOffset();
   const chatRef = useRef<HTMLDivElement>(null);
@@ -179,10 +186,23 @@ export default function LiveViewerPage({ id }: { id: string }) {
       roomRef.current = room;
 
       const hostId = live.userId?._id;
+      const attachTrack = (track: any, participant: any) => {
+        try {
+          if (!participant || !participant.identity) return;
+          if (track.kind !== Track.Kind.Video && track.kind !== Track.Kind.Audio) return;
+          const target = participant.identity === hostId ? videoRef.current : opponentVideoRef.current;
+          if (target) track.attach(target);
+        } catch (e) {
+          console.warn('attachTrack error (safe):', e);
+        }
+      };
       room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
-        if (track.kind !== Track.Kind.Video && track.kind !== Track.Kind.Audio) return;
-        const target = participant.identity === hostId ? videoRef.current : opponentVideoRef.current;
-        if (target) track.attach(target);
+        // Guard: participant may arrive before its metadata is populated — retry once
+        if (!participant?.identity) {
+          setTimeout(() => attachTrack(track, participant), 500);
+        } else {
+          attachTrack(track, participant);
+        }
       });
 
       room.on(RoomEvent.Disconnected, () => {
@@ -205,7 +225,16 @@ export default function LiveViewerPage({ id }: { id: string }) {
 
       const decoder = new TextDecoder();
       room.on(RoomEvent.DataReceived, (payload) => {
-        try { const msg = JSON.parse(decoder.decode(payload)); setMsgs(m => [...m, msg]); } catch { }
+        try {
+          const msg = JSON.parse(decoder.decode(payload));
+          if (msg.type === 'float') {
+            const id = ++floatCounterRef.current;
+            setFloatMsgs(m => [...m, { id, text: msg.text, emoji: msg.emoji || '' }]);
+            setTimeout(() => setFloatMsgs(m => m.filter(x => x.id !== id)), 4000);
+          } else {
+            setMsgs(m => [...m, msg]);
+          }
+        } catch { }
       });
 
       try {
@@ -248,6 +277,18 @@ export default function LiveViewerPage({ id }: { id: string }) {
   const encoder = new TextEncoder();
   const broadcast = (msg: ChatMsg) => {
     try { roomRef.current?.localParticipant.publishData(encoder.encode(JSON.stringify(msg)), { reliable: true }); } catch { }
+  };
+
+  const sendFloatMsg = (text: string, emoji: string = '') => {
+    if (!isOwner || !text.trim()) return;
+    const msg = { type: 'float', text: text.trim(), emoji };
+    try { roomRef.current?.localParticipant.publishData(encoder.encode(JSON.stringify(msg)), { reliable: true }); } catch { }
+    // Also show locally
+    const id = ++floatCounterRef.current;
+    setFloatMsgs(m => [...m, { id, text: text.trim(), emoji }]);
+    setTimeout(() => setFloatMsgs(m => m.filter(x => x.id !== id)), 4000);
+    setFloatInput('');
+    setShowFloatPanel(false);
   };
 
   // Solicitar unirse (espectador)
@@ -609,6 +650,67 @@ export default function LiveViewerPage({ id }: { id: string }) {
         <Toast message={toast}/>
         {insufficientCoins && <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 px-6 py-4 rounded-2xl text-center" style={{background:'rgba(255,0,127,0.9)'}}><p className="text-white font-bold">¡Monedas insuficientes!</p><Link href="/coins" className="text-xs text-white underline mt-1 block">Comprar →</Link></div>}
 
+        {/* Mensajes flotantes — visibles para todos los espectadores */}
+        <style>{`
+          @keyframes floatUp {
+            0%   { opacity: 0; transform: translate(-50%, 20px) scale(0.7); }
+            15%  { opacity: 1; transform: translate(-50%, 0px) scale(1.05); }
+            80%  { opacity: 1; transform: translate(-50%, -30px) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -60px) scale(0.9); }
+          }
+        `}</style>
+        <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden">
+          {floatMsgs.map((fm) => (
+            <div
+              key={fm.id}
+              className="absolute left-1/2"
+              style={{
+                top: `${25 + (fm.id % 4) * 10}%`,
+                animation: 'floatUp 4s ease-out forwards',
+              }}
+            >
+              {fm.emoji && <div className="text-4xl mb-1 text-center">{fm.emoji}</div>}
+              <div className="px-4 py-2 rounded-2xl font-black text-white text-lg text-center whitespace-nowrap" style={{
+                background: 'linear-gradient(135deg,rgba(255,0,127,0.92),rgba(124,58,237,0.92))',
+                boxShadow: '0 0 24px rgba(255,0,127,0.6)',
+                backdropFilter: 'blur(8px)',
+              }}>{fm.text}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Panel mensajes flotantes — solo el host lo ve */}
+        {isOwner && showFloatPanel && connState === 'connected' && (
+          <div className="absolute bottom-24 left-2 right-2 z-30 rounded-2xl p-4" style={{background:'#13131f',border:'1px solid #FF007F',boxShadow:'0 0 20px rgba(255,0,127,0.3)'}}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-white text-sm">✨ Enviar mensaje flotante</h3>
+              <button onClick={()=>setShowFloatPanel(false)}><X size={16} className="text-gray-400"/></button>
+            </div>
+            <div className="flex gap-2 mb-3 flex-wrap">
+              {FLOAT_PRESETS.map(emoji => (
+                <button key={emoji} onClick={()=>sendFloatMsg(emoji, emoji)} className="text-2xl p-1.5 rounded-xl hover:bg-white/10 transition-colors">{emoji}</button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={floatInput}
+                onChange={e=>setFloatInput(e.target.value)}
+                onKeyDown={e=>e.key==='Enter'&&sendFloatMsg(floatInput)}
+                placeholder="Escribe tu mensaje flotante..."
+                className="flex-1 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-400 focus:outline-none"
+                style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}
+                maxLength={40}
+              />
+              <button
+                onClick={()=>sendFloatMsg(floatInput)}
+                disabled={!floatInput.trim()}
+                className="px-4 py-2.5 rounded-xl font-bold text-white disabled:opacity-40"
+                style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)'}}
+              ><Send size={16}/></button>
+            </div>
+          </div>
+        )}
+
         {/* Panel regalos */}
         {showGifts && (
           <div className="absolute bottom-20 left-2 right-2 sm:right-auto sm:w-80 z-20 rounded-2xl p-4" style={{background:'#13131f',border:'1px solid #1e1e2a'}}>
@@ -652,6 +754,9 @@ export default function LiveViewerPage({ id }: { id: string }) {
             {user && <button onClick={sendMsg} className="p-2.5 rounded-full flex-shrink-0" style={{background:'rgba(255,255,255,0.15)'}}><Send size={16} className="text-white"/></button>}
             {user && !isParticipant && <button onClick={()=>sendGift('domino')} disabled={sending} className="p-2.5 rounded-full flex-shrink-0 disabled:opacity-50 text-lg" style={{background:'rgba(255,255,255,0.15)'}}>🎲</button>}
             {user && !isParticipant && <button onClick={()=>setShowGifts(true)} disabled={sending} className="p-2.5 rounded-full flex-shrink-0 disabled:opacity-50" style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)'}}><Gift size={18} className="text-white"/></button>}
+            {isOwner && connState === 'connected' && (
+              <button onClick={()=>setShowFloatPanel(s=>!s)} className="p-2.5 rounded-full flex-shrink-0 text-lg" style={{background: showFloatPanel ? 'linear-gradient(135deg,#FF007F,#7c3aed)' : 'rgba(255,255,255,0.15)'}} title="Mensaje flotante">✨</button>
+            )}
             <button onClick={doShare} className="p-2.5 rounded-full flex-shrink-0" style={{background:'rgba(255,255,255,0.15)'}}><Share2 size={18} className="text-white"/></button>
           </div>
         </div>
