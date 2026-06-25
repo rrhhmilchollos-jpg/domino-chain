@@ -114,7 +114,25 @@ export default function CameraPage() {
       }
       setCamOn(true);
       await new Promise(r=>setTimeout(r,100));
-      if(videoRef.current){videoRef.current.srcObject=s;videoRef.current.muted=true;videoRef.current.playsInline=true;try{await videoRef.current.play();}catch{}}
+      if(videoRef.current){
+        const v=videoRef.current;
+        v.srcObject=s;
+        v.muted=true;
+        v.playsInline=true;
+        // Esperar a que los metadatos del stream estén listos antes de play()
+        // — en Android el pipeline de video no se inicializa si se llama play()
+        // antes de que el stream tenga dimensiones reales (negro en pantalla)
+        await new Promise<void>(res=>{
+          if(v.readyState>=2){res();return;}
+          v.onloadedmetadata=()=>res();
+          setTimeout(res,1500); // fallback por si el evento no llega
+        });
+        try{await v.play();}catch(e){
+          // Segundo intento tras un pequeño delay (fix para WebView Android)
+          await new Promise(r=>setTimeout(r,300));
+          try{await v.play();}catch{}
+        }
+      }
     }catch(err:any){setCamOn(false);if(err.name==='NotAllowedError')alert('❌ Permiso denegado. Ve a Ajustes del navegador y permite el acceso al micrófono y la cámara.');else alert('❌ Error: '+err.message);}
   };
 
@@ -335,7 +353,7 @@ export default function CameraPage() {
       {showSoundPicker&&<SoundPicker onSelect={s=>{setSelectedSound(s);setShowSoundPicker(false);}} onClose={()=>setShowSoundPicker(false)}/>}
 
       <div className="relative h-screen max-h-screen overflow-hidden">
-        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay muted playsInline style={{display:camOn?'block':'none',filter:selectedFilter.css}}/>
+        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay muted playsInline webkit-playsinline="true" style={{visibility:camOn?'visible':'hidden',opacity:camOn?1:0,filter:selectedFilter.css,pointerEvents:camOn?'auto':'none'}}/>
 
         {camOn&&!hasAudio&&(
           <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded-full text-xs font-bold text-white flex items-center gap-1.5" style={{background:'rgba(255,0,127,0.85)'}}>🔇 Grabando sin audio — revisa el permiso del micrófono</div>
