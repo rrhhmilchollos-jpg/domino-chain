@@ -91,6 +91,42 @@ router.get('/:id/following', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/users/admin/fix-email-usernames — corregir usernames que son emails (solo admin o con secret)
+router.post('/admin/fix-email-usernames', async (req, res) => {
+  try {
+    const { secret } = req.body;
+    if (secret !== (process.env.ADMIN_SECRET || 'domino-admin-2024')) return res.status(403).json({ error: 'No autorizado' });
+    // Buscar usuarios cuyo username contiene @ (es un email)
+    const users = await User.find({ username: { $regex: '@' } });
+    const fixed = [];
+    for (const u of users) {
+      const baseUsername = u.username.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '').toLowerCase().slice(0, 20) || 'user';
+      let newUsername = baseUsername;
+      let counter = 1;
+      while (await User.findOne({ username: newUsername, _id: { $ne: u._id } })) {
+        newUsername = `${baseUsername}${counter++}`;
+      }
+      await User.findByIdAndUpdate(u._id, { username: newUsername });
+      fixed.push({ id: u._id, old: u.username, new: newUsername });
+    }
+    res.json({ fixed, count: fixed.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/users/me/username — cambiar username (con validación)
+router.put('/me/username', auth, async (req, res) => {
+  try {
+    const { username } = req.body;
+    if (!username || username.length < 3 || username.length > 30) return res.status(400).json({ error: 'Username debe tener entre 3 y 30 caracteres' });
+    if (username.includes('@')) return res.status(400).json({ error: 'El username no puede contener @' });
+    if (!/^[a-zA-Z0-9_\.]+$/.test(username)) return res.status(400).json({ error: 'Username solo puede contener letras, números, _ y .' });
+    const exists = await User.findOne({ username, _id: { $ne: req.user._id } });
+    if (exists) return res.status(409).json({ error: 'Este username ya está en uso' });
+    const user = await User.findByIdAndUpdate(req.user._id, { username }, { new: true }).select('-password');
+    res.json(user);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/push-subscription', auth, async (req, res) => {
   try {
     await User.findByIdAndUpdate(req.user._id, { pushSubscription: req.body });

@@ -557,22 +557,75 @@ export default function LiveViewerPage({ id }: { id: string }) {
           <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner||muted} style={{visibility:connState==='connected'?'visible':'hidden',opacity:connState==='connected'?1:0}}/>
         )}
 
-        {/* Placeholder mientras conecta */}
+        {/* Placeholder mientras conecta — NPC Bot Live o stream real */}
         {connState !== 'connected' && (
-          <div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}>
-            <div className="text-center px-4">
-              <Av u={live.userId} s={100}/>
-              <p className="text-white font-bold mt-4 text-lg">@{live.userId?.username}</p>
-              <p className="text-gray-400 text-sm mt-1 mb-4">{live.title}</p>
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-3" style={{background:'rgba(255,0,127,0.2)',border:'1px solid #FF007F'}}>
-                <div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#FF007F'}}/>
-                <span className="text-white text-sm font-bold">EN DIRECTO</span>
+          <div className="absolute inset-0" style={{background:'#0b0b12',overflow:'hidden'}}>
+            {/* Si es un bot IA — mostrar avatar NPC animado a pantalla completa */}
+            {live.userId?.isBot ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center" style={{background:'linear-gradient(180deg,#0b0b12 0%,#1a0a2e 50%,#0b0b12 100%)'}}>
+                {/* Fondo de partículas NPC */}
+                <div className="absolute inset-0" style={{backgroundImage:'radial-gradient(circle at 20% 50%, rgba(0,245,255,0.05) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255,0,127,0.05) 0%, transparent 50%)'}} />
+                {/* Avatar fotorrealista a pantalla completa */}
+                <div className="relative w-full h-full flex items-center justify-center">
+                  {live.userId?.avatarUrl && (
+                    <img
+                      src={live.userId.avatarUrl}
+                      alt={live.userId.username}
+                      className="w-full h-full object-cover"
+                      style={{
+                        filter: 'brightness(0.9) contrast(1.1) saturate(1.2)',
+                        animation: 'npcPulse 3s ease-in-out infinite',
+                      }}
+                    />
+                  )}
+                  {/* Overlay degradado para que el chat sea legible */}
+                  <div className="absolute inset-0" style={{background:'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.1) 40%, transparent 70%)'}} />
+                  {/* Efecto glitch NPC */}
+                  <div className="absolute inset-0 pointer-events-none" style={{animation:'npcGlitch 8s steps(1) infinite', opacity:0.15, backgroundImage:'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,245,255,0.3) 2px, rgba(0,245,255,0.3) 4px)'}} />
+                  {/* Badge IA */}
+                  <div className="absolute top-16 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-full" style={{background:'rgba(0,0,0,0.6)',border:'1px solid rgba(0,245,255,0.5)',backdropFilter:'blur(10px)'}}>
+                    <div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#00F5FF'}}/>
+                    <span className="text-xs font-bold" style={{color:'#00F5FF'}}>BOT IA EN DIRECTO</span>
+                  </div>
+                  {/* Badge LIVE */}
+                  <div className="absolute top-16 right-4 flex items-center gap-1 px-2 py-1 rounded-full" style={{background:'#FF007F'}}>
+                    <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>
+                    <span className="text-white text-xs font-bold">LIVE</span>
+                  </div>
+                  {/* Nombre del bot */}
+                  <div className="absolute bottom-32 left-0 right-0 text-center">
+                    <p className="text-white font-black text-xl drop-shadow-lg">@{live.userId?.username}</p>
+                    <p className="text-gray-300 text-sm mt-1 px-4 drop-shadow">{live.title}</p>
+                  </div>
+                  {/* Frases NPC flotantes */}
+                  <div className="absolute bottom-52 left-1/2 -translate-x-1/2 text-center pointer-events-none">
+                    <span className="text-white text-sm font-bold px-3 py-1 rounded-full" style={{background:'rgba(0,0,0,0.5)',animation:'npcFloat 4s ease-in-out infinite'}}>🎲 ¡Únete al reto!</span>
+                  </div>
+                </div>
+                <style>{`
+                  @keyframes npcPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.02)} }
+                  @keyframes npcGlitch { 0%,90%,100%{opacity:0} 91%{opacity:0.15;transform:translateX(-2px)} 93%{opacity:0;transform:translateX(0)} 95%{opacity:0.1;transform:translateX(2px)} 97%{opacity:0} }
+                  @keyframes npcFloat { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(-8px)} }
+                `}</style>
               </div>
-              <p className="text-gray-500 text-xs">
-                {connState==='connecting'?'Conectando...':connState==='blocked'?'🚫 Has sido bloqueado':connState==='unavailable'?(isOwner?'Inicia el streaming':'Esperando al streamer...'):'No se pudo conectar'}
-              </p>
-              {!token && <p className="text-yellow-400 text-xs mt-2"><Link href="/auth" style={{color:'#00F5FF'}}>Inicia sesión</Link> para ver el directo</p>}
-            </div>
+            ) : (
+              /* Stream de usuario real — placeholder estándar */
+              <div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}>
+                <div className="text-center px-4">
+                  <Av u={live.userId} s={100}/>
+                  <p className="text-white font-bold mt-4 text-lg">@{live.userId?.username}</p>
+                  <p className="text-gray-400 text-sm mt-1 mb-4">{live.title}</p>
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-3" style={{background:'rgba(255,0,127,0.2)',border:'1px solid #FF007F'}}>
+                    <div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#FF007F'}}/>
+                    <span className="text-white text-sm font-bold">EN DIRECTO</span>
+                  </div>
+                  <p className="text-gray-500 text-xs">
+                    {connState==='connecting'?'Conectando...':connState==='blocked'?'🚫 Has sido bloqueado':connState==='unavailable'?(isOwner?'Inicia el streaming':'Esperando al streamer...'):'No se pudo conectar'}
+                  </p>
+                  {!token && <p className="text-yellow-400 text-xs mt-2"><Link href="/auth" style={{color:'#00F5FF'}}>Inicia sesión</Link> para ver el directo</p>}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

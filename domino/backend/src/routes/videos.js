@@ -197,6 +197,43 @@ router.patch('/:id/update-bot', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/videos/user/:id — vídeos públicos de un usuario (usado por perfil y dashboard)
+router.get('/user/:id', async (req, res) => {
+  try {
+    const { page = 1, limit = 12 } = req.query;
+    const videos = await Video.find({ userId: req.params.id, isPublished: true })
+      .populate('userId', 'username avatarUrl flag country city impactPoints currentStreak isVerified isBot')
+      .populate('challengeId', 'title category')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit).limit(Number(limit));
+    res.json(videos);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/videos/saved/:id — vídeos guardados de un usuario
+router.get('/saved/:id', auth, async (req, res) => {
+  try {
+    if (String(req.user._id) !== String(req.params.id)) return res.status(403).json({ error: 'No autorizado' });
+    const me = await User.findById(req.user._id).populate({
+      path: 'savedVideos',
+      populate: [{ path: 'userId', select: 'username avatarUrl flag isVerified isBot' }, { path: 'challengeId', select: 'title category' }]
+    });
+    res.json(me?.savedVideos || []);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/videos/liked/:id — vídeos con like de un usuario
+router.get('/liked/:id', auth, async (req, res) => {
+  try {
+    if (String(req.user._id) !== String(req.params.id)) return res.status(403).json({ error: 'No autorizado' });
+    const videos = await Video.find({ likes: req.user._id, isPublished: true })
+      .populate('userId', 'username avatarUrl flag isVerified isBot')
+      .populate('challengeId', 'title category')
+      .sort({ createdAt: -1 }).limit(50);
+    res.json(videos);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // DELETE /api/videos/:id
 router.delete('/:id', auth, async (req, res) => {
   try {
