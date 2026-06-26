@@ -9,7 +9,7 @@ const liveSchema = new mongoose.Schema({
   totalGifts:   { type: Number, default: 0 },
   isActive:     { type: Boolean, default: true },
   endedAt:      { type: Date, default: null },
-  roomId:       { type: String, default: '' },
+  roomId:       { type: String, default: null },
 }, { timestamps: true });
 
 liveSchema.index({ isActive: 1, createdAt: -1 });

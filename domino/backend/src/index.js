@@ -144,6 +144,14 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/domino')
         { isBot: true, googleId: '' },
         { $set: { googleId: null } }
       );
+
+      // Migración: eliminar índice único de roomName en lives
+      const liveIndexes = await db.collection('lives').indexes();
+      const roomNameIndex = liveIndexes.find(idx => idx.key && (idx.key.roomName !== undefined || idx.key.roomId !== undefined) && idx.unique);
+      if (roomNameIndex) {
+        await db.collection('lives').dropIndex(roomNameIndex.name);
+        console.log('✅ Índice único de roomName/roomId en lives eliminado (migración)');
+      }
     } catch (migErr) {
       console.log('ℹ️ Migración googleId:', migErr.message);
     }
