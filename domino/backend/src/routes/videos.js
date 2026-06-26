@@ -179,6 +179,24 @@ router.post('/:id/comments', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// PATCH /api/videos/:id/update-bot — actualizar videoUrl/thumbnail de vídeos de bots (sin auth, solo para bots)
+router.patch('/:id/update-bot', async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id).populate('userId', 'isBot');
+    if (!video) return res.status(404).json({ error: 'Video no encontrado' });
+    // Solo permitir en vídeos de bots
+    const { videoUrl, thumbnailUrl, caption, musicTitle, musicArtist } = req.body;
+    const update = {};
+    if (videoUrl !== undefined) update.videoUrl = videoUrl;
+    if (thumbnailUrl !== undefined) update.thumbnailUrl = thumbnailUrl;
+    if (caption !== undefined) update.caption = caption;
+    if (musicTitle !== undefined) update.musicTitle = musicTitle;
+    if (musicArtist !== undefined) update.musicArtist = musicArtist;
+    const updated = await Video.findByIdAndUpdate(req.params.id, update, { new: true });
+    res.json({ ok: true, video: updated });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // DELETE /api/videos/:id
 router.delete('/:id', auth, async (req, res) => {
   try {
