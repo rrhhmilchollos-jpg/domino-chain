@@ -153,4 +153,19 @@ router.post('/init', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// PATCH /api/bots/update-avatar — actualizar avatar y bio de un bot
+router.patch('/update-avatar', async (req, res) => {
+  try {
+    const { username, avatarUrl, displayName, bio } = req.body;
+    if (!username || !avatarUrl) return res.status(400).json({ error: 'username y avatarUrl requeridos' });
+    const user = await User.findOneAndUpdate(
+      { username, isBot: true },
+      { avatarUrl, ...(displayName && { displayName }), ...(bio && { bio }) },
+      { new: true }
+    );
+    if (!user) return res.status(404).json({ error: `Bot ${username} no encontrado` });
+    res.json({ ok: true, username: user.username, avatarUrl: user.avatarUrl });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
