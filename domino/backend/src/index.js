@@ -157,6 +157,39 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/domino')
       try {
         const { startBotEngine } = require('./services/aiBotEngine');
         await startBotEngine(io);
+
+        // Crear lives de bots automáticamente al arrancar
+        setTimeout(async () => {
+          try {
+            const User = require('./models/User');
+            const Live = require('./models/Live');
+            const botUsers = await User.find({ isBot: true });
+            const LIVE_TITLES = [
+              '🎲 DOMINO KING EN VIVO — ¡Retos en directo!',
+              '👑 CADENA QUEEN — ¡Humor y retos!',
+              '💪 RETO MASTER — Consejos y motivación',
+              '🚀 VIRAL BOT — ¡Lo más trending ahora!',
+              '⛓️ CHAIN BREAKER — ¡Rompiendo cadenas!',
+            ];
+            for (let i = 0; i < botUsers.length; i++) {
+              const bot = botUsers[i];
+              const hasActiveLive = await Live.findOne({ userId: bot._id, isActive: true });
+              if (!hasActiveLive) {
+                const title = LIVE_TITLES[i] || `🤖 ${bot.username} EN DIRECTO`;
+                await Live.create({
+                  userId: bot._id, title,
+                  thumbnailUrl: bot.avatarUrl,
+                  roomId: `domino-bot-live-${bot._id}-${Date.now()}`,
+                  viewerCount: Math.floor(Math.random() * 50) + 10,
+                  isActive: true,
+                });
+                console.log(`📺 Live creado para bot: ${bot.username}`);
+              }
+            }
+          } catch (liveErr) {
+            console.error('⚠️ Error creando lives de bots:', liveErr.message);
+          }
+        }, 15000); // 15s después de iniciar bots
       } catch (e) {
         console.error('⚠️ Error iniciando bots:', e.message);
       }

@@ -94,12 +94,62 @@ router.post('/chat/:liveId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// POST /api/bots/init — inicializar/crear todos los bots y sus lives (público para setup)
+// POST /api/bots/init — inicializar/crear todos los bots y sus lives directamente
 router.post('/init', async (req, res) => {
   try {
-    const { startBotEngine } = require('../services/aiBotEngine');
-    await startBotEngine(global.io);
-    res.json({ ok: true, message: 'Motor de bots reiniciado. Bots y lives se crearán en los próximos segundos.' });
+    const { initializeBots, botJoinLive } = require('../services/aiBotEngine');
+    const OpenAI = require('openai');
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+    // 1. Inicializar bots en la BD
+    await initializeBots();
+
+    // 2. Cerrar lives anteriores de bots
+    const botUsers = await User.find({ isBot: true });
+    for (const bot of botUsers) {
+      await Live.updateMany({ userId: bot._id, isActive: true }, { isActive: false, endedAt: new Date() });
+    }
+
+    // 3. Crear lives para cada bot
+    const LIVE_TITLES = [
+      '🎲 DOMINO KING EN VIVO — ¡Retos en directo!',
+      '👑 CADENA QUEEN — ¡Humor y retos!',
+      '💪 RETO MASTER — Consejos y motivación',
+      '🚀 VIRAL BOT — ¡Lo más trending ahora!',
+      '⛓️ CHAIN BREAKER — ¡Rompiendo cadenas!',
+    ];
+
+    const createdLives = [];
+    for (let i = 0; i < botUsers.length; i++) {
+      const bot = botUsers[i];
+      const title = LIVE_TITLES[i] || `🤖 ${bot.username} EN DIRECTO`;
+      const live = await Live.create({
+        userId: bot._id,
+        title,
+        thumbnailUrl: bot.avatarUrl,
+        roomId: `domino-bot-live-${bot._id}-${Date.now()}`,
+        viewerCount: Math.floor(Math.random() * 50) + 10,
+        isActive: true,
+      });
+      createdLives.push({ bot: bot.username, liveId: live._id, title });
+
+      // Emitir evento de nuevo live
+      if (global.io) {
+        global.io.emit('live_started', {
+          liveId: live._id,
+          userId: bot._id,
+          username: bot.username,
+          title,
+          isBot: true,
+        });
+      }
+    }
+
+    res.json({
+      ok: true,
+      message: `${botUsers.length} bots inicializados con lives activos`,
+      lives: createdLives,
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
