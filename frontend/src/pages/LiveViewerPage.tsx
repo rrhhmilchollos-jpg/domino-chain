@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import GiftPanel, { GiftAnimationOverlay, useGiftAnimations } from '../components/GiftPanel';
 import '../styles/gifts.css';
 import { Link } from 'wouter';
@@ -14,6 +14,55 @@ type ChatMsg = { user: string; userId?: string; text: string; type?: string };
 type JoinRequest = { _id: string; fromUserId: { _id: string; username: string; avatarUrl: string; flag: string }; message: string };
 type FloatMsg = { id: number; text: string; emoji: string };
 
+// ─── Frases NPC que el bot "dice" en voz alta ─────────────────────────────
+const NPC_PHRASES = [
+  '¡Hola a todos! Bienvenidos al directo 🎲',
+  '¿Quién se atreve a aceptar el reto? 🔥',
+  '¡La cadena sigue! ¡Únete a DOMINO! ⛓️',
+  '¡Esto está que arde! 🚀',
+  '¡Gracias por estar aquí! ❤️',
+  '¡Vamos vamos vamos! 💪',
+  '¿Quién es el próximo en la cadena? 🎯',
+  '¡El mejor directo de hoy! 👑',
+  '¡Increíble! ¡Sigue así! ⭐',
+  '¡La cadena no para! ⛓️🔥',
+  '¡Manda un regalo si te gusta! 🎁',
+  '¡Somos los mejores! 🏆',
+  '¡Únete al reto ahora! 🎲',
+  '¡Qué nivel tan alto! 🔥🔥',
+  '¡Esto va a ser viral! 🚀🚀',
+];
+
+// ─── Reacciones a regalos ─────────────────────────────────────────────────
+const GIFT_VOICE_REACTIONS: Record<string, string[]> = {
+  heart:     ['¡Gracias por el corazón! Te quiero ❤️', '¡Amor puro! ❤️❤️'],
+  fire:      ['¡FUEGO! ¡Esto está ardiendo! 🔥🔥🔥', '¡Gracias por el fuego! 🔥'],
+  star:      ['¡Gracias por la estrella! Eres brillante ⭐', '¡Una estrella para el mejor! ⭐⭐'],
+  domino:    ['¡Gracias por el dominó! Eres un crack 🎲', '¡Dominó para el mejor! 🎲🎲'],
+  chain:     ['¡CADENA! ¡La cadena sigue! ⛓️⛓️', '¡Gracias por la cadena! ⛓️'],
+  crown:     ['¡CORONA REAL! ¡Eres el rey! 👑👑👑', '¡Gracias por la corona! 👑'],
+  diamond:   ['¡DIAMANTE! ¡Eres increíble! 💎💎💎', '¡Gracias! ¡Eres un diamante! 💎'],
+};
+
+// ─── TTS Web Speech API ───────────────────────────────────────────────────
+function speakNPC(text: string, muted: boolean) {
+  if (muted) return;
+  try {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(text.replace(/[🎲🔥⛓️❤️⭐🎁👑💎🚀💪🎯🏆]/g, ''));
+    utt.lang = 'es-ES';
+    utt.rate = 1.05;
+    utt.pitch = 1.1;
+    utt.volume = 0.85;
+    // Intentar usar una voz en español
+    const voices = window.speechSynthesis.getVoices();
+    const esVoice = voices.find(v => v.lang.startsWith('es')) || voices[0];
+    if (esVoice) utt.voice = esVoice;
+    window.speechSynthesis.speak(utt);
+  } catch { /* silencioso */ }
+}
+
 export default function LiveViewerPage({ id }: { id: string }) {
   const { user, token, refreshUser } = useAuth();
   const [live, setLive] = useState<LiveStream | null>(null);
@@ -27,7 +76,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
   const [sending, setSending] = useState(false);
   const [insufficientCoins, setInsufficientCoins] = useState(false);
   const [connState, setConnState] = useState<ConnState>('idle');
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(false); // ← bots: desmutear por defecto para TTS
   const [endSummary, setEndSummary] = useState<EndSummary>(null);
   const [ending, setEnding] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -38,6 +87,12 @@ export default function LiveViewerPage({ id }: { id: string }) {
   const [camError, setCamError] = useState(false);
   const [giftTarget, setGiftTarget] = useState<'host'|'opponent'>('host');
   const [hostProfile, setHostProfile] = useState<any>(null);
+
+  // Estado NPC Bot
+  const [npcPhrase, setNpcPhrase] = useState('¡Bienvenido al directo! 🎲');
+  const [npcAnimation, setNpcAnimation] = useState<'idle'|'talking'|'excited'|'dancing'>('idle');
+  const [npcGiftReaction, setNpcGiftReaction] = useState<string|null>(null);
+  const npcPhraseRef = useRef(0);
 
   // Solicitudes de unirse (solo visible para el host)
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
@@ -63,7 +118,9 @@ export default function LiveViewerPage({ id }: { id: string }) {
   const chunksRef = useRef<Blob[]>([]);
   const localBlobRef = useRef<Blob | null>(null);
 
-  // Cargar live
+  const isBot = !!live?.userId?.isBot;
+
+  // ─── Cargar live ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!id) return;
     setLiveLoading(true);
@@ -85,7 +142,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
         .then(r => r.ok ? r.json() : [])
         .then((list: LiveStream[]) => {
           const found = Array.isArray(list) ? list.find(l => l._id === id) : null;
-          if (found) setLive(found);
+          if (found) { setLive(found); setViewers(found.viewerCount || 0); }
         })
         .catch(() => {});
     }, 4000);
@@ -101,6 +158,31 @@ export default function LiveViewerPage({ id }: { id: string }) {
   }, [live?.userId?._id, token]);
 
   useEffect(() => { if (live) setViewers(live.viewerCount || 0); }, [live]);
+
+  // ─── NPC Bot: frases automáticas + TTS ───────────────────────────────────
+  useEffect(() => {
+    if (!isBot) return;
+    // Frase inicial
+    const initialPhrase = NPC_PHRASES[0];
+    setNpcPhrase(initialPhrase);
+    setNpcAnimation('talking');
+    speakNPC(initialPhrase, muted);
+    setTimeout(() => setNpcAnimation('idle'), 3000);
+
+    // Ciclo de frases cada 12s
+    const interval = setInterval(() => {
+      const idx = (++npcPhraseRef.current) % NPC_PHRASES.length;
+      const phrase = NPC_PHRASES[idx];
+      setNpcPhrase(phrase);
+      setNpcAnimation('talking');
+      speakNPC(phrase, muted);
+      setTimeout(() => setNpcAnimation('idle'), 3500);
+    }, 12000);
+
+    return () => clearInterval(interval);
+  }, [isBot]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Scroll chat ─────────────────────────────────────────────────────────
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [msgs]);
 
   const isOwner = !!user && !!live && live.userId?._id === user._id;
@@ -165,9 +247,9 @@ export default function LiveViewerPage({ id }: { id: string }) {
     });
   };
 
-  // Conexión LiveKit
+  // ─── Conexión LiveKit (solo para usuarios reales, no bots) ────────────────
   useEffect(() => {
-    if (!live?._id || !token) return;
+    if (!live?._id || !token || isBot) return; // ← bots no necesitan LiveKit
     let cancelled = false;
     setConnState('connecting');
     setCamError(false);
@@ -199,7 +281,6 @@ export default function LiveViewerPage({ id }: { id: string }) {
           const target = isHost ? videoRef.current : opponentVideoRef.current;
           if (target) {
             track.attach(target);
-            // Forzar play en Safari/WebKit que a veces no autoplay
             target.play().catch(() => {});
           }
         } catch (e) {
@@ -207,7 +288,6 @@ export default function LiveViewerPage({ id }: { id: string }) {
         }
       };
 
-      // Tracks nuevos que llegan mientras el espectador ya está conectado
       room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
         if (!participant?.identity) {
           setTimeout(() => attachTrack(track, participant), 500);
@@ -216,8 +296,6 @@ export default function LiveViewerPage({ id }: { id: string }) {
         }
       });
 
-      // Tracks que ya estaban publicados ANTES de que el espectador se uniera
-      // (sin esto la pantalla queda negra para cualquiera que llegue tarde)
       const attachExistingTracks = () => {
         room.remoteParticipants.forEach((participant) => {
           participant.trackPublications.forEach((pub: any) => {
@@ -251,9 +329,9 @@ export default function LiveViewerPage({ id }: { id: string }) {
         try {
           const msg = JSON.parse(decoder.decode(payload));
           if (msg.type === 'float') {
-            const id = ++floatCounterRef.current;
-            setFloatMsgs(m => [...m, { id, text: msg.text, emoji: msg.emoji || '' }]);
-            setTimeout(() => setFloatMsgs(m => m.filter(x => x.id !== id)), 4000);
+            const fid = ++floatCounterRef.current;
+            setFloatMsgs(m => [...m, { id: fid, text: msg.text, emoji: msg.emoji || '' }]);
+            setTimeout(() => setFloatMsgs(m => m.filter(x => x.id !== fid)), 4000);
           } else {
             setMsgs(m => [...m, msg]);
           }
@@ -264,9 +342,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
         await room.connect(livekitUrl, lkToken);
         if (cancelled) { room.disconnect(); return; }
 
-        // Adjuntar tracks que ya existían antes de que llegáramos (fix pantalla negra)
         attachExistingTracks();
-        // Retry 1s después por si las suscripciones llegaron justo en ese instante
         setTimeout(attachExistingTracks, 1000);
 
         if (isParticipant) {
@@ -300,7 +376,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live?._id, token, isOwner, isOpponent]);
+  }, [live?._id, token, isOwner, isOpponent, isBot]);
 
   const encoder = new TextEncoder();
   const broadcast = (msg: ChatMsg) => {
@@ -310,7 +386,6 @@ export default function LiveViewerPage({ id }: { id: string }) {
   // Socket.IO para chat en tiempo real (funciona aunque no haya LiveKit)
   const { sendMessage: socketSendMsg, sendFloat: socketSendFloat } = useLiveSocket(live?._id || '', {
     onMessage: (msg: ChatMsg) => setMsgs(m => {
-      // Evitar duplicados de mensajes propios
       if (msg.userId && user && msg.userId === user._id) return m;
       return [...m, msg];
     }),
@@ -318,14 +393,22 @@ export default function LiveViewerPage({ id }: { id: string }) {
       const giftDef = GIFT_BY_ID[data.giftType || data.type || ''];
       const giftName = giftDef?.name || data.name || 'regalo';
       const giftEmoji = giftDef?.emoji || data.emoji || '🎁';
-      const msg: ChatMsg = { user: data.user, userId: data.userId, text: `envió ${giftEmoji} ${giftName}!`, type: 'gift' };
+      addGiftAnim(data.giftType || data.type || 'heart', data.fromUser || 'Alguien', 1);
+      const msg: ChatMsg = { user: data.fromUser || 'Alguien', text: `envió ${giftEmoji} ${giftName}!`, type: 'gift' };
       setMsgs(m => [...m, msg]);
-      // Animación nueva
-      if (giftDef) {
-        addGiftAnim(giftDef.id, data.user || 'Alguien', data.quantity || 1);
-      } else {
-        setGiftAnim(`${giftEmoji} ${giftName}`);
-        setTimeout(() => setGiftAnim(null), 3000);
+
+      // ─── Reacción NPC al regalo ─────────────────────────────────────────
+      if (isBot) {
+        const giftType = data.giftType || data.type || 'heart';
+        const reactions = GIFT_VOICE_REACTIONS[giftType] || ['¡Gracias por el regalo! ❤️'];
+        const reaction = reactions[Math.floor(Math.random() * reactions.length)];
+        setNpcPhrase(reaction);
+        setNpcAnimation('excited');
+        setNpcGiftReaction(giftEmoji);
+        speakNPC(reaction, muted);
+        // Añadir al chat como mensaje del bot
+        setMsgs(m => [...m, { user: live?.userId?.username || 'Bot', text: reaction, type: 'bot' }]);
+        setTimeout(() => { setNpcAnimation('idle'); setNpcGiftReaction(null); }, 4000);
       }
     },
     onFloat: (data: any) => {
@@ -343,9 +426,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
     if (!isOwner || !text.trim()) return;
     const msg = { type: 'float', text: text.trim(), emoji };
     try { roomRef.current?.localParticipant.publishData(encoder.encode(JSON.stringify(msg)), { reliable: true }); } catch { }
-    // Enviar también por Socket.IO para espectadores sin LiveKit
     socketSendFloat({ text: text.trim(), emoji, user: user?.username || 'Host' });
-    // Also show locally
     const fid = ++floatCounterRef.current;
     setFloatMsgs(m => [...m, { id: fid, text: text.trim(), emoji }]);
     setTimeout(() => setFloatMsgs(m => m.filter(x => x.id !== fid)), 4000);
@@ -353,7 +434,6 @@ export default function LiveViewerPage({ id }: { id: string }) {
     setShowFloatPanel(false);
   };
 
-  // Solicitar unirse (espectador)
   const requestJoin = async () => {
     if (!token || !live?._id) return;
     try {
@@ -372,7 +452,6 @@ export default function LiveViewerPage({ id }: { id: string }) {
     } catch { }
   };
 
-  // Aceptar solicitud (host)
   const acceptRequest = async (req: JoinRequest) => {
     if (!token || !live?._id) return;
     try {
@@ -386,7 +465,6 @@ export default function LiveViewerPage({ id }: { id: string }) {
     } catch { }
   };
 
-  // Rechazar solicitud (host)
   const rejectRequest = async (req: JoinRequest) => {
     if (!token || !live?._id) return;
     try {
@@ -395,22 +473,6 @@ export default function LiveViewerPage({ id }: { id: string }) {
       });
       setJoinRequests(prev => prev.filter(r => r._id !== req._id));
     } catch { }
-  };
-
-  // Invitar a batalla desde dentro del live
-  const inviteBattle = async (targetUserId: string, targetUsername: string) => {
-    if (!token || !live?._id) return;
-    try {
-      const r = await fetch(`${API}/api/lives/${live._id}/battle/invite`, {
-        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: targetUserId })
-      });
-      if (r.ok) {
-        setToast(`Reto enviado a @${targetUsername} ⚔️`);
-        setShowBattleInvite(false);
-      }
-    } catch { }
-    setTimeout(() => setToast(null), 3000);
   };
 
   const blockUser = async (targetUserId: string, targetUsername: string) => {
@@ -487,7 +549,6 @@ export default function LiveViewerPage({ id }: { id: string }) {
     const msg: ChatMsg = { user: user.username, userId: user._id, text: input };
     setMsgs(m => [...m, msg]);
     broadcast(msg);
-    // Enviar también por Socket.IO para todos los espectadores
     socketSendMsg({ user: user.username, userId: user._id, avatarUrl: user.avatarUrl, text: input });
     setInput('');
   };
@@ -529,87 +590,189 @@ export default function LiveViewerPage({ id }: { id: string }) {
     </div>
   );
 
+  // ─── Render principal ─────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0" style={{paddingTop:'56px',background:'#000'}}>
       <div className="relative w-full h-full">
 
-        {/* Vídeo */}
-        {/* Pantalla dividida siempre que haya co-host — igual que TikTok */}
-        {live.battleOpponentId ? (
-          <div className="absolute inset-0 flex flex-col" style={{visibility:connState==='connected'?'visible':'hidden',opacity:connState==='connected'?1:0}}>
-            {/* Host arriba */}
-            <div className="relative flex-1 overflow-hidden">
-              <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner?true:muted}/>
-              <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'rgba(0,0,0,0.5)'}}>@{live.userId?.username}</div>
+        {/* ═══════════════════════════════════════════════════════════════
+            MODO BOT NPC — Avatar fotorrealista animado a pantalla completa
+            Siempre visible para bots (no depende de LiveKit)
+        ═══════════════════════════════════════════════════════════════ */}
+        {isBot ? (
+          <div className="absolute inset-0 overflow-hidden">
+            {/* Fondo degradado */}
+            <div className="absolute inset-0" style={{background:'linear-gradient(180deg,#0a0a1a 0%,#1a0a2e 40%,#0d0d1d 100%)'}}/>
+
+            {/* Partículas de fondo */}
+            <div className="absolute inset-0 pointer-events-none" style={{
+              backgroundImage:'radial-gradient(circle at 15% 40%, rgba(0,245,255,0.08) 0%, transparent 45%), radial-gradient(circle at 85% 20%, rgba(255,0,127,0.08) 0%, transparent 45%), radial-gradient(circle at 50% 80%, rgba(124,58,237,0.06) 0%, transparent 40%)',
+            }}/>
+
+            {/* Avatar NPC a pantalla completa */}
+            {live.userId?.avatarUrl && (
+              <img
+                src={live.userId.avatarUrl}
+                alt={live.userId.username}
+                className="absolute inset-0 w-full h-full object-cover object-top"
+                style={{
+                  filter: 'brightness(0.85) contrast(1.15) saturate(1.2)',
+                  animation: npcAnimation === 'talking'
+                    ? 'npcTalk 0.15s steps(2) infinite'
+                    : npcAnimation === 'excited'
+                    ? 'npcExcited 0.3s ease-in-out infinite'
+                    : npcAnimation === 'dancing'
+                    ? 'npcDance 0.5s ease-in-out infinite'
+                    : 'npcIdle 4s ease-in-out infinite',
+                  transformOrigin: 'bottom center',
+                }}
+              />
+            )}
+
+            {/* Overlay degradado inferior para legibilidad del chat */}
+            <div className="absolute inset-0" style={{background:'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 35%, rgba(0,0,0,0.05) 60%, transparent 80%)'}}/>
+
+            {/* Efecto glitch sutil */}
+            <div className="absolute inset-0 pointer-events-none" style={{
+              animation:'npcGlitch 10s steps(1) infinite',
+              opacity:0.08,
+              backgroundImage:'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,245,255,0.4) 3px, rgba(0,245,255,0.4) 4px)',
+            }}/>
+
+            {/* Efecto de scanlines */}
+            <div className="absolute inset-0 pointer-events-none" style={{
+              backgroundImage:'repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0px, rgba(0,0,0,0.03) 1px, transparent 1px, transparent 2px)',
+              backgroundSize:'100% 2px',
+            }}/>
+
+            {/* Badge BOT IA EN DIRECTO */}
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-full z-10" style={{background:'rgba(0,0,0,0.7)',border:'1px solid rgba(0,245,255,0.6)',backdropFilter:'blur(12px)'}}>
+              <div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#00F5FF'}}/>
+              <span className="text-xs font-black tracking-wider" style={{color:'#00F5FF'}}>🤖 BOT IA EN DIRECTO</span>
             </div>
-            {/* Separador */}
-            <div className="flex-shrink-0 h-0.5 w-full" style={{background: live.isBattle ? '#FF007F' : '#00F5FF'}}/>
-            {/* Co-host abajo */}
-            <div className="relative flex-1 overflow-hidden">
-              <video ref={opponentVideoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOpponent?true:muted}/>
-              <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'rgba(0,0,0,0.5)'}}>@{live.battleOpponentId?.username}</div>
-              {live.isBattle && (
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs font-black text-white" style={{background:'#FF007F'}}>VS ⚔️</div>
-              )}
+
+            {/* Reacción a regalo — emoji grande flotante */}
+            {npcGiftReaction && (
+              <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none" style={{animation:'giftPop 0.5s cubic-bezier(0.175,0.885,0.32,1.275)'}}>
+                <div className="text-8xl drop-shadow-2xl">{npcGiftReaction}</div>
+              </div>
+            )}
+
+            {/* Burbuja de frase NPC — boca del bot */}
+            <div className="absolute z-10" style={{bottom:'42%',left:'50%',transform:'translateX(-50%)',maxWidth:'85%',minWidth:'200px'}}>
+              <div
+                className="relative px-4 py-2.5 rounded-2xl text-center"
+                style={{
+                  background:'rgba(0,0,0,0.75)',
+                  border:`1px solid ${npcAnimation==='excited'?'rgba(255,0,127,0.7)':'rgba(0,245,255,0.4)'}`,
+                  backdropFilter:'blur(12px)',
+                  boxShadow: npcAnimation==='excited' ? '0 0 20px rgba(255,0,127,0.4)' : '0 0 15px rgba(0,245,255,0.2)',
+                  animation: npcAnimation==='talking' ? 'phrasePop 0.3s ease-out' : 'none',
+                }}
+              >
+                {/* Indicador de habla animado */}
+                {npcAnimation === 'talking' && (
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    {[0,1,2].map(i => (
+                      <div key={i} className="w-1.5 h-1.5 rounded-full" style={{background:'#00F5FF',animation:`soundBar 0.6s ease-in-out ${i*0.15}s infinite`}}/>
+                    ))}
+                  </div>
+                )}
+                <p className="text-white text-sm font-bold leading-tight">{npcPhrase}</p>
+              </div>
+              {/* Triángulo apuntando hacia arriba (hacia el avatar) */}
+              <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-0 h-0" style={{borderLeft:'8px solid transparent',borderRight:'8px solid transparent',borderBottom:`8px solid rgba(0,245,255,0.4)`}}/>
             </div>
+
+            {/* Nombre del bot y título del live */}
+            <div className="absolute z-10" style={{bottom:'36%',left:0,right:0,textAlign:'center'}}>
+              <p className="text-white font-black text-lg drop-shadow-lg">@{live.userId?.username}</p>
+              <p className="text-gray-300 text-xs mt-0.5 px-8 drop-shadow line-clamp-1">{live.title}</p>
+            </div>
+
+            {/* Botón de volumen/TTS */}
+            <button
+              onClick={() => {
+                setMuted(m => {
+                  if (!m) window.speechSynthesis?.cancel();
+                  return !m;
+                });
+              }}
+              className="absolute z-20 p-2.5 rounded-full"
+              style={{top:'52px',right:'8px',background:'rgba(0,0,0,0.6)',border:'1px solid rgba(255,255,255,0.2)'}}
+            >
+              {muted ? <VolumeX size={18} className="text-white"/> : <Volume2 size={18} style={{color:'#00F5FF'}}/>}
+            </button>
+
+            {/* CSS Animations */}
+            <style>{`
+              @keyframes npcIdle {
+                0%,100%{transform:scale(1) translateY(0)}
+                25%{transform:scale(1.005) translateY(-2px)}
+                75%{transform:scale(0.998) translateY(1px)}
+              }
+              @keyframes npcTalk {
+                0%{transform:scale(1)}
+                50%{transform:scale(1.008) translateY(-1px)}
+                100%{transform:scale(1)}
+              }
+              @keyframes npcExcited {
+                0%,100%{transform:scale(1) rotate(0deg)}
+                25%{transform:scale(1.02) rotate(-0.5deg)}
+                75%{transform:scale(1.02) rotate(0.5deg)}
+              }
+              @keyframes npcDance {
+                0%,100%{transform:scale(1) rotate(0deg) translateY(0)}
+                25%{transform:scale(1.01) rotate(-1deg) translateY(-3px)}
+                75%{transform:scale(1.01) rotate(1deg) translateY(-3px)}
+              }
+              @keyframes npcGlitch {
+                0%,88%,100%{opacity:0}
+                89%{opacity:0.08;transform:translateX(-2px)}
+                91%{opacity:0;transform:translateX(0)}
+                93%{opacity:0.06;transform:translateX(2px)}
+                95%{opacity:0}
+              }
+              @keyframes soundBar {
+                0%,100%{height:4px;opacity:0.5}
+                50%{height:10px;opacity:1}
+              }
+              @keyframes phrasePop {
+                0%{transform:scale(0.8);opacity:0}
+                100%{transform:scale(1);opacity:1}
+              }
+              @keyframes giftPop {
+                0%{transform:translate(-50%,-50%) scale(0);opacity:0}
+                60%{transform:translate(-50%,-50%) scale(1.3);opacity:1}
+                100%{transform:translate(-50%,-50%) scale(1);opacity:1}
+              }
+            `}</style>
           </div>
         ) : (
-          <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner||muted} style={{visibility:connState==='connected'?'visible':'hidden',opacity:connState==='connected'?1:0}}/>
-        )}
-
-        {/* Placeholder mientras conecta — NPC Bot Live o stream real */}
-        {connState !== 'connected' && (
-          <div className="absolute inset-0" style={{background:'#0b0b12',overflow:'hidden'}}>
-            {/* Si es un bot IA — mostrar avatar NPC animado a pantalla completa */}
-            {live.userId?.isBot ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center" style={{background:'linear-gradient(180deg,#0b0b12 0%,#1a0a2e 50%,#0b0b12 100%)'}}>
-                {/* Fondo de partículas NPC */}
-                <div className="absolute inset-0" style={{backgroundImage:'radial-gradient(circle at 20% 50%, rgba(0,245,255,0.05) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255,0,127,0.05) 0%, transparent 50%)'}} />
-                {/* Avatar fotorrealista a pantalla completa */}
-                <div className="relative w-full h-full flex items-center justify-center">
-                  {live.userId?.avatarUrl && (
-                    <img
-                      src={live.userId.avatarUrl}
-                      alt={live.userId.username}
-                      className="w-full h-full object-cover"
-                      style={{
-                        filter: 'brightness(0.9) contrast(1.1) saturate(1.2)',
-                        animation: 'npcPulse 3s ease-in-out infinite',
-                      }}
-                    />
-                  )}
-                  {/* Overlay degradado para que el chat sea legible */}
-                  <div className="absolute inset-0" style={{background:'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.1) 40%, transparent 70%)'}} />
-                  {/* Efecto glitch NPC */}
-                  <div className="absolute inset-0 pointer-events-none" style={{animation:'npcGlitch 8s steps(1) infinite', opacity:0.15, backgroundImage:'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,245,255,0.3) 2px, rgba(0,245,255,0.3) 4px)'}} />
-                  {/* Badge IA */}
-                  <div className="absolute top-16 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-full" style={{background:'rgba(0,0,0,0.6)',border:'1px solid rgba(0,245,255,0.5)',backdropFilter:'blur(10px)'}}>
-                    <div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#00F5FF'}}/>
-                    <span className="text-xs font-bold" style={{color:'#00F5FF'}}>BOT IA EN DIRECTO</span>
-                  </div>
-                  {/* Badge LIVE */}
-                  <div className="absolute top-16 right-4 flex items-center gap-1 px-2 py-1 rounded-full" style={{background:'#FF007F'}}>
-                    <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>
-                    <span className="text-white text-xs font-bold">LIVE</span>
-                  </div>
-                  {/* Nombre del bot */}
-                  <div className="absolute bottom-32 left-0 right-0 text-center">
-                    <p className="text-white font-black text-xl drop-shadow-lg">@{live.userId?.username}</p>
-                    <p className="text-gray-300 text-sm mt-1 px-4 drop-shadow">{live.title}</p>
-                  </div>
-                  {/* Frases NPC flotantes */}
-                  <div className="absolute bottom-52 left-1/2 -translate-x-1/2 text-center pointer-events-none">
-                    <span className="text-white text-sm font-bold px-3 py-1 rounded-full" style={{background:'rgba(0,0,0,0.5)',animation:'npcFloat 4s ease-in-out infinite'}}>🎲 ¡Únete al reto!</span>
-                  </div>
+          /* ═══════════════════════════════════════════════════════════════
+              MODO USUARIO REAL — LiveKit stream
+          ═══════════════════════════════════════════════════════════════ */
+          <>
+            {/* Pantalla dividida para batalla */}
+            {live.battleOpponentId ? (
+              <div className="absolute inset-0 flex flex-col" style={{visibility:connState==='connected'?'visible':'hidden',opacity:connState==='connected'?1:0}}>
+                <div className="relative flex-1 overflow-hidden">
+                  <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner?true:muted}/>
+                  <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'rgba(0,0,0,0.5)'}}>@{live.userId?.username}</div>
                 </div>
-                <style>{`
-                  @keyframes npcPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.02)} }
-                  @keyframes npcGlitch { 0%,90%,100%{opacity:0} 91%{opacity:0.15;transform:translateX(-2px)} 93%{opacity:0;transform:translateX(0)} 95%{opacity:0.1;transform:translateX(2px)} 97%{opacity:0} }
-                  @keyframes npcFloat { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(-8px)} }
-                `}</style>
+                <div className="flex-shrink-0 h-0.5 w-full" style={{background: live.isBattle ? '#FF007F' : '#00F5FF'}}/>
+                <div className="relative flex-1 overflow-hidden">
+                  <video ref={opponentVideoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOpponent?true:muted}/>
+                  <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'rgba(0,0,0,0.5)'}}>@{live.battleOpponentId?.username}</div>
+                  {live.isBattle && <div className="absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs font-black text-white" style={{background:'#FF007F'}}>VS ⚔️</div>}
+                </div>
               </div>
             ) : (
-              /* Stream de usuario real — placeholder estándar */
+              <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted={isOwner||muted} style={{visibility:connState==='connected'?'visible':'hidden',opacity:connState==='connected'?1:0}}/>
+            )}
+
+            {/* Placeholder usuario real mientras conecta */}
+            {connState !== 'connected' && (
               <div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}>
                 <div className="text-center px-4">
                   <Av u={live.userId} s={100}/>
@@ -626,17 +789,26 @@ export default function LiveViewerPage({ id }: { id: string }) {
                 </div>
               </div>
             )}
-          </div>
+
+            {/* Botón mute para usuarios reales */}
+            {connState==='connected' && !isOwner && (
+              <button onClick={() => setMuted(m => !m)} className="absolute z-10 p-2.5 rounded-full" style={{top:'52px',right:'8px',background:'rgba(0,0,0,0.55)'}}>
+                {muted ? <VolumeX size={18} className="text-white"/> : <Volume2 size={18} className="text-white"/>}
+              </button>
+            )}
+          </>
         )}
 
+        {/* Gradiente inferior para legibilidad */}
         <div className="absolute inset-x-0 bottom-0 h-2/5 pointer-events-none" style={{background:'linear-gradient(to top,rgba(0,0,0,0.75) 0%,transparent 100%)'}}/>
 
-        {/* Top bar */}
+        {/* ─── Top bar ────────────────────────────────────────────────── */}
         <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-10 gap-2">
           <div className="flex items-center gap-1.5 flex-wrap">
             <div className="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full" style={{background:'rgba(0,0,0,0.55)'}}>
               <Av u={live.userId} s={24}/>
               <span className="text-white text-xs font-bold">@{live.userId?.username}</span>
+              {isBot && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(0,245,255,0.25)',color:'#00F5FF'}}>IA</span>}
             </div>
             {!isOwner && <FollowButton userId={live.userId?._id} initialIsFollowing={!!hostProfile?.isFollowing} compact/>}
             <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}>
@@ -647,14 +819,12 @@ export default function LiveViewerPage({ id }: { id: string }) {
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            {/* Botón solicitudes (solo host) */}
             {isOwner && joinRequests.length > 0 && (
               <button onClick={() => setShowRequests(s => !s)} className="relative p-1.5 rounded-full" style={{background:'rgba(0,245,255,0.2)',border:'1px solid #00F5FF'}}>
                 <Users size={16} className="text-white"/>
                 <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-black text-black flex items-center justify-center" style={{background:'#00F5FF'}}>{joinRequests.length}</span>
               </button>
             )}
-            {/* Botón batalla — solo si hay co-host y no están ya en batalla */}
             {isOwner && connState === 'connected' && live.battleOpponentId && !live.isBattle && (
               <button onClick={async () => {
                 if (!token || !live._id || !live.battleOpponentId) return;
@@ -667,14 +837,12 @@ export default function LiveViewerPage({ id }: { id: string }) {
                 <Swords size={13}/>⚔️ Batalla
               </button>
             )}
-            {/* Botón espadas general para invitar desde fuera */}
             {isOwner && connState === 'connected' && !live.battleOpponentId && (
               <button onClick={() => setShowBattleInvite(s => !s)} className="p-1.5 rounded-full" style={{background:'rgba(255,0,127,0.2)',border:'1px solid #FF007F'}}>
                 <Swords size={16} className="text-white"/>
               </button>
             )}
-            {/* Botón pedir unirse (espectador) */}
-            {!isOwner && !isOpponent && connState === 'connected' && requestStatus === 'none' && (
+            {!isOwner && !isOpponent && connState === 'connected' && requestStatus === 'none' && !isBot && (
               <button onClick={requestJoin} className="flex items-center gap-1 px-2 py-1.5 rounded-full text-xs font-bold text-white" style={{background:'rgba(0,245,255,0.2)',border:'1px solid #00F5FF'}}>
                 <UserPlus size={13}/>Unirse
               </button>
@@ -689,13 +857,6 @@ export default function LiveViewerPage({ id }: { id: string }) {
             )}
           </div>
         </div>
-
-        {/* Mute */}
-        {connState==='connected' && !isOwner && (
-          <button onClick={() => setMuted(m => !m)} className="absolute z-10 p-2.5 rounded-full" style={{top:'52px',right:'8px',background:'rgba(0,0,0,0.55)'}}>
-            {muted ? <VolumeX size={18} className="text-white"/> : <Volume2 size={18} className="text-white"/>}
-          </button>
-        )}
 
         {/* Marcador batalla */}
         {live.isBattle && (() => {
@@ -720,7 +881,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
           );
         })()}
 
-        {/* Panel solicitudes de unirse (host) */}
+        {/* Panel solicitudes de unirse */}
         {showRequests && isOwner && joinRequests.length > 0 && (
           <div className="absolute top-14 right-2 z-20 rounded-2xl p-3 w-72" style={{background:'#13131f',border:'1px solid #1e1e2a'}}>
             <div className="flex items-center justify-between mb-2">
@@ -740,7 +901,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
           </div>
         )}
 
-        {/* Panel invitar a batalla (host) */}
+        {/* Panel invitar a batalla */}
         {showBattleInvite && isOwner && (
           <div className="absolute top-14 right-2 z-20 rounded-2xl p-3 w-72" style={{background:'#13131f',border:'1px solid #1e1e2a'}}>
             <div className="flex items-center justify-between mb-2">
@@ -763,14 +924,13 @@ export default function LiveViewerPage({ id }: { id: string }) {
           </div>
         )}
 
-        {/* Animaciones de regalos nuevas */}
+        {/* Animaciones de regalos */}
         <GiftAnimationOverlay events={giftEvents} onDone={removeAnim} />
-        {/* Fallback para regalos sin definición */}
         {giftAnim && <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center animate-bounce z-20"><div className="text-5xl mb-2">{giftAnim.split(' ')[0]}</div><p className="text-white font-bold">{giftAnim}</p></div>}
         <Toast message={toast}/>
         {insufficientCoins && <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 px-6 py-4 rounded-2xl text-center" style={{background:'rgba(255,0,127,0.9)'}}><p className="text-white font-bold">¡Monedas insuficientes!</p><Link href="/coins" className="text-xs text-white underline mt-1 block">Comprar →</Link></div>}
 
-        {/* Mensajes flotantes — visibles para todos los espectadores */}
+        {/* Mensajes flotantes */}
         <style>{`
           @keyframes floatUp {
             0%   { opacity: 0; transform: translate(-50%, 20px) scale(0.7); }
@@ -781,25 +941,14 @@ export default function LiveViewerPage({ id }: { id: string }) {
         `}</style>
         <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden">
           {floatMsgs.map((fm) => (
-            <div
-              key={fm.id}
-              className="absolute left-1/2"
-              style={{
-                top: `${25 + (fm.id % 4) * 10}%`,
-                animation: 'floatUp 4s ease-out forwards',
-              }}
-            >
+            <div key={fm.id} className="absolute left-1/2" style={{top:`${25+(fm.id%4)*10}%`,animation:'floatUp 4s ease-out forwards'}}>
               {fm.emoji && <div className="text-4xl mb-1 text-center">{fm.emoji}</div>}
-              <div className="px-4 py-2 rounded-2xl font-black text-white text-lg text-center whitespace-nowrap" style={{
-                background: 'linear-gradient(135deg,rgba(255,0,127,0.92),rgba(124,58,237,0.92))',
-                boxShadow: '0 0 24px rgba(255,0,127,0.6)',
-                backdropFilter: 'blur(8px)',
-              }}>{fm.text}</div>
+              <div className="px-4 py-2 rounded-2xl font-black text-white text-lg text-center whitespace-nowrap" style={{background:'linear-gradient(135deg,rgba(255,0,127,0.92),rgba(124,58,237,0.92))',boxShadow:'0 0 24px rgba(255,0,127,0.6)',backdropFilter:'blur(8px)'}}>{fm.text}</div>
             </div>
           ))}
         </div>
 
-        {/* Panel mensajes flotantes — solo el host lo ve */}
+        {/* Panel mensajes flotantes — solo el host */}
         {isOwner && showFloatPanel && connState === 'connected' && (
           <div className="absolute bottom-24 left-2 right-2 z-30 rounded-2xl p-4" style={{background:'#13131f',border:'1px solid #FF007F',boxShadow:'0 0 20px rgba(255,0,127,0.3)'}}>
             <div className="flex items-center justify-between mb-3">
@@ -812,26 +961,13 @@ export default function LiveViewerPage({ id }: { id: string }) {
               ))}
             </div>
             <div className="flex gap-2">
-              <input
-                value={floatInput}
-                onChange={e=>setFloatInput(e.target.value)}
-                onKeyDown={e=>e.key==='Enter'&&sendFloatMsg(floatInput)}
-                placeholder="Escribe tu mensaje flotante..."
-                className="flex-1 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-400 focus:outline-none"
-                style={{background:'#0b0b12',border:'1px solid #2a2a3a'}}
-                maxLength={40}
-              />
-              <button
-                onClick={()=>sendFloatMsg(floatInput)}
-                disabled={!floatInput.trim()}
-                className="px-4 py-2.5 rounded-xl font-bold text-white disabled:opacity-40"
-                style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)'}}
-              ><Send size={16}/></button>
+              <input value={floatInput} onChange={e=>setFloatInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendFloatMsg(floatInput)} placeholder="Escribe tu mensaje flotante..." className="flex-1 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-400 focus:outline-none" style={{background:'#0b0b12',border:'1px solid #2a2a3a'}} maxLength={40}/>
+              <button onClick={()=>sendFloatMsg(floatInput)} disabled={!floatInput.trim()} className="px-4 py-2.5 rounded-xl font-bold text-white disabled:opacity-40" style={{background:'linear-gradient(135deg,#FF007F,#7c3aed)'}}><Send size={16}/></button>
             </div>
           </div>
         )}
 
-        {/* Nuevo GiftPanel completo con 15+ regalos, animaciones e interactivos */}
+        {/* GiftPanel */}
         {showGifts && live && (
           <GiftPanel
             liveId={live._id}
@@ -854,6 +990,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
               <div key={i} className={cn('text-xs',m.type==='system'?'text-gray-300':'')}>
                 {m.type==='gift' ? <span className="px-2 py-1 rounded-full font-bold inline-block" style={{background:'rgba(255,0,127,0.25)',color:'#FF6FB5'}}>🎁 {m.user} {m.text}</span>
                 : m.type==='system' ? <span className="px-2 py-0.5 rounded-full inline-block" style={{background:'rgba(0,0,0,0.4)'}}>{m.text}</span>
+                : m.type==='bot' ? <span className="px-2 py-1 rounded-full font-bold inline-block" style={{background:'rgba(0,245,255,0.15)',color:'#00F5FF'}}>🤖 {m.user}: {m.text}</span>
                 : <span className="px-2 py-0.5 rounded-full inline-block" style={{background:'rgba(0,0,0,0.4)'}}>
                     <span className="font-bold" style={{color:'#00F5FF'}}>{m.user} </span>
                     <span className="text-gray-100">{m.text}</span>
