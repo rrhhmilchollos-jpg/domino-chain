@@ -36,6 +36,19 @@ const GIFT_CATALOG = {
   crown:     { name: 'Corona Real',       emoji: '👑',  coins: 800,  points: 1600 },
 };
 
+// ─── Pool de vídeos de bots (Pexels — libre de derechos) ──────────────────
+const BOT_VIDEO_POOL = [
+  'https://videos.pexels.com/video-files/5198139/5198139-hd_1080_1920_25fps.mp4',
+  'https://videos.pexels.com/video-files/6238297/6238297-hd_1080_1920_25fps.mp4',
+  'https://videos.pexels.com/video-files/7565433/7565433-hd_1080_1920_25fps.mp4',
+  'https://videos.pexels.com/video-files/4491461/4491461-hd_1080_1920_25fps.mp4',
+  'https://videos.pexels.com/video-files/3209828/3209828-hd_1080_1920_25fps.mp4',
+  'https://videos.pexels.com/video-files/5198139/5198139-uhd_1440_2560_25fps.mp4',
+  'https://videos.pexels.com/video-files/6238297/6238297-uhd_1440_2560_25fps.mp4',
+  'https://videos.pexels.com/video-files/7565433/7565433-uhd_1440_2560_25fps.mp4',
+  'https://videos.pexels.com/video-files/4491461/4491461-uhd_1440_2560_25fps.mp4',
+];
+
 // Regalos pequeños que los bots usan frecuentemente (baratos)
 const SMALL_GIFTS = ['heart', 'fire', 'star', 'confetti', 'panda', 'domino'];
 // Regalos medianos (ocasionales)
@@ -648,10 +661,12 @@ async function botPostVideo(io) {
 
     const challenge = challenges[Math.floor(Math.random() * challenges.length)];
 
+    const randomVideoUrl = BOT_VIDEO_POOL[Math.floor(Math.random() * BOT_VIDEO_POOL.length)];
+
     const video = await Video.create({
       userId: botUser._id,
       challengeId: challenge._id,
-      videoUrl: '',
+      videoUrl: randomVideoUrl,
       thumbnailUrl: botUser.avatarUrl,
       caption: `¡Acepto el reto "${challenge.title}"! 🎲 ¿Quién se atreve a continuar la cadena? #DOMINO`,
       isPublished: true,
