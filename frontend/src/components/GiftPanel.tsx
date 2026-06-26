@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Coins } from 'lucide-react';
 import { cn, useAuth, API } from '../lib/shared';
 import { GIFT_CATALOG_FULL, GIFT_CATEGORIES, GIFT_BY_ID, GiftDef } from '../lib/giftCatalog';
@@ -106,8 +106,8 @@ export default function GiftPanel({ liveId, hostId, onClose, onGiftSent, target 
                 selected?.id === gift.id ? 'ring-2' : 'hover:bg-white/5'
               )}
               style={selected?.id === gift.id
-                ? { background: `${gift.color}22`, ringColor: gift.color, boxShadow: `0 0 12px ${gift.color}44` }
-                : { background: 'rgba(255,255,255,0.04)' }
+                ? { background: `${gift.color}22`, outline: `2px solid ${gift.color}`, boxShadow: `0 0 12px ${gift.color}44` } as React.CSSProperties
+                : { background: 'rgba(255,255,255,0.04)' } as React.CSSProperties
               }
             >
               <div className="relative w-14 h-14 flex items-center justify-center">

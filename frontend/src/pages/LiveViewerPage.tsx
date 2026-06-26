@@ -494,7 +494,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
 
   const sendGift = async (type: string) => {
     if (!token || !user) return;
-    const g = GIFT_CATALOG[type];
+    const g = GIFT_BY_ID[type] || { coins: 0, name: type, emoji: '🎁' };
     if ((user.coins || 0) < g.coins) { setInsufficientCoins(true); setTimeout(() => setInsufficientCoins(false), 3000); setShowGifts(false); return; }
     setSending(true);
     try {
