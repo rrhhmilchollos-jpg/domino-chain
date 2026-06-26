@@ -190,20 +190,38 @@ export default function LiveViewerPage({ id }: { id: string }) {
         try {
           if (!participant || !participant.identity) return;
           if (track.kind !== Track.Kind.Video && track.kind !== Track.Kind.Audio) return;
-          const target = participant.identity === hostId ? videoRef.current : opponentVideoRef.current;
-          if (target) track.attach(target);
+          const isHost = participant.identity === hostId;
+          const target = isHost ? videoRef.current : opponentVideoRef.current;
+          if (target) {
+            track.attach(target);
+            // Forzar play en Safari/WebKit que a veces no autoplay
+            target.play().catch(() => {});
+          }
         } catch (e) {
           console.warn('attachTrack error (safe):', e);
         }
       };
+
+      // Tracks nuevos que llegan mientras el espectador ya está conectado
       room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
-        // Guard: participant may arrive before its metadata is populated — retry once
         if (!participant?.identity) {
           setTimeout(() => attachTrack(track, participant), 500);
         } else {
           attachTrack(track, participant);
         }
       });
+
+      // Tracks que ya estaban publicados ANTES de que el espectador se uniera
+      // (sin esto la pantalla queda negra para cualquiera que llegue tarde)
+      const attachExistingTracks = () => {
+        room.remoteParticipants.forEach((participant) => {
+          participant.trackPublications.forEach((pub: any) => {
+            if (pub.track && pub.isSubscribed) {
+              attachTrack(pub.track, participant);
+            }
+          });
+        });
+      };
 
       room.on(RoomEvent.Disconnected, () => {
         if (cancelled) return;
@@ -240,6 +258,11 @@ export default function LiveViewerPage({ id }: { id: string }) {
       try {
         await room.connect(livekitUrl, lkToken);
         if (cancelled) { room.disconnect(); return; }
+
+        // Adjuntar tracks que ya existían antes de que llegáramos (fix pantalla negra)
+        attachExistingTracks();
+        // Retry 1s después por si las suscripciones llegaron justo en ese instante
+        setTimeout(attachExistingTracks, 1000);
 
         if (isParticipant) {
           const myRef = isOwner ? videoRef : opponentVideoRef;
