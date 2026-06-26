@@ -41,12 +41,50 @@ export default function HomePage() {
             <div className="flex items-center justify-between mb-5"><div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#FF007F'}}/><h2 className="text-2xl font-black text-white" style={{fontFamily:'Syne,sans-serif'}}>En Directo</h2></div><Link href="/live" className="text-sm font-semibold" style={{color:'#00F5FF'}}>Ver todos →</Link></div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {lives.slice(0,4).map((l:LiveStream)=>(
-                <Link key={l._id} href={`/live/${l._id}`} className="relative rounded-xl overflow-hidden cursor-pointer" style={{aspectRatio:'9/16',background:'#13131f',border:'1px solid #1e1e2a'}}>
-                  <div className="absolute inset-0 flex items-center justify-center"><Av u={l.userId} s={64}/></div>
-                  <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.8) 0%,transparent 60%)'}}/>
+                <Link key={l._id} href={`/live/${l._id}`} className="relative rounded-xl overflow-hidden cursor-pointer" style={{aspectRatio:'9/16',background:'#0a0a1a',border:'1px solid rgba(255,0,127,0.3)'}}>
+                  {/* Fondo animado para bots, avatar estático para usuarios reales */}
+                  {l.userId?.isBot && l.userId?.avatarUrl ? (
+                    <>
+                      <div className="absolute inset-0" style={{background:'linear-gradient(180deg,#0a0a1a 0%,#1a0a2e 50%,#0d0d1d 100%)'}}/>
+                      <img
+                        src={l.userId.avatarUrl}
+                        alt={l.userId.username}
+                        className="absolute inset-0 w-full h-full object-cover object-top"
+                        style={{filter:'brightness(0.85) contrast(1.1) saturate(1.2)',animation:'liveCardZoom 8s ease-in-out infinite',transformOrigin:'center 25%'}}
+                      />
+                      {/* Partículas mini */}
+                      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                        {[0,1,2].map(i=>(
+                          <div key={i} className="absolute rounded-full" style={{width:'4px',height:'4px',background:i===0?'rgba(0,245,255,0.6)':i===1?'rgba(255,0,127,0.5)':'rgba(124,58,237,0.5)',left:`${20+i*30}%`,animation:`particleFloatMini ${2+i}s ease-in-out ${i*0.5}s infinite`}}/>
+                        ))}
+                      </div>
+                      {/* Badge IA */}
+                      <div className="absolute top-8 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-0.5 rounded-full" style={{background:'rgba(0,0,0,0.7)',border:'1px solid rgba(0,245,255,0.5)'}}>
+                        <div className="w-1 h-1 rounded-full animate-pulse" style={{background:'#00F5FF'}}/>
+                        <span className="text-[9px] font-black" style={{color:'#00F5FF'}}>BOT IA</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center" style={{background:'#1a1a2e'}}>
+                      <Av u={l.userId} s={64}/>
+                    </div>
+                  )}
+                  <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(0,0,0,0.85) 0%,rgba(0,0,0,0.1) 40%,transparent 70%)'}}/>
                   <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{background:'#FF007F'}}><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>LIVE</div>
                   <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs text-white" style={{background:'rgba(0,0,0,0.6)'}}><Eye size={9}/>{l.viewerCount}</div>
                   <div className="absolute bottom-2 left-2 right-2"><p className="text-white text-xs font-bold truncate">@{l.userId?.username}</p><p className="text-gray-300 text-xs truncate">{l.title}</p></div>
+                  <style>{`
+                    @keyframes liveCardZoom {
+                      0%,100%{transform:scale(1.05) translate(0,0)}
+                      33%{transform:scale(1.08) translate(-1%,-1%)}
+                      66%{transform:scale(1.06) translate(1%,0%)}
+                    }
+                    @keyframes particleFloatMini {
+                      0%{transform:translateY(100%) scale(0);opacity:0}
+                      50%{opacity:0.8}
+                      100%{transform:translateY(-20px) scale(1);opacity:0}
+                    }
+                  `}</style>
                 </Link>
               ))}
             </div>
