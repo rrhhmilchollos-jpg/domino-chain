@@ -37,12 +37,23 @@ export function useSocket(userId?: string) {
   return { socket: socketRef.current, emit, on };
 }
 
+export interface BotSpeakEvent {
+  liveId: string;
+  botUsername: string;
+  text: string;
+  animation: 'talking' | 'excited' | 'dancing' | 'idle';
+  duration: number;
+  timestamp: string;
+}
+
 export function useLiveSocket(liveId: string, handlers: {
   onMessage?: (msg: any) => void;
   onGift?: (data: any) => void;
   onFloat?: (data: any) => void;
   onEnded?: () => void;
   onViewerCount?: (count: number) => void;
+  // ─── Seguimiento 1: bot_speak — TTS sincronizado ───────────────────────
+  onBotSpeak?: (data: BotSpeakEvent) => void;
 }) {
   const socketRef = useRef<Socket | null>(null);
 
@@ -58,6 +69,8 @@ export function useLiveSocket(liveId: string, handlers: {
     if (handlers.onFloat) socket.on('live_float', handlers.onFloat);
     if (handlers.onEnded) socket.on('live_ended', handlers.onEnded);
     if (handlers.onViewerCount) socket.on('live_viewer_count', handlers.onViewerCount);
+    // ─── Seguimiento 1: escuchar bot_speak ──────────────────────────────
+    if (handlers.onBotSpeak) socket.on('bot_speak', handlers.onBotSpeak);
 
     return () => {
       socket.emit('leave_live', liveId);
@@ -66,6 +79,7 @@ export function useLiveSocket(liveId: string, handlers: {
       if (handlers.onFloat) socket.off('live_float', handlers.onFloat);
       if (handlers.onEnded) socket.off('live_ended', handlers.onEnded);
       if (handlers.onViewerCount) socket.off('live_viewer_count', handlers.onViewerCount);
+      if (handlers.onBotSpeak) socket.off('bot_speak', handlers.onBotSpeak);
     };
   }, [liveId]);
 

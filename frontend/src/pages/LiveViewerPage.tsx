@@ -397,7 +397,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
       const msg: ChatMsg = { user: data.fromUser || 'Alguien', text: `envió ${giftEmoji} ${giftName}!`, type: 'gift' };
       setMsgs(m => [...m, msg]);
 
-      // ─── Reacción NPC al regalo ─────────────────────────────────────────
+      // ─── Reacción NPC al regalo ───────────────────────────────────────────────────────────────────
       if (isBot) {
         const giftType = data.giftType || data.type || 'heart';
         const reactions = GIFT_VOICE_REACTIONS[giftType] || ['¡Gracias por el regalo! ❤️'];
@@ -420,6 +420,15 @@ export default function LiveViewerPage({ id }: { id: string }) {
       setConnState('unavailable');
     },
     onViewerCount: (count: number) => setViewers(count),
+    // ─── Seguimiento 1: bot_speak — TTS sincronizado con el backend ──────────────────────────────
+    onBotSpeak: (data) => {
+      if (!isBot) return;
+      setNpcPhrase(data.text);
+      setNpcAnimation(data.animation as 'talking' | 'excited' | 'dancing' | 'idle');
+      speakNPC(data.text, muted);
+      // Volver a idle tras la duración estimada del habla
+      setTimeout(() => setNpcAnimation('idle'), data.duration || 4000);
+    },
   });
 
   const sendFloatMsg = (text: string, emoji: string = '') => {

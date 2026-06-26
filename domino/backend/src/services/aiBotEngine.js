@@ -442,13 +442,23 @@ async function botStartOwnLive(botDef, io) {
     // Mensaje de apertura
     if (io) {
       const openingMsg = await generateChatMessage(botDef, title);
+      const fullOpening = `¡Bienvenidos al directo! ${openingMsg}`;
       io.to(`live:${live._id}`).emit('live_message', {
         user: botUser.username,
         userId: botUser._id,
         avatarUrl: botUser.avatarUrl,
-        text: `¡Bienvenidos al directo! ${openingMsg}`,
+        text: fullOpening,
         isBot: true,
         type: 'host_message',
+        timestamp: new Date().toISOString(),
+      });
+      // ─── Seguimiento 1: bot_speak — mensaje de apertura con TTS ───
+      io.to(`live:${live._id}`).emit('bot_speak', {
+        liveId: live._id.toString(),
+        botUsername: botUser.username,
+        text: fullOpening,
+        animation: 'excited',
+        duration: Math.max(3000, fullOpening.length * 80),
         timestamp: new Date().toISOString(),
       });
     }
@@ -488,6 +498,15 @@ function scheduleBotLiveMessages(botDef, botUser, live, io) {
           text: msg,
           isBot: true,
           type: 'host_chat',
+          timestamp: new Date().toISOString(),
+        });
+        // ─── Seguimiento 1: bot_speak — activa TTS + animación de boca en el cliente ───
+        io.to(`live:${live._id}`).emit('bot_speak', {
+          liveId: live._id.toString(),
+          botUsername: botUser.username,
+          text: msg,
+          animation: 'talking',
+          duration: Math.max(2000, msg.length * 80), // duración estimada del habla
           timestamp: new Date().toISOString(),
         });
       }
