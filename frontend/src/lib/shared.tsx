@@ -12,7 +12,7 @@ export const CLOUDINARY_CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD || 'dawgpv
 export const CLOUDINARY_PRESET = import.meta.env.VITE_CLOUDINARY_PRESET || 'domino_unsigned';
 
 // ===================== TYPES =====================
-export interface AppUser { _id: string; username: string; email: string; avatarUrl: string; country: string; city: string; flag: string; impactPoints: number; currentStreak: number; bio: string; coins: number; followersCount?: number; followingCount?: number; isFollowing?: boolean; }
+export interface AppUser { _id: string; username: string; email: string; avatarUrl: string; country: string; city: string; flag: string; impactPoints: number; currentStreak: number; bio: string; coins: number; followersCount?: number; followingCount?: number; isFollowing?: boolean; isBot?: boolean; isVerified?: boolean; savedVideos?: string[]; videoCount?: number; }
 export interface Challenge { _id: string; title: string; description: string; category: string; expiresAt: string; globalCounter: number; dayKey?: string; slot?: 1|2; }
 export interface CalendarDay { dayKey: string; challenges: { _id: string; title: string; category: string; completed: boolean }[]; }
 export interface RemixOf { videoId: string; type: 'duet'|'stitch'; authorId: string; authorUsername: string; }
