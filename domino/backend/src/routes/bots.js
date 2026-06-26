@@ -90,7 +90,16 @@ router.post('/chat/:liveId', async (req, res) => {
       });
     }
 
-    res.json({ ok: true, message: msg });
+        res.json({ ok: true, message: msg });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/bots/init — inicializar/crear todos los bots y sus lives (público para setup)
+router.post('/init', async (req, res) => {
+  try {
+    const { startBotEngine } = require('../services/aiBotEngine');
+    await startBotEngine(global.io);
+    res.json({ ok: true, message: 'Motor de bots reiniciado. Bots y lives se crearán en los próximos segundos.' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
