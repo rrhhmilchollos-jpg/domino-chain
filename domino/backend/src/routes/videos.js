@@ -10,7 +10,7 @@ const User = require('../models/User');
 router.get('/feed', async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    const videos = await Video.find({ isPublished: true, isPrivate: false })
+    const videos = await Video.find({ isPublished: true, $or: [{ isPrivate: false }, { isPublic: true }] })
       .populate('userId', 'username avatarUrl country city flag impactPoints currentStreak isVerified')
       .populate('challengeId', 'title category hashtag')
       .sort({ createdAt: -1 })
@@ -24,7 +24,7 @@ router.get('/feed/following', auth, async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     const me = await User.findById(req.user._id).select('following');
-    const videos = await Video.find({ userId: { $in: me.following }, isPublished: true, isPrivate: false })
+    const videos = await Video.find({ userId: { $in: me.following }, isPublished: true, $or: [{ isPrivate: false }, { isPublic: true }] })
       .populate('userId', 'username avatarUrl country city flag impactPoints currentStreak isVerified')
       .populate('challengeId', 'title category hashtag')
       .sort({ createdAt: -1 }).limit(Number(limit));
