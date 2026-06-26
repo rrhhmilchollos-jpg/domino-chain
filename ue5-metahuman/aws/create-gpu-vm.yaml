@@ -1,0 +1,251 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  DOMINO CHAIN - Servidor GPU para UE5 MetaHuman Pixel Streaming
+  Instancia g4dn.xlarge con NVIDIA T4, Windows Server 2022, UE5 preinstalado
+
+Parameters:
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Par de claves SSH para acceso RDP/SSH
+  
+  InstanceType:
+    Type: String
+    Default: g4dn.xlarge
+    AllowedValues:
+      - g4dn.xlarge      # NVIDIA T4 16GB, 4 vCPU, 16GB RAM - $0.526/h
+      - g4dn.2xlarge     # NVIDIA T4 16GB, 8 vCPU, 32GB RAM - $0.752/h
+      - g5.xlarge        # NVIDIA A10G 24GB, 4 vCPU, 16GB RAM - $1.006/h
+    Description: Tipo de instancia GPU
+
+  VolumeSize:
+    Type: Number
+    Default: 500
+    Description: Tamaño del disco en GB (UE5 necesita ~200GB mínimo)
+
+Mappings:
+  RegionMap:
+    # Windows Server 2022 con NVIDIA GRID Driver preinstalado (AWS Marketplace)
+    us-east-1:
+      AMI: ami-0c7217cdde317cfec  # Windows Server 2022 Base
+    eu-west-1:
+      AMI: ami-0694d931cee176e7d  # Windows Server 2022 Base EU
+    eu-central-1:
+      AMI: ami-07c589821f2b353aa  # Windows Server 2022 Base Frankfurt
+
+Resources:
+  # VPC y red
+  DominoVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: domino-ue5-vpc
+
+  DominoSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DominoVPC
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: domino-ue5-subnet
+
+  DominoIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: domino-ue5-igw
+
+  DominoVPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref DominoVPC
+      InternetGatewayId: !Ref DominoIGW
+
+  DominoRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DominoVPC
+
+  DominoRoute:
+    Type: AWS::EC2::Route
+    DependsOn: DominoVPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref DominoRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref DominoIGW
+
+  DominoSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DominoSubnet
+      RouteTableId: !Ref DominoRouteTable
+
+  # Security Group - Pixel Streaming ports
+  DominoSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: DOMINO UE5 Pixel Streaming Security Group
+      VpcId: !Ref DominoVPC
+      SecurityGroupIngress:
+        # RDP para administración
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: 0.0.0.0/0
+        # Pixel Streaming WebSocket
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        # Pixel Streaming Signaling Server
+        - IpProtocol: tcp
+          FromPort: 8888
+          ToPort: 8888
+          CidrIp: 0.0.0.0/0
+        # WebRTC STUN/TURN
+        - IpProtocol: udp
+          FromPort: 19302
+          ToPort: 19302
+          CidrIp: 0.0.0.0/0
+        # Pixel Streaming media ports
+        - IpProtocol: udp
+          FromPort: 7000
+          ToPort: 8000
+          CidrIp: 0.0.0.0/0
+        # Bot API interno
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+        # HTTPS para API de voz
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: domino-ue5-sg
+
+  # IP Elástica (fija)
+  DominoElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  DominoEIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: !Ref DominoGPUInstance
+      EIP: !Ref DominoElasticIP
+
+  # Instancia GPU principal
+  DominoGPUInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      KeyName: !Ref KeyPairName
+      SubnetId: !Ref DominoSubnet
+      SecurityGroupIds:
+        - !Ref DominoSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: !Ref VolumeSize
+            VolumeType: gp3
+            Iops: 3000
+            Throughput: 125
+            DeleteOnTermination: false
+      Tags:
+        - Key: Name
+          Value: domino-ue5-metahuman-server
+        - Key: Project
+          Value: DOMINO-CHAIN
+      UserData:
+        Fn::Base64: |
+          <powershell>
+          # Script de configuración inicial - Windows Server 2022
+          # Se ejecuta al primer arranque
+          
+          # 1. Instalar Chocolatey (gestor de paquetes)
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          
+          # 2. Instalar herramientas básicas
+          choco install -y git nodejs python3 7zip wget curl
+          
+          # 3. Instalar NVIDIA GRID Driver (para instancias g4dn)
+          $driverUrl = "https://s3.amazonaws.com/ec2-windows-nvidia-drivers/latest/latest.zip"
+          $driverZip = "C:\nvidia-driver.zip"
+          Invoke-WebRequest -Uri $driverUrl -OutFile $driverZip
+          Expand-Archive -Path $driverZip -DestinationPath "C:\nvidia-driver" -Force
+          $driverExe = Get-ChildItem "C:\nvidia-driver" -Filter "*.exe" | Select-Object -First 1
+          Start-Process -FilePath $driverExe.FullName -ArgumentList "/s /noreboot" -Wait
+          
+          # 4. Instalar Visual C++ Redistributable (requerido por UE5)
+          choco install -y vcredist-all
+          
+          # 5. Instalar DirectX (requerido por UE5)
+          choco install -y directx
+          
+          # 6. Crear directorio de trabajo
+          New-Item -ItemType Directory -Force -Path "C:\DOMINO"
+          New-Item -ItemType Directory -Force -Path "C:\DOMINO\UE5"
+          New-Item -ItemType Directory -Force -Path "C:\DOMINO\MetaHumans"
+          New-Item -ItemType Directory -Force -Path "C:\DOMINO\PixelStreaming"
+          New-Item -ItemType Directory -Force -Path "C:\DOMINO\VoiceTTS"
+          
+          # 7. Descargar Epic Games Launcher
+          $launcherUrl = "https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/installer/download/EpicGamesLauncherInstaller.msi"
+          Invoke-WebRequest -Uri $launcherUrl -OutFile "C:\DOMINO\EpicGamesLauncher.msi"
+          
+          # 8. Instalar Node.js para el servidor de señalización de Pixel Streaming
+          npm install -g pm2
+          
+          # 9. Configurar Windows para rendimiento máximo (GPU)
+          powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+          
+          # 10. Habilitar RDP
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          
+          # 11. Señal de que el setup inicial está completo
+          New-Item -ItemType File -Path "C:\DOMINO\setup_phase1_complete.txt"
+          Write-Output "Setup Phase 1 Complete - $(Get-Date)" | Out-File "C:\DOMINO\setup_phase1_complete.txt"
+          
+          # Reiniciar para aplicar drivers NVIDIA
+          Restart-Computer -Force
+          </powershell>
+
+Outputs:
+  InstanceId:
+    Description: ID de la instancia GPU
+    Value: !Ref DominoGPUInstance
+  
+  PublicIP:
+    Description: IP pública fija del servidor
+    Value: !Ref DominoElasticIP
+  
+  RDPConnection:
+    Description: Conexión RDP al servidor
+    Value: !Sub "mstsc /v:${DominoElasticIP}:3389"
+  
+  PixelStreamingURL:
+    Description: URL del Pixel Streaming
+    Value: !Sub "https://${DominoElasticIP}:8888"
+  
+  EstimatedMonthlyCost:
+    Description: Coste mensual estimado (g4dn.xlarge 24/7)
+    Value: "~$526/mes (instancia) + ~$50/mes (disco) + ~$50/mes (red) = ~$626/mes total"
