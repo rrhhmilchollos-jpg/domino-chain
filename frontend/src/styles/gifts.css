@@ -1,0 +1,271 @@
+/* ─── DOMINO CHAIN — Animaciones de regalos ─────────────────────────────────── */
+
+/* Regalo normal: flota hacia arriba y desaparece */
+@keyframes giftFloat {
+  0%   { opacity: 0; transform: translateY(0) scale(0.8); }
+  15%  { opacity: 1; transform: translateY(-10px) scale(1); }
+  80%  { opacity: 1; transform: translateY(-60px) scale(1); }
+  100% { opacity: 0; transform: translateY(-90px) scale(0.9); }
+}
+
+/* Regalo interactivo: entra desde la derecha */
+@keyframes giftSlideIn {
+  0%   { opacity: 0; transform: translateX(100%); }
+  60%  { opacity: 1; transform: translateX(-8px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/* Barra de progreso del regalo interactivo */
+@keyframes giftProgress {
+  0%   { width: 100%; }
+  100% { width: 0%; }
+}
+
+/* Pulso del icono del regalo */
+@keyframes giftPulse {
+  0%   { transform: scale(1) rotate(-3deg); }
+  100% { transform: scale(1.08) rotate(3deg); }
+}
+
+/* Fullscreen: aparece con fade + escala */
+@keyframes fullscreenGiftIn {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* Icono grande rebota al entrar */
+@keyframes giftBounceIn {
+  0%   { opacity: 0; transform: scale(0.3) rotate(-10deg); }
+  60%  { opacity: 1; transform: scale(1.1) rotate(3deg); }
+  80%  { transform: scale(0.95) rotate(-2deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* Texto con glow */
+@keyframes textGlowIn {
+  0%   { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Combo */
+@keyframes comboIn {
+  0%   { opacity: 0; transform: scale(0.5); }
+  70%  { transform: scale(1.15); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Glow pulsante */
+@keyframes glowPulse {
+  0%   { opacity: 0.3; transform: scale(0.9); }
+  100% { opacity: 0.7; transform: scale(1.1); }
+}
+
+/* Partículas flotantes */
+@keyframes particleFloat {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-120px) scale(0.3); }
+}
+
+/* León: rugido con vibración */
+@keyframes lionRoar {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  10%       { transform: scale(1.05) rotate(-2deg); }
+  20%       { transform: scale(1.1) rotate(2deg); }
+  30%       { transform: scale(1.08) rotate(-1deg); }
+  40%       { transform: scale(1.12) rotate(1deg); }
+  50%       { transform: scale(1.15) rotate(0deg); }
+}
+
+/* Avión: vuela de izquierda a derecha */
+@keyframes airplaneFly {
+  0%   { transform: translateX(-200px) translateY(20px) rotate(-5deg); opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateX(200px) translateY(-20px) rotate(5deg); opacity: 0; }
+}
+
+/* Pistola de dinero: billetes caen */
+@keyframes moneyRain {
+  0%   { transform: translateY(-100px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+/* Diamante: brilla y gira */
+@keyframes diamondSparkle {
+  0%   { transform: rotate(0deg) scale(1); filter: brightness(1); }
+  25%  { transform: rotate(90deg) scale(1.1); filter: brightness(2); }
+  50%  { transform: rotate(180deg) scale(1); filter: brightness(1); }
+  75%  { transform: rotate(270deg) scale(1.1); filter: brightness(2); }
+  100% { transform: rotate(360deg) scale(1); filter: brightness(1); }
+}
+
+/* Galaxia: espiral */
+@keyframes galaxySwirl {
+  0%   { transform: scale(0.5) rotate(0deg); opacity: 0; }
+  50%  { transform: scale(1.2) rotate(180deg); opacity: 1; }
+  100% { transform: scale(1) rotate(360deg); opacity: 1; }
+}
+
+/* Universo: explosión */
+@keyframes universeExplode {
+  0%   { transform: scale(0); opacity: 0; }
+  30%  { transform: scale(1.5); opacity: 1; }
+  60%  { transform: scale(0.9); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Corona: desciende desde arriba */
+@keyframes crownDescend {
+  0%   { transform: translateY(-100px) scale(0.5); opacity: 0; }
+  60%  { transform: translateY(10px) scale(1.05); opacity: 1; }
+  80%  { transform: translateY(-5px) scale(0.98); }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* Sirena: nada de lado a lado */
+@keyframes mermaidSwim {
+  0%   { transform: translateX(-30px) rotate(-5deg); }
+  50%  { transform: translateX(30px) rotate(5deg); }
+  100% { transform: translateX(-30px) rotate(-5deg); }
+}
+
+/* Panda: rebota */
+@keyframes pandaBounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%       { transform: translateY(-20px) scale(1.05); }
+}
+
+/* Confeti: explosión de partículas */
+@keyframes confettiBurst {
+  0%   { transform: scale(0) rotate(0deg); opacity: 1; }
+  100% { transform: scale(2) rotate(360deg); opacity: 0; }
+}
+
+/* Estrella: gira y brilla */
+@keyframes starSpin {
+  0%   { transform: rotate(0deg) scale(1); }
+  50%  { transform: rotate(180deg) scale(1.2); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+/* Fuego: sube */
+@keyframes fireRise {
+  0%   { transform: scaleY(1) translateY(0); }
+  50%  { transform: scaleY(1.2) translateY(-10px); }
+  100% { transform: scaleY(1) translateY(0); }
+}
+
+/* Corazón: flota */
+@keyframes heartFloat {
+  0%   { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-80px) scale(0.5); opacity: 0; }
+}
+
+/* Dominó: cae en cascada */
+@keyframes dominoFall {
+  0%   { transform: rotate(0deg) translateY(0); }
+  30%  { transform: rotate(-15deg) translateY(5px); }
+  60%  { transform: rotate(5deg) translateY(-5px); }
+  100% { transform: rotate(0deg) translateY(0); }
+}
+
+/* Cadena: ondula */
+@keyframes chainWave {
+  0%   { transform: scaleX(1) scaleY(1); }
+  25%  { transform: scaleX(1.1) scaleY(0.95); }
+  50%  { transform: scaleX(0.95) scaleY(1.1); }
+  75%  { transform: scaleX(1.05) scaleY(0.98); }
+  100% { transform: scaleX(1) scaleY(1); }
+}
+
+/* Cohete: despega */
+@keyframes rocketLaunch {
+  0%   { transform: translateY(0) rotate(0deg); }
+  20%  { transform: translateY(-10px) rotate(-5deg); }
+  100% { transform: translateY(-200px) rotate(-10deg); opacity: 0; }
+}
+
+/* ─── Clases de utilidad ─────────────────────────────────────────────────────── */
+.anim-lion-roar      { animation: lionRoar 0.8s ease-in-out infinite; }
+.anim-airplane-fly   { animation: airplaneFly 3s ease-in-out forwards; }
+.anim-money-rain     { animation: moneyRain 2s linear infinite; }
+.anim-diamond-sparkle { animation: diamondSparkle 2s linear infinite; }
+.anim-galaxy-swirl   { animation: galaxySwirl 3s ease-out forwards; }
+.anim-universe-explode { animation: universeExplode 1s cubic-bezier(0.175,0.885,0.32,1.275) forwards; }
+.anim-crown-descend  { animation: crownDescend 0.8s cubic-bezier(0.175,0.885,0.32,1.275) forwards; }
+.anim-mermaid-swim   { animation: mermaidSwim 2s ease-in-out infinite; }
+.anim-panda-bounce   { animation: pandaBounce 0.6s ease-in-out infinite; }
+.anim-confetti-burst { animation: confettiBurst 1s ease-out forwards; }
+.anim-star-spin      { animation: starSpin 1.5s linear infinite; }
+.anim-fire-rise      { animation: fireRise 0.5s ease-in-out infinite; }
+.anim-heart-float    { animation: heartFloat 2s ease-out forwards; }
+.anim-domino-fall    { animation: dominoFall 0.8s ease-in-out infinite; }
+.anim-chain-wave     { animation: chainWave 1s ease-in-out infinite; }
+
+/* ─── Efectos especiales de pantalla ─────────────────────────────────────────── */
+
+/* Shake de pantalla para regalos grandes */
+@keyframes screenShake {
+  0%, 100% { transform: translate(0, 0); }
+  10%       { transform: translate(-4px, -2px); }
+  20%       { transform: translate(4px, 2px); }
+  30%       { transform: translate(-3px, 3px); }
+  40%       { transform: translate(3px, -3px); }
+  50%       { transform: translate(-2px, 2px); }
+  60%       { transform: translate(2px, -2px); }
+  70%       { transform: translate(-1px, 1px); }
+  80%       { transform: translate(1px, -1px); }
+}
+
+.screen-shake { animation: screenShake 0.5s ease-in-out; }
+
+/* Flash de pantalla */
+@keyframes screenFlash {
+  0%   { opacity: 0; }
+  20%  { opacity: 0.4; }
+  100% { opacity: 0; }
+}
+
+.screen-flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  background: white;
+  animation: screenFlash 0.4s ease-out forwards;
+}
+
+/* Lluvia de monedas */
+@keyframes coinFall {
+  0%   { transform: translateY(-50px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+}
+
+.coin-rain-particle {
+  position: fixed;
+  top: -50px;
+  font-size: 24px;
+  animation: coinFall linear forwards;
+  pointer-events: none;
+  z-index: 998;
+}
+
+/* Corazones flotando en el live */
+@keyframes liveHeartFloat {
+  0%   { transform: translateY(0) scale(1) rotate(0deg); opacity: 1; }
+  50%  { transform: translateY(-60px) scale(1.1) rotate(15deg); opacity: 0.8; }
+  100% { transform: translateY(-120px) scale(0.6) rotate(-10deg); opacity: 0; }
+}
+
+.live-heart {
+  position: absolute;
+  bottom: 100px;
+  right: 20px;
+  font-size: 28px;
+  animation: liveHeartFloat 2s ease-out forwards;
+  pointer-events: none;
+}
+
+/* Scrollbar oculta */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }

@@ -5,18 +5,7 @@ const Gift = require('../models/Gift');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 
-const GIFT_CATALOG = {
-  domino:  { coins: 5,    points: 10   },
-  chain:   { coins: 20,   points: 50   },
-  star:    { coins: 50,   points: 100  },
-  rocket:  { coins: 100,  points: 200  },
-  crown:   { coins: 500,  points: 1000 },
-  diamond: { coins: 1000, points: 2500 },
-  fire:    { coins: 10,   points: 25   },
-  heart:   { coins: 15,   points: 30   },
-  bomb:    { coins: 200,  points: 400  },
-  galaxy:  { coins: 2000, points: 5000 },
-};
+const GIFT_CATALOG = require('../data/giftCatalog');
 
 // GET /api/lives
 router.get('/', async (req, res) => {

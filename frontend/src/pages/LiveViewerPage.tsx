@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import GiftPanel, { GiftAnimationOverlay, useGiftAnimations } from '../components/GiftPanel';
+import '../styles/gifts.css';
 import { Link } from 'wouter';
 import { Eye, X, Gift, Send, Volume2, VolumeX, Share2, UserPlus, Check, XCircle, Swords, Users } from 'lucide-react';
 import { Room, RoomEvent, Track } from 'livekit-client';
-import { cn, useAuth, Av, FollowButton, GIFT_CATALOG, API, uploadToCloudinary, shareLink, Toast, useKeyboardOffset, LiveStream } from '../lib/shared';
+import { cn, useAuth, Av, FollowButton, API, uploadToCloudinary, shareLink, Toast, useKeyboardOffset, LiveStream } from '../lib/shared';
+import { GIFT_BY_ID } from '../lib/giftCatalog';
 import { useLiveSocket } from '../lib/useSocket';
 
 type ConnState = 'idle' | 'connecting' | 'connected' | 'error' | 'unavailable' | 'blocked';
@@ -19,6 +22,7 @@ export default function LiveViewerPage({ id }: { id: string }) {
   const [input, setInput] = useState('');
   const [showGifts, setShowGifts] = useState(false);
   const [giftAnim, setGiftAnim] = useState<string|null>(null);
+  const { events: giftEvents, addGiftAnim, removeAnim } = useGiftAnimations();
   const [viewers, setViewers] = useState(0);
   const [sending, setSending] = useState(false);
   const [insufficientCoins, setInsufficientCoins] = useState(false);
@@ -311,10 +315,18 @@ export default function LiveViewerPage({ id }: { id: string }) {
       return [...m, msg];
     }),
     onGift: (data: any) => {
-      const msg: ChatMsg = { user: data.user, userId: data.userId, text: `envió ${data.emoji} ${data.name}!`, type: 'gift' };
+      const giftDef = GIFT_BY_ID[data.giftType || data.type || ''];
+      const giftName = giftDef?.name || data.name || 'regalo';
+      const giftEmoji = giftDef?.emoji || data.emoji || '🎁';
+      const msg: ChatMsg = { user: data.user, userId: data.userId, text: `envió ${giftEmoji} ${giftName}!`, type: 'gift' };
       setMsgs(m => [...m, msg]);
-      setGiftAnim(`${data.emoji} ${data.name}`);
-      setTimeout(() => setGiftAnim(null), 3000);
+      // Animación nueva
+      if (giftDef) {
+        addGiftAnim(giftDef.id, data.user || 'Alguien', data.quantity || 1);
+      } else {
+        setGiftAnim(`${giftEmoji} ${giftName}`);
+        setTimeout(() => setGiftAnim(null), 3000);
+      }
     },
     onFloat: (data: any) => {
       const fid = ++floatCounterRef.current;
@@ -698,6 +710,9 @@ export default function LiveViewerPage({ id }: { id: string }) {
           </div>
         )}
 
+        {/* Animaciones de regalos nuevas */}
+        <GiftAnimationOverlay events={giftEvents} onDone={removeAnim} />
+        {/* Fallback para regalos sin definición */}
         {giftAnim && <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center animate-bounce z-20"><div className="text-5xl mb-2">{giftAnim.split(' ')[0]}</div><p className="text-white font-bold">{giftAnim}</p></div>}
         <Toast message={toast}/>
         {insufficientCoins && <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 px-6 py-4 rounded-2xl text-center" style={{background:'rgba(255,0,127,0.9)'}}><p className="text-white font-bold">¡Monedas insuficientes!</p><Link href="/coins" className="text-xs text-white underline mt-1 block">Comprar →</Link></div>}
@@ -763,19 +778,20 @@ export default function LiveViewerPage({ id }: { id: string }) {
           </div>
         )}
 
-        {/* Panel regalos */}
-        {showGifts && (
-          <div className="absolute bottom-20 left-2 right-2 sm:right-auto sm:w-80 z-20 rounded-2xl p-4" style={{background:'#13131f',border:'1px solid #1e1e2a'}}>
-            <div className="flex items-center justify-between mb-3"><h3 className="font-bold text-white text-sm">Enviar Regalo</h3><button onClick={()=>setShowGifts(false)}><X size={16} className="text-gray-400"/></button></div>
-            <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-lg" style={{background:'rgba(0,245,255,0.1)'}}><span className="text-sm">🪙</span><span className="text-sm font-bold text-white">{(user?.coins||0).toLocaleString()} monedas</span><Link href="/coins" className="ml-auto text-xs font-semibold" style={{color:'#00F5FF'}}>+ Comprar</Link></div>
-            <div className="grid grid-cols-3 gap-2">
-              {Object.entries(GIFT_CATALOG).map(([k,g]) => (
-                <button key={k} onClick={()=>sendGift(k)} disabled={sending||(user?.coins||0)<g.coins} className="flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-white/10 border border-transparent hover:border-[#FF007F] transition-colors disabled:opacity-40">
-                  <span className="text-2xl">{g.emoji}</span><span className="text-white text-xs font-bold">{g.name}</span><span className="text-yellow-400 text-xs">{g.coins}🪙</span>
-                </button>
-              ))}
-            </div>
-          </div>
+        {/* Nuevo GiftPanel completo con 15+ regalos, animaciones e interactivos */}
+        {showGifts && live && (
+          <GiftPanel
+            liveId={live._id}
+            hostId={live.userId?._id || ''}
+            onClose={() => setShowGifts(false)}
+            onGiftSent={(gift, qty) => {
+              addGiftAnim(gift.id, user?.username || 'Tú', qty);
+              const msg: ChatMsg = { user: user?.username || 'Tú', userId: user?._id, text: `envió ${gift.emoji} ${gift.name}!`, type: 'gift' };
+              setMsgs(m => [...m, msg]);
+            }}
+            target={giftTarget}
+            opponentId={live.battleOpponentId?._id}
+          />
         )}
 
         {/* Chat y controles */}
