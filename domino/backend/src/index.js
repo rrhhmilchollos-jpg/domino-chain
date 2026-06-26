@@ -14,6 +14,8 @@ const rankingRoutes      = require('./routes/ranking');
 const messageRoutes      = require('./routes/messages');
 const liveRoutes         = require('./routes/lives');
 const botRoutes          = require('./routes/bots');
+const analyticsRoutes    = require('./routes/analytics');
+const { feedAnalytics, globalAnalytics } = require('./middleware/analytics');
 
 const app    = express();
 const server = http.createServer(app);
@@ -40,16 +42,22 @@ app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Analytics middleware global (conteo de requests)
+app.use(globalAnalytics);
+
 // ── Rutas ──────────────────────────────────────────────
 app.use('/api/auth',          authRoutes);
 app.use('/api/users',         userRoutes);
 app.use('/api/challenges',    challengeRoutes);
+// Analytics específico para el feed de videos
+app.use('/api/videos/feed', feedAnalytics);
 app.use('/api/videos',        videoRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/ranking',       rankingRoutes);
 app.use('/api/messages',      messageRoutes);
 app.use('/api/lives',         liveRoutes);
 app.use('/api/bots',          botRoutes);
+app.use('/api/analytics',     analyticsRoutes);
 
 app.get('/api/health', (req, res) => res.json({
   status: 'ok',

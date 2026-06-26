@@ -4,7 +4,7 @@ const giftSchema = new mongoose.Schema({
   liveId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Live', required: true },
   fromUserId:  { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   toUserId:    { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  giftType:    { type: String, enum: ['domino','chain','star','rocket','crown','diamond','fire','heart','bomb','galaxy'], required: true },
+  giftType:    { type: String, enum: ['heart','fire','star','confetti','panda','domino','chain','mermaid','money_gun','airplane','diamond','crown','lion','galaxy','universe','rocket','bomb'], required: true },
   coins:       { type: Number, required: true },
   points:      { type: Number, required: true },
   quantity:    { type: Number, default: 1 },

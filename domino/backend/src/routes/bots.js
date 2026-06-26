@@ -2,6 +2,7 @@ const router = require('express').Router();
 const auth = require('../middleware/auth');
 const User = require('../models/User');
 const Live = require('../models/Live');
+const Gift = require('../models/Gift');
 const { botJoinLive, generateChatMessage } = require('../services/aiBotEngine');
 
 // GET /api/bots — lista de bots activos (público)
@@ -14,8 +15,40 @@ router.get('/', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// POST /api/bots/join-live/:liveId — forzar que un bot entre en un directo (admin)
-router.post('/join-live/:liveId', auth, async (req, res) => {
+// GET /api/bots/status — estado de todos los bots y sus lives (público)
+router.get('/status', async (req, res) => {
+  try {
+    const bots = await User.find({ isBot: true })
+      .select('username avatarUrl bio impactPoints coins isVerified flag city country');
+    const botsWithLives = await Promise.all(bots.map(async (bot) => {
+      const activeLive = await Live.findOne({ userId: bot._id, isActive: true })
+        .select('title viewerCount totalGifts createdAt roomId');
+      const totalGiftsSent = await Gift.countDocuments({ fromUserId: bot._id, isBot: true });
+      return { ...bot.toObject(), activeLive: activeLive || null, isLive: !!activeLive, totalGiftsSent };
+    }));
+    res.json({
+      bots: botsWithLives,
+      totalBots: bots.length,
+      botsInLive: botsWithLives.filter(b => b.isLive).length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/bots/lives — todos los lives activos de bots (público)
+router.get('/lives', async (req, res) => {
+  try {
+    const botUsers = await User.find({ isBot: true }).select('_id');
+    const botIds = botUsers.map(b => b._id);
+    const botLives = await Live.find({ userId: { $in: botIds }, isActive: true })
+      .populate('userId', 'username avatarUrl flag isBot isVerified impactPoints coins city country')
+      .sort({ viewerCount: -1 });
+    res.json(botLives);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/bots/join-live/:liveId — forzar que un bot entre en un directo
+router.post('/join-live/:liveId', async (req, res) => {
   try {
     const live = await Live.findById(req.params.liveId);
     if (!live || !live.isActive) return res.status(404).json({ error: 'Directo no encontrado' });
@@ -40,7 +73,6 @@ router.post('/chat/:liveId', async (req, res) => {
     const live = await Live.findById(req.params.liveId);
     if (!live || !live.isActive) return res.status(404).json({ error: 'Directo no activo' });
 
-    const BOT_PERSONALITIES = require('../services/aiBotEngine');
     const msg = await generateChatMessage(
       { chatStyle: 'hype', personality: `Eres ${bot.username}, un bot de DOMINO. Hablas en español. Máximo 15 palabras.` },
       context || live.title
