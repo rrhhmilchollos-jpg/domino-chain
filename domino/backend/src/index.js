@@ -129,6 +129,25 @@ io.on('connection', (socket) => {
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/domino')
   .then(async () => {
     console.log('✅ MongoDB conectado');
+
+    // Migración: eliminar índice único de googleId para permitir múltiples bots
+    try {
+      const db = mongoose.connection.db;
+      const indexes = await db.collection('users').indexes();
+      const googleIdIndex = indexes.find(idx => idx.key && idx.key.googleId !== undefined && idx.unique);
+      if (googleIdIndex) {
+        await db.collection('users').dropIndex(googleIdIndex.name);
+        console.log('✅ Índice único de googleId eliminado (migración)');
+      }
+      // Actualizar dominoking_bot para que googleId sea null
+      await db.collection('users').updateMany(
+        { isBot: true, googleId: '' },
+        { $set: { googleId: null } }
+      );
+    } catch (migErr) {
+      console.log('ℹ️ Migración googleId:', migErr.message);
+    }
+
     server.listen(PORT, () => {
       console.log(`🚀 DOMINO Backend v3 en http://localhost:${PORT}`);
     });

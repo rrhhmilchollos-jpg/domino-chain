@@ -171,6 +171,7 @@ async function initializeBots() {
           username: botDef.username,
           email: `${botDef.username}@domino-ai.internal`,
           password: require('crypto').randomBytes(32).toString('hex'),
+          googleId: null,
           avatarUrl: botDef.avatar,
           bio: `Bot de IA de DOMINO 🤖 | ${botDef.name} | Siempre en directo`,
           isBot: true,
