@@ -297,16 +297,9 @@ function CreatePage() {
 
 // ===================== HOME ROUTE =====================
 function HomeRoute() {
-  const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
-  useEffect(() => { if (!loading && user) setLocation('/feed'); }, [user, loading]);
-  if (loading) return <PageLoader />;
-  if (user) return null;
-  return (
-    <Suspense fallback={<PageLoader />}>
-      <HomePage />
-    </Suspense>
-  );
+  useEffect(() => { setLocation('/feed'); }, []);
+  return <PageLoader />;
 }
 
 // ===================== APP =====================

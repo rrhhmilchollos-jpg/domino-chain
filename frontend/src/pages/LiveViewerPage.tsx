@@ -3,6 +3,7 @@ import { Link } from 'wouter';
 import { Eye, X, Gift, Send, Volume2, VolumeX, Share2, UserPlus, Check, XCircle, Swords, Users } from 'lucide-react';
 import { Room, RoomEvent, Track } from 'livekit-client';
 import { cn, useAuth, Av, FollowButton, GIFT_CATALOG, API, uploadToCloudinary, shareLink, Toast, useKeyboardOffset, LiveStream } from '../lib/shared';
+import { useLiveSocket } from '../lib/useSocket';
 
 type ConnState = 'idle' | 'connecting' | 'connected' | 'error' | 'unavailable' | 'blocked';
 type EndSummary = { totalUniqueViewers: number; peakViewerCount: number; totalGiftsReceived: number; durationSeconds: number; recordingUrl: string | null; liveId: string } | null;
@@ -302,14 +303,40 @@ export default function LiveViewerPage({ id }: { id: string }) {
     try { roomRef.current?.localParticipant.publishData(encoder.encode(JSON.stringify(msg)), { reliable: true }); } catch { }
   };
 
+  // Socket.IO para chat en tiempo real (funciona aunque no haya LiveKit)
+  const { sendMessage: socketSendMsg, sendFloat: socketSendFloat } = useLiveSocket(live?._id || '', {
+    onMessage: (msg: ChatMsg) => setMsgs(m => {
+      // Evitar duplicados de mensajes propios
+      if (msg.userId && user && msg.userId === user._id) return m;
+      return [...m, msg];
+    }),
+    onGift: (data: any) => {
+      const msg: ChatMsg = { user: data.user, userId: data.userId, text: `envió ${data.emoji} ${data.name}!`, type: 'gift' };
+      setMsgs(m => [...m, msg]);
+      setGiftAnim(`${data.emoji} ${data.name}`);
+      setTimeout(() => setGiftAnim(null), 3000);
+    },
+    onFloat: (data: any) => {
+      const fid = ++floatCounterRef.current;
+      setFloatMsgs(m => [...m, { id: fid, text: data.text, emoji: data.emoji || '' }]);
+      setTimeout(() => setFloatMsgs(m => m.filter(x => x.id !== fid)), 4000);
+    },
+    onEnded: () => {
+      setConnState('unavailable');
+    },
+    onViewerCount: (count: number) => setViewers(count),
+  });
+
   const sendFloatMsg = (text: string, emoji: string = '') => {
     if (!isOwner || !text.trim()) return;
     const msg = { type: 'float', text: text.trim(), emoji };
     try { roomRef.current?.localParticipant.publishData(encoder.encode(JSON.stringify(msg)), { reliable: true }); } catch { }
+    // Enviar también por Socket.IO para espectadores sin LiveKit
+    socketSendFloat({ text: text.trim(), emoji, user: user?.username || 'Host' });
     // Also show locally
-    const id = ++floatCounterRef.current;
-    setFloatMsgs(m => [...m, { id, text: text.trim(), emoji }]);
-    setTimeout(() => setFloatMsgs(m => m.filter(x => x.id !== id)), 4000);
+    const fid = ++floatCounterRef.current;
+    setFloatMsgs(m => [...m, { id: fid, text: text.trim(), emoji }]);
+    setTimeout(() => setFloatMsgs(m => m.filter(x => x.id !== fid)), 4000);
     setFloatInput('');
     setShowFloatPanel(false);
   };
@@ -448,6 +475,8 @@ export default function LiveViewerPage({ id }: { id: string }) {
     const msg: ChatMsg = { user: user.username, userId: user._id, text: input };
     setMsgs(m => [...m, msg]);
     broadcast(msg);
+    // Enviar también por Socket.IO para todos los espectadores
+    socketSendMsg({ user: user.username, userId: user._id, avatarUrl: user.avatarUrl, text: input });
     setInput('');
   };
 
