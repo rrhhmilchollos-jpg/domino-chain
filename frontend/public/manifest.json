@@ -12,6 +12,12 @@
   "dir": "ltr",
   "categories": ["social", "entertainment", "lifestyle"],
   "prefer_related_applications": false,
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://domino-chain-pi.vercel.app/manifest.webmanifest"
+    }
+  ],
   "iarc_rating_id": "",
   "icons": [
     { "src": "/icons/icon-72.png", "sizes": "72x72", "type": "image/png", "purpose": "any" },

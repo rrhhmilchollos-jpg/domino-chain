@@ -11,3 +11,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </React.StrictMode>
 );
+
+// Registro del Service Worker para PWA (offline, caché, notificaciones push)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js', { scope: '/' })
+      .then(reg => console.log('[SW] Registrado:', reg.scope))
+      .catch(err => console.warn('[SW] Error al registrar:', err));
+  });
+}
