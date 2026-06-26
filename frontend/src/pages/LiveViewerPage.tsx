@@ -7,6 +7,7 @@ import { Room, RoomEvent, Track } from 'livekit-client';
 import { cn, useAuth, Av, FollowButton, API, uploadToCloudinary, shareLink, Toast, useKeyboardOffset, LiveStream } from '../lib/shared';
 import { GIFT_BY_ID } from '../lib/giftCatalog';
 import { useLiveSocket } from '../lib/useSocket';
+import BotAvatar3D from '../components/BotAvatar3D';
 
 type ConnState = 'idle' | 'connecting' | 'connected' | 'error' | 'unavailable' | 'blocked';
 type EndSummary = { totalUniqueViewers: number; peakViewerCount: number; totalGiftsReceived: number; durationSeconds: number; recordingUrl: string | null; liveId: string } | null;
@@ -610,127 +611,39 @@ export default function LiveViewerPage({ id }: { id: string }) {
         ═══════════════════════════════════════════════════════════════ */}
         {isBot ? (
           <div className="absolute inset-0 overflow-hidden" style={{background:'#000'}}>
-            {/* Fondo degradado */}
-            <div className="absolute inset-0" style={{background:'linear-gradient(180deg,#0a0a1a 0%,#1a0a2e 40%,#0d0d1d 100%)'}}/>
 
-            {/* Partículas de fondo */}
-            <div className="absolute inset-0 pointer-events-none" style={{
-              backgroundImage:'radial-gradient(circle at 15% 40%, rgba(0,245,255,0.08) 0%, transparent 45%), radial-gradient(circle at 85% 20%, rgba(255,0,127,0.08) 0%, transparent 45%), radial-gradient(circle at 50% 80%, rgba(124,58,237,0.06) 0%, transparent 40%)',
-            }}/>
-
-            {/* Avatar NPC a pantalla completa — con animación de movimiento continuo */}
+            {/* ── BotAvatar3D: Three.js + lip-sync + animaciones procedurales ── */}
             {live.userId?.avatarUrl && (
-              <div
-                className="absolute inset-0"
-                style={{
-                  animation: npcAnimation === 'talking'
-                    ? 'npcTalkBody 0.2s ease-in-out infinite alternate'
-                    : npcAnimation === 'excited'
-                    ? 'npcExcitedBody 0.25s ease-in-out infinite alternate'
-                    : npcAnimation === 'dancing'
-                    ? 'npcDanceBody 0.4s ease-in-out infinite alternate'
-                    : 'npcBreath 5s ease-in-out infinite',
-                  transformOrigin: 'bottom center',
-                }}
-              >
-                <img
-                  src={live.userId.avatarUrl}
-                  alt={live.userId.username}
-                  className="absolute w-full h-full object-cover object-top"
-                  style={{
-                    filter: 'brightness(0.88) contrast(1.12) saturate(1.25)',
-                    animation: 'npcZoomPan 18s ease-in-out infinite',
-                    transformOrigin: 'center 30%',
-                  }}
+              <div className="absolute inset-0">
+                <BotAvatar3D
+                  avatarImageUrl={live.userId.avatarUrl}
+                  botUsername={live.userId.username || ''}
+                  phrase={npcPhrase}
+                  animation={npcAnimation as 'idle'|'talking'|'excited'|'dancing'}
+                  muted={muted}
+                  onSpeakEnd={() => setNpcAnimation('idle')}
                 />
               </div>
             )}
 
-            {/* Ondas de audio — efecto de stream en vivo */}
-            <div className="absolute pointer-events-none z-10" style={{bottom:'52%',left:'50%',transform:'translateX(-50%)',display:'flex',alignItems:'flex-end',gap:'3px',height:'32px'}}>
-              {Array.from({length:12}).map((_,i) => (
-                <div key={i} className="rounded-full" style={{
-                  width:'3px',
-                  background: npcAnimation==='talking' || npcAnimation==='excited'
-                    ? `rgba(0,245,255,${0.5+Math.random()*0.5})`
-                    : 'rgba(0,245,255,0.25)',
-                  animation: `audioWave${(i%4)+1} ${0.4+i*0.07}s ease-in-out infinite alternate`,
-                  animationDelay: `${i*0.06}s`,
-                }}/>
-              ))}
-            </div>
-
-            {/* Partículas flotantes — efecto de stream vivo */}
-            <div className="absolute inset-0 pointer-events-none z-5 overflow-hidden">
-              {Array.from({length:8}).map((_,i) => (
-                <div key={i} className="absolute rounded-full" style={{
-                  width: `${4+i*2}px`,
-                  height: `${4+i*2}px`,
-                  background: i%3===0 ? 'rgba(0,245,255,0.4)' : i%3===1 ? 'rgba(255,0,127,0.3)' : 'rgba(124,58,237,0.3)',
-                  left: `${10+i*12}%`,
-                  animation: `particleFloat ${3+i*0.8}s ease-in-out ${i*0.4}s infinite`,
-                  filter: 'blur(1px)',
-                }}/>
-              ))}
-            </div>
-
             {/* Overlay degradado inferior para legibilidad del chat */}
-            <div className="absolute inset-0" style={{background:'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 35%, rgba(0,0,0,0.05) 60%, transparent 80%)'}}/>
-
-            {/* Efecto glitch sutil */}
-            <div className="absolute inset-0 pointer-events-none" style={{
-              animation:'npcGlitch 10s steps(1) infinite',
-              opacity:0.08,
-              backgroundImage:'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,245,255,0.4) 3px, rgba(0,245,255,0.4) 4px)',
-            }}/>
-
-            {/* Efecto de scanlines */}
-            <div className="absolute inset-0 pointer-events-none" style={{
-              backgroundImage:'repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0px, rgba(0,0,0,0.03) 1px, transparent 1px, transparent 2px)',
-              backgroundSize:'100% 2px',
-            }}/>
+            <div className="absolute inset-0 pointer-events-none" style={{background:'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 35%, rgba(0,0,0,0.05) 60%, transparent 80%)'}}/>
 
             {/* Badge BOT IA EN DIRECTO */}
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-full z-10" style={{background:'rgba(0,0,0,0.7)',border:'1px solid rgba(0,245,255,0.6)',backdropFilter:'blur(12px)'}}>
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-full z-20" style={{background:'rgba(0,0,0,0.7)',border:'1px solid rgba(0,245,255,0.6)',backdropFilter:'blur(12px)'}}>
               <div className="w-2 h-2 rounded-full animate-pulse" style={{background:'#00F5FF'}}/>
               <span className="text-xs font-black tracking-wider" style={{color:'#00F5FF'}}>🤖 BOT IA EN DIRECTO</span>
             </div>
 
             {/* Reacción a regalo — emoji grande flotante */}
             {npcGiftReaction && (
-              <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none" style={{animation:'giftPop 0.5s cubic-bezier(0.175,0.885,0.32,1.275)'}}>
+              <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none" style={{animation:'npcGiftBounce 0.6s cubic-bezier(0.175,0.885,0.32,1.275)'}}>
                 <div className="text-8xl drop-shadow-2xl">{npcGiftReaction}</div>
               </div>
             )}
 
-            {/* Burbuja de frase NPC — boca del bot */}
-            <div className="absolute z-10" style={{bottom:'42%',left:'50%',transform:'translateX(-50%)',maxWidth:'85%',minWidth:'200px'}}>
-              <div
-                className="relative px-4 py-2.5 rounded-2xl text-center"
-                style={{
-                  background:'rgba(0,0,0,0.75)',
-                  border:`1px solid ${npcAnimation==='excited'?'rgba(255,0,127,0.7)':'rgba(0,245,255,0.4)'}`,
-                  backdropFilter:'blur(12px)',
-                  boxShadow: npcAnimation==='excited' ? '0 0 20px rgba(255,0,127,0.4)' : '0 0 15px rgba(0,245,255,0.2)',
-                  animation: npcAnimation==='talking' ? 'phrasePop 0.3s ease-out' : 'none',
-                }}
-              >
-                {/* Indicador de habla animado */}
-                {npcAnimation === 'talking' && (
-                  <div className="flex items-center justify-center gap-1 mb-1">
-                    {[0,1,2].map(i => (
-                      <div key={i} className="w-1.5 h-1.5 rounded-full" style={{background:'#00F5FF',animation:`soundBar 0.6s ease-in-out ${i*0.15}s infinite`}}/>
-                    ))}
-                  </div>
-                )}
-                <p className="text-white text-sm font-bold leading-tight">{npcPhrase}</p>
-              </div>
-              {/* Triángulo apuntando hacia arriba (hacia el avatar) */}
-              <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-0 h-0" style={{borderLeft:'8px solid transparent',borderRight:'8px solid transparent',borderBottom:`8px solid rgba(0,245,255,0.4)`}}/>
-            </div>
-
             {/* Nombre del bot y título del live */}
-            <div className="absolute z-10" style={{bottom:'36%',left:0,right:0,textAlign:'center'}}>
+            <div className="absolute z-20" style={{bottom:'36%',left:0,right:0,textAlign:'center'}}>
               <p className="text-white font-black text-lg drop-shadow-lg">@{live.userId?.username}</p>
               <p className="text-gray-300 text-xs mt-0.5 px-8 drop-shadow line-clamp-1">{live.title}</p>
             </div>
@@ -743,87 +656,20 @@ export default function LiveViewerPage({ id }: { id: string }) {
                   return !m;
                 });
               }}
-              className="absolute z-20 p-2.5 rounded-full"
+              className="absolute z-30 p-2.5 rounded-full"
               style={{top:'52px',right:'8px',background:'rgba(0,0,0,0.6)',border:'1px solid rgba(255,255,255,0.2)'}}
             >
               {muted ? <VolumeX size={18} className="text-white"/> : <Volume2 size={18} style={{color:'#00F5FF'}}/>}
             </button>
 
-            {/* CSS Animations */}
+            {/* CSS Animations para reacciones */}
             <style>{`
-              /* Zoom+pan continuo — simula cámara en movimiento */
-              @keyframes npcZoomPan {
-                0%   { transform: scale(1.08) translate(0%, 0%); }
-                20%  { transform: scale(1.12) translate(-1.5%, -1%); }
-                40%  { transform: scale(1.10) translate(1%, -2%); }
-                60%  { transform: scale(1.13) translate(-0.5%, 1%); }
-                80%  { transform: scale(1.09) translate(1.5%, -0.5%); }
-                100% { transform: scale(1.08) translate(0%, 0%); }
-              }
-              /* Respiración del cuerpo */
-              @keyframes npcBreath {
-                0%,100% { transform: scaleY(1) translateY(0); }
-                50%     { transform: scaleY(1.008) translateY(-2px); }
-              }
-              /* Habla — movimiento de cabeza */
-              @keyframes npcTalkBody {
-                0%   { transform: rotate(-0.4deg) translateY(-1px) scale(1.002); }
-                100% { transform: rotate(0.4deg) translateY(0px) scale(1.005); }
-              }
-              /* Emocionado */
-              @keyframes npcExcitedBody {
-                0%   { transform: scale(1.01) rotate(-0.8deg) translateY(-2px); }
-                100% { transform: scale(1.03) rotate(0.8deg) translateY(-4px); }
-              }
-              /* Bailando */
-              @keyframes npcDanceBody {
-                0%   { transform: scale(1.01) rotate(-1.5deg) translateY(-3px) translateX(-2px); }
-                100% { transform: scale(1.02) rotate(1.5deg) translateY(-5px) translateX(2px); }
-              }
-              /* Glitch */
-              @keyframes npcGlitch {
-                0%,88%,100%{opacity:0}
-                89%{opacity:0.08;transform:translateX(-2px)}
-                91%{opacity:0;transform:translateX(0)}
-                93%{opacity:0.06;transform:translateX(2px)}
-                95%{opacity:0}
-              }
-              /* Barras de sonido */
-              @keyframes soundBar {
-                0%,100%{height:4px;opacity:0.5}
-                50%{height:12px;opacity:1}
-              }
-              /* Ondas de audio */
-              @keyframes audioWave1 { 0%{height:4px} 100%{height:18px} }
-              @keyframes audioWave2 { 0%{height:6px} 100%{height:24px} }
-              @keyframes audioWave3 { 0%{height:3px} 100%{height:14px} }
-              @keyframes audioWave4 { 0%{height:8px} 100%{height:20px} }
-              /* Partículas flotantes */
-              @keyframes particleFloat {
-                0%   { transform: translateY(100vh) scale(0); opacity: 0; }
-                10%  { opacity: 1; }
-                90%  { opacity: 0.6; }
-                100% { transform: translateY(-20px) scale(1); opacity: 0; }
-              }
-              /* Burbuja de frase */
-              @keyframes phrasePop {
-                0%{transform:scale(0.8);opacity:0}
-                100%{transform:scale(1);opacity:1}
-              }
-              /* Regalo */
-              @keyframes giftPop {
-                0%{transform:translate(-50%,-50%) scale(0);opacity:0}
-                60%{transform:translate(-50%,-50%) scale(1.3);opacity:1}
-                100%{transform:translate(-50%,-50%) scale(1);opacity:1}
-              }
-              /* Efecto de cámara en vivo — vignette pulsante */
-              @keyframes liveVignette {
-                0%,100% { box-shadow: inset 0 0 60px rgba(255,0,127,0.08); }
-                50%     { box-shadow: inset 0 0 80px rgba(255,0,127,0.15); }
+              @keyframes npcGiftBounce {
+                0%{transform:translate(-50%,-50%) scale(0) rotate(-20deg);opacity:0}
+                60%{transform:translate(-50%,-50%) scale(1.3) rotate(5deg);opacity:1}
+                100%{transform:translate(-50%,-50%) scale(1) rotate(0deg);opacity:1}
               }
             `}</style>
-            {/* Vignette pulsante — efecto de cámara en vivo */}
-            <div className="absolute inset-0 pointer-events-none z-10" style={{animation:'liveVignette 3s ease-in-out infinite',borderRadius:0}}/>
           </div>
         ) : (
           /* ═══════════════════════════════════════════════════════════════
