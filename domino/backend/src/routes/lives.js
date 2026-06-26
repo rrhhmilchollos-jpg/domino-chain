@@ -7,6 +7,26 @@ const User = require('../models/User');
 const Video = require('../models/Video');
 
 const GIFT_CATALOG = require('../data/giftCatalog');
+const { AccessToken } = require('livekit-server-sdk');
+
+const LIVEKIT_URL = process.env.LIVEKIT_URL || 'wss://domino-chain-h5dv1szx.livekit.cloud';
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || 'APIPmacwcopHV32';
+const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || 'exC1TjivQkBseZ6IdtIfeMjHXfetO7PFp63mn0RbsKPL';
+
+async function generateLiveKitToken(identity, roomName, canPublish) {
+  const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+    identity,
+    ttl: '6h',
+  });
+  at.addGrant({
+    roomJoin: true,
+    room: roomName,
+    canPublish,
+    canSubscribe: true,
+    canPublishData: true,
+  });
+  return await at.toJwt();
+}
 
 // GET /api/lives
 router.get('/', async (req, res) => {
@@ -252,25 +272,48 @@ router.post('/:id/publish-as-video', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// PUT /api/lives/:id/join — incrementar viewers
-router.put('/:id/join', async (req, res) => {
+// Función para generar token LiveKit (PUT y POST /join)
+async function handleJoin(req, res) {
   try {
     const live = await Live.findByIdAndUpdate(req.params.id, { $inc: { viewerCount: 1 } }, { new: true });
     if (!live) return res.status(404).json({ error: 'Directo no encontrado' });
     if (live.viewerCount > live.peakViewers) await Live.findByIdAndUpdate(req.params.id, { peakViewers: live.viewerCount });
-    res.json({ viewerCount: live.viewerCount });
+
+    // Verificar si el usuario está bloqueado
+    const userId = req.user?._id;
+    if (userId && live.blockedUsers?.some(b => String(b) === String(userId))) {
+      return res.status(403).json({ error: 'blocked' });
+    }
+
+    // Generar token LiveKit
+    const roomName = live.roomId || String(live._id);
+    const identity = userId ? String(userId) : `viewer_${Date.now()}`;
+    const isOwner = userId && String(live.userId) === String(userId);
+    const isOpponent = userId && live.battleOpponentId && String(live.battleOpponentId) === String(userId);
+    const canPublish = isOwner || isOpponent;
+
+    let token = null;
+    try {
+      token = await generateLiveKitToken(identity, roomName, canPublish);
+    } catch (e) {
+      console.warn('LiveKit token error:', e.message);
+    }
+
+    res.json({
+      viewerCount: live.viewerCount,
+      token,
+      livekitUrl: LIVEKIT_URL,
+      roomName,
+      canPublish,
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
-});
+}
+
+// PUT /api/lives/:id/join — incrementar viewers y obtener token LiveKit
+router.put('/:id/join', handleJoin);
 
 // POST /api/lives/:id/join — también aceptar POST para compatibilidad
-router.post('/:id/join', async (req, res) => {
-  try {
-    const live = await Live.findByIdAndUpdate(req.params.id, { $inc: { viewerCount: 1 } }, { new: true });
-    if (!live) return res.status(404).json({ error: 'Directo no encontrado' });
-    if (live.viewerCount > live.peakViewers) await Live.findByIdAndUpdate(req.params.id, { peakViewers: live.viewerCount });
-    res.json({ viewerCount: live.viewerCount });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+router.post('/:id/join', handleJoin);
 
 // PUT /api/lives/:id/leave
 router.put('/:id/leave', async (req, res) => {
